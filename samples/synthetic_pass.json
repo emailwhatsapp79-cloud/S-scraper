@@ -1,0 +1,16 @@
+[
+  {
+    "game_id": "S-001", "league": "invented, not from the screenshots",
+    "home": "AAA", "away": "BBB",
+    "ft": {"home": 1.80, "draw": 4.40, "away": 3.95},
+    "ft_dc": {"home_draw": 1.28, "home_away": 1.24, "draw_away": 2.08},
+    "ht": {"home": 2.20, "draw": 2.60, "away": 4.60}
+  },
+  {
+    "game_id": "S-002", "league": "invented, mirrored (away is favourite)",
+    "home": "CCC", "away": "DDD",
+    "ft": {"home": 4.10, "draw": 4.30, "away": 1.90},
+    "ft_dc": {"home_draw": 2.05, "home_away": 1.26, "draw_away": 1.29},
+    "ht": {"home": 5.00, "draw": 2.70, "away": 2.10}
+  }
+]

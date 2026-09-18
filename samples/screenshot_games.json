@@ -1,0 +1,24 @@
+[
+  {
+    "game_id": "52350", "league": "England - Virtual", "kickoff": "18/09 21:54",
+    "home": "AST", "away": "BRE",
+    "ft": {"home": 2.74, "draw": 4.25, "away": 2.32}
+  },
+  {
+    "game_id": "52354", "league": "England - Virtual", "kickoff": "18/09 21:54",
+    "home": "BHA", "away": "BOU",
+    "ft": {"home": 2.69, "draw": 3.60, "away": 2.63}
+  },
+  {
+    "game_id": "52355", "league": "England - Virtual", "kickoff": "18/09 21:54",
+    "home": "CRY", "away": "NFO",
+    "ft": {"home": 1.84, "draw": 4.35, "away": 3.88},
+    "ft_dc": {"home_draw": 1.29, "home_away": 1.25, "draw_away": 1.99},
+    "ht": {"home": 2.80, "draw": 2.92, "away": 3.02}
+  },
+  {
+    "game_id": "52352", "league": "England - Virtual", "kickoff": "18/09 21:54",
+    "home": "FUL", "away": "CHE",
+    "ft": {"home": 2.55, "draw": 3.94, "away": 2.60}
+  }
+]
