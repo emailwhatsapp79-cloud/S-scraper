@@ -4,6 +4,7 @@
 //     empty even before anything has been collected.
 
 import { sql, rowToGame, cors } from "./_db.js";
+import { store } from "./_store.js";
 
 const BASE = "https://www.sportybet.com/api/ng/factsCenter";
 const SPORT = "sr:sport:202120001";
@@ -101,26 +102,33 @@ export default async function handler(req, res) {
   if (stored.status === "fulfilled") {
     for (const row of stored.value) merge(byId, rowToGame(row), false);
   }
-  let live = 0;
+  const fresh = [];
   for (const f of feeds) {
     if (f.status !== "fulfilled") continue;
     for (const ev of f.value) {
       const g = normalise(ev);
-      if (g) { merge(byId, g, true); live++; }
+      if (g) { merge(byId, g, true); fresh.push(g); }
     }
   }
+  const live = fresh.length;
 
   let games = [...byId.values()];
   if (openOnly) games = games.filter((g) => g.upcoming);
   games.sort((a, b) => (b.kickoff || 0) - (a.kickoff || 0));
 
-  res.setHeader("Cache-Control", "s-maxage=10, stale-while-revalidate=20");
+  // Every read also records what the feeds showed, so the card builds up a
+  // history on its own. Nothing has to be installed anywhere for this.
+  let saved = 0;
+  try { saved = await store(fresh); } catch (e) { /* never fail a read over a write */ }
+
+  res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
     ok: true,
     fetchedAt: Date.now(),
     tookMs: Date.now() - started,
     storedInDb: stored.status === "fulfilled" ? stored.value.length : 0,
     fromLiveFeeds: live,
+    savedThisVisit: saved,
     dbError: stored.status === "rejected" ? String(stored.reason?.message || stored.reason) : null,
     count: games.length,
     upcoming: games.filter((g) => g.upcoming).length,

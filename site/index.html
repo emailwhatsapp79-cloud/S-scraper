@@ -54,7 +54,7 @@
 <body>
 <div class="wrap">
   <h1>vFootball Screener</h1>
-  <p class="sub">Reads the SportyBet <b>vFootball</b> card and keeps the games matching your odds shape. Virtual games only \u2014 real football is filtered out.</p>
+  <p class="sub">Reads the SportyBet <b>vFootball</b> card and keeps the games matching your odds shape. Virtual games only. Every visit is recorded, so the list builds up over time.</p>
 
   <button id="find">FIND GAMES</button>
   <p id="status">Tap FIND to read the vFootball card.</p>
@@ -175,12 +175,12 @@
         "or try again when the next batch comes up.";
       out.appendChild(p);
     }
-    var wrong = (last.sports || []).filter(function (s) { return s !== "sr:sport:202120001"; });
-    $("foot").textContent = "Read " + last.feedsReached + " feeds in " + last.tookMs + "ms. " +
-      "Every game is checked to be vFootball before it is counted" +
-      (wrong.length ? " (and " + wrong.length + " other sport(s) slipped through - tell Claude)" : "") +
-      ". SportyBet only serves the next batch to anything outside their own app, so the " +
-      "full multi-day card is not reachable from here.";
+    $("foot").textContent =
+      last.storedInDb + " games on record \u00b7 " + last.fromLiveFeeds + " read live \u00b7 " +
+      last.savedThisVisit + " saved this visit \u00b7 " + last.tookMs + "ms. " +
+      "Every visit records what SportyBet was showing, so the record grows on its own. " +
+      "Only the open games are screened \u2014 the rest are kept for looking back." +
+      (last.dbError ? "  Storage problem: " + last.dbError : "");
   }
 
   function find() {
