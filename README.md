@@ -61,6 +61,27 @@ high on X2, so prefer real values when you have them.
 England-Virtual card. `samples/synthetic_pass.json` holds two invented games
 that clear the screen — one with the home side favourite, one mirrored.
 
+## Paper ledger
+
+`store.py` keeps every match, every odds snapshot (not overwritten, so drift is
+visible), every result and every pick in SQLite. `ledger.py` records the natural
+bet for a passing screen — full-time double chance on the favourite — at the
+price that was showing when it fired, and settles it against the published
+result. Nothing touches a real account; a pick is a recorded prediction.
+
+`report.py` scores the strategy against its own prices. It reports a Wilson
+interval rather than a bare percentage, and widens the interval by Bonferroni
+whenever picks are sliced into groups, because slicing 24 ways and keeping the
+best slice finds an "edge" in data that has none:
+
+```
+python3 tools/noise_demo.py        # 2,250 picks from a generator with no pattern
+```
+
+That demo routinely shows a 13–21 point gap between the best and worst hour of
+the day, and on some seeds the best hour clears break-even outright when judged
+on its own. The correction is what stops you backing the 3am pattern.
+
 ## Where the odds come from
 
 Nothing in this repo fetches anything; the feed is deliberately a separate,
