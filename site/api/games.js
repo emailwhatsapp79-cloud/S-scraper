@@ -91,7 +91,7 @@ export default async function handler(req, res) {
   cors(res);
   const started = Date.now();
   const url = new URL(req.url, "http://x");
-  const openOnly = url.searchParams.get("open") === "1";
+  const includeLive = url.searchParams.get("live") === "1";
 
   const [stored, ...feeds] = await Promise.allSettled([
     sql`SELECT * FROM games ORDER BY kickoff DESC NULLS LAST LIMIT 2000`,
@@ -112,9 +112,11 @@ export default async function handler(req, res) {
   }
   const live = fresh.length;
 
+  // Only games that have not kicked off can still be backed, so the view is
+  // upcoming-only unless asked otherwise. Live games are still recorded.
   let games = [...byId.values()];
-  if (openOnly) games = games.filter((g) => g.upcoming);
-  games.sort((a, b) => (b.kickoff || 0) - (a.kickoff || 0));
+  if (!includeLive) games = games.filter((g) => g.upcoming);
+  games.sort((a, b) => (a.kickoff || 0) - (b.kickoff || 0));
 
   // Every read also records what the feeds showed, so the card builds up a
   // history on its own. Nothing has to be installed anywhere for this.
@@ -136,6 +138,7 @@ export default async function handler(req, res) {
     dbError: stored.status === "rejected" ? String(stored.reason?.message || stored.reason) : null,
     count: games.length,
     upcoming: games.filter((g) => g.upcoming).length,
+    liveSeen: fresh.filter((g) => !g.upcoming).length,
     screenable: games.filter((g) => g.upcoming && g.dc && g.ht).length,
     games,
   });

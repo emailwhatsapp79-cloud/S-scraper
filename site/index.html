@@ -36,9 +36,12 @@
   .who b{display:block;font-size:16px;font-weight:600}
   .who span{font-size:12.5px;color:var(--dim);display:block;overflow:hidden;
     text-overflow:ellipsis;white-space:nowrap}
-  .odds{margin-top:9px;font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums;
-    display:flex;gap:15px;flex-wrap:wrap}
-  .odds b{color:var(--ink);font-weight:600}
+  .mkt{margin-top:10px}
+  .mkt-t{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+  .mkt-g{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+  .cell{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:6px 3px;text-align:center}
+  .cell b{display:block;font-family:var(--mono);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+  .cell span{font-size:10.5px;color:var(--dim);line-height:1.25;display:block;margin-top:1px}
   .none{color:var(--dim);font-size:14px;line-height:1.6;padding:20px 0}
   details{margin-top:16px}
   summary{cursor:pointer;color:var(--dim);font-size:13.5px;padding:6px 0}
@@ -54,7 +57,7 @@
 <body>
 <div class="wrap">
   <h1>vFootball Screener</h1>
-  <p class="sub">Reads the SportyBet <b>vFootball</b> card and keeps the games matching your odds shape. Virtual games only. Every visit is recorded, so the list builds up over time.</p>
+  <p class="sub">Reads the SportyBet <b>vFootball</b> card and keeps the upcoming games matching your odds shape. Virtual games only, and only ones that have not kicked off.</p>
 
   <button id="find">FIND GAMES</button>
   <p id="status">Tap FIND to read the vFootball card.</p>
@@ -121,6 +124,20 @@
     return isNaN(d) ? "" : d.toTimeString().slice(0, 5);
   }
 
+  function market(title, pairs) {
+    var box = el("div", "mkt");
+    box.appendChild(el("div", "mkt-t", title));
+    var grid = el("div", "mkt-g");
+    pairs.forEach(function (p) {
+      var cell = el("div", "cell");
+      cell.appendChild(el("b", null, p[1] == null ? "\u2014" : p[1].toFixed(2)));
+      cell.appendChild(el("span", null, p[0]));
+      grid.appendChild(cell);
+    });
+    box.appendChild(grid);
+    return box;
+  }
+
   function card(g, r) {
     var box = el("div", "game" + (r.verdict === "hold" ? " hold" : ""));
     var row = el("div", "row1");
@@ -128,7 +145,7 @@
     var who = el("div", "who");
     who.appendChild(el("b", null, g.home + " v " + g.away));
     who.appendChild(el("span", null, [clock(g.kickoff), g.league,
-      r.verdict === "hold" ? "no half-time odds" : ""].filter(Boolean).join(" · ")));
+      r.verdict === "hold" ? "no half-time odds" : ""].filter(Boolean).join(" \u00b7 ")));
     row.appendChild(who);
     var copy = el("button", null, "Copy ID");
     copy.addEventListener("click", function () {
@@ -140,14 +157,16 @@
     row.appendChild(copy);
     box.appendChild(row);
 
-    var o = el("div", "odds");
-    o.innerHTML =
-      "<span>FT <b>" + g.ft.home.toFixed(2) + "</b> / <b>" + g.ft.draw.toFixed(2) +
-      "</b> / <b>" + g.ft.away.toFixed(2) + "</b></span>" +
-      "<span>DC <b>" + r.dc.home_draw.toFixed(2) + "</b> / <b>" + r.dc.draw_away.toFixed(2) + "</b></span>" +
-      (g.ht ? "<span>HT <b>" + g.ht.home.toFixed(2) + "</b> / <b>" + g.ht.draw.toFixed(2) +
-        "</b> / <b>" + g.ht.away.toFixed(2) + "</b></span>" : "");
-    box.appendChild(o);
+    box.appendChild(market("Full time", [
+      ["Home", g.ft.home], ["Draw", g.ft.draw], ["Away", g.ft.away]]));
+    box.appendChild(market("Full time \u2014 two chances" + (g.dc ? "" : " (worked out)"), [
+      ["Home or Draw", r.dc.home_draw],
+      ["Home or Away", r.dc.home_away],
+      ["Draw or Away", r.dc.draw_away]]));
+    box.appendChild(market("Half time", [
+      ["Home", g.ht ? g.ht.home : null],
+      ["Draw", g.ht ? g.ht.draw : null],
+      ["Away", g.ht ? g.ht.away : null]]));
     return box;
   }
 
@@ -158,28 +177,27 @@
     var out = $("out"); out.textContent = "";
     var hits = [], holds = [];
     last.games.forEach(function (g) {
-      if (!g.upcoming) return;
       var r = screen(g);
       if (r.verdict === "show") hits.push([g, r]);
       else if (r.verdict === "hold") holds.push([g, r]);
     });
     hits.concat(holds).forEach(function (p) { out.appendChild(card(p[0], p[1])); });
 
-    $("status").innerHTML = "Went through <b>" + last.count + "</b> games, <b>" +
-      last.upcoming + "</b> still open — <b>" + hits.length + "</b> matched.";
+    $("status").innerHTML = "Went through <b>" + last.count +
+      "</b> upcoming vFootball games — <b>" + hits.length + "</b> matched.";
     $("bar").style.width = "100%";
 
     if (!hits.length && !holds.length) {
       var p = el("p", "none");
-      p.textContent = "None of the open games match. Loosen the thresholds below, " +
+      p.textContent = "None of the upcoming games match. Loosen the thresholds below, " +
         "or try again when the next batch comes up.";
       out.appendChild(p);
     }
     $("foot").textContent =
-      last.storedInDb + " games on record \u00b7 " + last.fromLiveFeeds + " read live \u00b7 " +
-      last.savedThisVisit + " saved this visit \u00b7 " + last.tookMs + "ms. " +
-      "Every visit records what SportyBet was showing, so the record grows on its own. " +
-      "Only the open games are screened \u2014 the rest are kept for looking back." +
+      "Upcoming only — games that already kicked off are not shown. " +
+      (last.liveSeen || 0) + " running game(s) skipped. " +
+      last.savedThisVisit + " saved · " + last.storedInDb + " on record · " +
+      last.tookMs + "ms." +
       (last.dbError ? "  Read problem: " + last.dbError : "") +
       (last.saveError ? "  Save problem: " + last.saveError : "");
   }
