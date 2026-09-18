@@ -180,7 +180,8 @@
       last.savedThisVisit + " saved this visit \u00b7 " + last.tookMs + "ms. " +
       "Every visit records what SportyBet was showing, so the record grows on its own. " +
       "Only the open games are screened \u2014 the rest are kept for looking back." +
-      (last.dbError ? "  Storage problem: " + last.dbError : "");
+      (last.dbError ? "  Read problem: " + last.dbError : "") +
+      (last.saveError ? "  Save problem: " + last.saveError : "");
   }
 
   function find() {

@@ -22,7 +22,7 @@ export async function store(games) {
       const b = j * FIELDS;
       return "(" + Array.from({ length: FIELDS }, (_, k) => `$${b + k + 1}`).join(",") + ")";
     }).join(",");
-    await sql.query(
+    await sql(
       `INSERT INTO games (game_id, event_id, home, away, league, kickoff, status,
          ft_home, ft_draw, ft_away, dc_1x, dc_12, dc_x2, ht_home, ht_draw, ht_away)
        VALUES ${values}

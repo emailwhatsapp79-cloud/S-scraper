@@ -118,8 +118,11 @@ export default async function handler(req, res) {
 
   // Every read also records what the feeds showed, so the card builds up a
   // history on its own. Nothing has to be installed anywhere for this.
-  let saved = 0;
-  try { saved = await store(fresh); } catch (e) { /* never fail a read over a write */ }
+  // A write must never fail a read, but it must never fail silently either:
+  // swallowing this is what hid sql.query not existing on the driver.
+  let saved = 0, saveError = null;
+  try { saved = await store(fresh); }
+  catch (e) { saveError = String(e?.message || e); }
 
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
@@ -129,6 +132,7 @@ export default async function handler(req, res) {
     storedInDb: stored.status === "fulfilled" ? stored.value.length : 0,
     fromLiveFeeds: live,
     savedThisVisit: saved,
+    saveError,
     dbError: stored.status === "rejected" ? String(stored.reason?.message || stored.reason) : null,
     count: games.length,
     upcoming: games.filter((g) => g.upcoming).length,
