@@ -10,14 +10,19 @@ export const COLUMNS = [
 ];
 
 export function rowToGame(r) {
+  // A stored row keeps the status it had when it was last seen, and a game
+  // the feeds stop showing is never updated again. So the clock decides:
+  // once kick-off has passed it is not upcoming, whatever the row says.
+  const kickoff = r.kickoff ? Number(r.kickoff) : null;
+  const notStarted = kickoff == null || kickoff > Date.now();
   return {
     id: r.game_id,
     home: r.home,
     away: r.away,
     league: r.league || "",
-    kickoff: r.kickoff ? Number(r.kickoff) : null,
+    kickoff,
     status: r.status || "",
-    upcoming: r.status === "Not start",
+    upcoming: r.status === "Not start" && notStarted,
     ft: { home: r.ft_home, draw: r.ft_draw, away: r.ft_away },
     dc: r.dc_1x == null ? null : { home_draw: r.dc_1x, home_away: r.dc_12, draw_away: r.dc_x2 },
     ht: r.ht_home == null ? null : { home: r.ht_home, draw: r.ht_draw, away: r.ht_away },

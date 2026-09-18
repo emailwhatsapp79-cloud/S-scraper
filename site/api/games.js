@@ -65,7 +65,8 @@ function normalise(ev) {
     league: ev.tournamentName || ev.categoryName || "",
     kickoff: ev.estimateStartTime || null,
     status: ev.matchStatus || "",
-    upcoming: ev.matchStatus === "Not start",
+    upcoming: ev.matchStatus === "Not start" &&
+      (!ev.estimateStartTime || Number(ev.estimateStartTime) > Date.now()),
     ft: { home: ft.Home, draw: ft.Draw, away: ft.Away },
     dc: dc && dc["Home or Draw"] != null
       ? { home_draw: dc["Home or Draw"], home_away: dc["Home or Away"], draw_away: dc["Draw or Away"] }
