@@ -45,7 +45,7 @@ function boot(routes) {
   sandbox.window = sandbox;
   sandbox.XMLHttpRequest.prototype = { open() {}, send() {} };
   vm.createContext(sandbox);
-  vm.runInContext(fs.readFileSync("web/sportybet-screener.user.js", "utf8"), sandbox);
+  vm.runInContext(fs.readFileSync(process.env.VFS_SRC || "web/sportybet-screener.user.js", "utf8"), sandbox);
 
   const panel = doc.body.children.find((c) => c.tag === "div");
   return {
