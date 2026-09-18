@@ -1,4 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "functions": { "api/games.js": { "maxDuration": 15 } }
+  "regions": ["cpt1"],
+  "functions": { "api/*.js": { "maxDuration": 15 } }
 }

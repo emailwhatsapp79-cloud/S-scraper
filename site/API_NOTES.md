@@ -32,6 +32,24 @@ request is needed. Events carry `gameId` (the number shown on the site),
 Together these mean a server or a third-party page can read the near-term
 card but not the full multi-day one. Only code running on sportybet.com can.
 
+## The POST block is not geographic
+
+Tested from two continents with identical results:
+
+| Server region | Outbound IP | GET | POST |
+|---|---|---|---|
+| `iad1` Virginia, USA | 54.198.213.188 | works | Forbidden |
+| `cpt1` Cape Town, South Africa | 13.244.239.202 | works | Forbidden |
+
+Moving the host closer to the user changes nothing, so the refusal is not
+about where the request comes from geographically. `/api/diag` runs these
+checks live and reports the server's region and outbound IP next to the
+visitor's, which also makes clear that the request to SportyBet is issued
+by the host and never by the visitor's device.
+
+The site stays on `cpt1` anyway: it is the closest region to Nigeria, so
+pages load faster there even though the database is still in Ohio.
+
 ## Unverified
 
 Whether the GET feeds return the full day's card at the start of a day
