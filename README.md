@@ -84,5 +84,25 @@ on its own. The correction is what stops you backing the 3am pattern.
 
 ## Where the odds come from
 
-Nothing in this repo fetches anything; the feed is deliberately a separate,
-pluggable stage. Run `python3 -m unittest discover -s tests` to check the rules.
+`web/sportybet-screener.user.js` is a userscript. Installed through Tampermonkey
+it runs inside sportybet.com, which makes it same-origin: it can call their
+endpoints directly, so nothing has to be pasted anywhere.
+
+It hardcodes no URLs. It watches the requests the site makes, takes whichever
+one yielded the most games as the list endpoint, and walks its pages until one
+comes back empty or repeats the page before it. Markets are matched on their
+printed names ("1X2", "Double Chance", "1st Half - 1X2") and outcomes on theirs,
+falling back to position. Half-time odds are fetched only for games that already
+cleared the four full-time checks, which keeps a 1000-game sweep to a few dozen
+detail calls.
+
+`web/install.html` is the install page: the script with a copy button and the
+Tampermonkey steps.
+
+```
+python3 -m unittest discover -s tests   # the rules, the ledger, the statistics
+node tests/js/run.js                    # the userscript, against a mock feed
+```
+
+The JS tests boot the userscript in a fake DOM and drive it end to end — the
+sweep, the pagination, the screen and what it renders.

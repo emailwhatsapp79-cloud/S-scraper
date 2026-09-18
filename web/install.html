@@ -1,0 +1,642 @@
+<title>Screener Install</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg:#F1F2F0; --card:#FFFFFF; --line:#D9DCD8; --ink:#14181A; --dim:#5F6A6B;
+    --go:#17693F; --go-ink:#FFFFFF; --code:#F5F6F4;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#101312; --card:#181C1B; --line:#2A302E; --ink:#E6EAE8; --dim:#909B98;
+    --go:#2FB56E; --go-ink:#0C1110; --code:#0C0F0E;
+  } }
+  :root[data-theme="dark"] {
+    --bg:#101312; --card:#181C1B; --line:#2A302E; --ink:#E6EAE8; --dim:#909B98;
+    --go:#2FB56E; --go-ink:#0C1110; --code:#0C0F0E;
+  }
+  * { box-sizing:border-box; }
+  body { background:var(--bg); color:var(--ink); margin:0; line-height:1.55;
+    font-family:"IBM Plex Sans",system-ui,sans-serif; font-size:16px; }
+  .wrap { max-width:640px; margin:0 auto; padding-inline:16px; padding-block:36px 72px; }
+  h1 { font-size:27px; font-weight:600; margin:0 0 6px; letter-spacing:-.01em; text-wrap:balance; }
+  .lede { color:var(--dim); margin:0 0 30px; font-size:15.5px; max-width:52ch; }
+  h2 { font-size:13px; font-weight:600; letter-spacing:.09em; text-transform:uppercase;
+    color:var(--dim); margin:34px 0 12px; }
+  ol { list-style:none; counter-reset:s; padding:0; margin:0; display:grid; gap:9px; }
+  li { counter-increment:s; background:var(--card); border:1px solid var(--line);
+    border-radius:10px; padding:14px 16px 14px 52px; position:relative; font-size:15.5px; }
+  li::before { content:counter(s); position:absolute; left:16px; top:13px;
+    width:22px; height:22px; border-radius:50%; background:var(--go); color:var(--go-ink);
+    font-size:13px; font-weight:600; display:grid; place-items:center;
+    font-family:"IBM Plex Mono",monospace; }
+  li b { font-weight:600; }
+  li small { display:block; color:var(--dim); font-size:13.5px; margin-top:3px; }
+  a { color:var(--go); }
+  button { font:inherit; font-family:inherit; font-weight:600; font-size:16px; cursor:pointer;
+    width:100%; padding:15px; border:none; border-radius:10px;
+    background:var(--go); color:var(--go-ink); }
+  button:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+  pre { font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:11px; line-height:1.45;
+    background:var(--code); border:1px solid var(--line); border-radius:10px;
+    padding:13px; margin:12px 0 0; max-height:190px; overflow:auto; color:var(--dim); }
+  .note { color:var(--dim); font-size:14px; margin:26px 0 0; max-width:56ch; }
+  .note b { color:var(--ink); font-weight:600; }
+</style>
+
+<div class="wrap">
+  <h1>vFootball Screener</h1>
+  <p class="lede">Puts a <b>FIND</b> button on SportyBet. Tap it and it reads the whole card itself,
+  tells you how many games it went through, and lists the ones that match with their game IDs.</p>
+
+  <button id="copy">Copy the script</button>
+  <pre id="src">// ==UserScript==
+// @name         vFootball Screener
+// @namespace    sportyfilter
+// @version      0.1.0
+// @description  Screens the SportyBet vFootball card for the odds shape you want and lists the survivors with their game IDs.
+// @match        https://www.sportybet.com/*
+// @match        https://sportybet.com/*
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==
+
+(function () {
+  &quot;use strict&quot;;
+
+  // ---------------------------------------------------------------- config
+
+  var DEFAULTS = {
+    ft_fav_min: 1.50, ft_fav_max: 2.50, ft_dog_min: 3.70,
+    ft_dc_fav_min: 1.17, ft_dc_fav_max: 1.30, ft_dc_dog_min: 1.89,
+    ht_fav_min: 1.10, ht_fav_max: 3.00, ht_ratio_min: 1.70
+  };
+  var KNOBS = [
+    [&quot;ft_fav_min&quot;, &quot;FT favourite from&quot;], [&quot;ft_fav_max&quot;, &quot;FT favourite to&quot;],
+    [&quot;ft_dog_min&quot;, &quot;FT other side min&quot;], [&quot;ft_dc_fav_min&quot;, &quot;FT fav DC from&quot;],
+    [&quot;ft_dc_fav_max&quot;, &quot;FT fav DC to&quot;], [&quot;ft_dc_dog_min&quot;, &quot;FT other DC min&quot;],
+    [&quot;ht_fav_min&quot;, &quot;HT favourite from&quot;], [&quot;ht_fav_max&quot;, &quot;HT favourite to&quot;],
+    [&quot;ht_ratio_min&quot;, &quot;HT other side ×&quot;]
+  ];
+  var cfg = Object.assign({}, DEFAULTS);
+  try {
+    var stored = JSON.parse(localStorage.getItem(&quot;vfs.cfg&quot;) || &quot;null&quot;);
+    if (stored) Object.keys(DEFAULTS).forEach(function (k) {
+      if (typeof stored[k] === &quot;number&quot;) cfg[k] = stored[k];
+    });
+  } catch (e) { /* storage blocked; defaults stand */ }
+  function saveCfg() { try { localStorage.setItem(&quot;vfs.cfg&quot;, JSON.stringify(cfg)); } catch (e) {} }
+
+  // ------------------------------------------------ watch the page&#x27;s traffic
+  // The site&#x27;s own requests teach us its endpoints, so nothing is hardcoded.
+
+  var traffic = [];
+  function note(url, text) {
+    if (!text || text.length &gt; 4e6) return;
+    var head = text.slice(0, 40).trim();
+    if (head[0] !== &quot;{&quot; &amp;&amp; head[0] !== &quot;[&quot;) return;
+    try { traffic.push({ url: String(url), json: JSON.parse(text) }); } catch (e) {}
+    if (traffic.length &gt; 250) traffic.shift();
+  }
+
+  var nativeFetch = window.fetch;
+  if (nativeFetch) {
+    window.fetch = function () {
+      var args = arguments;
+      var url = (args[0] &amp;&amp; args[0].url) || String(args[0]);
+      return nativeFetch.apply(this, args).then(function (res) {
+        try { res.clone().text().then(function (t) { note(url, t); }, function () {}); } catch (e) {}
+        return res;
+      });
+    };
+  }
+  var xhrOpen = XMLHttpRequest.prototype.open;
+  var xhrSend = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function (m, u) { this.__vfsUrl = u; return xhrOpen.apply(this, arguments); };
+  XMLHttpRequest.prototype.send = function () {
+    var x = this;
+    x.addEventListener(&quot;load&quot;, function () {
+      try { if (typeof x.responseText === &quot;string&quot;) note(x.__vfsUrl, x.responseText); } catch (e) {}
+    });
+    return xhrSend.apply(this, arguments);
+  };
+
+  // ------------------------------------------------------- reading the JSON
+  // Markets are identified by their printed names, which is the one thing
+  // these feeds keep stable. Everything else is found by shape.
+
+  function walk(node, fn, depth) {
+    depth = depth || 0;
+    if (!node || typeof node !== &quot;object&quot; || depth &gt; 12) return;
+    if (Array.isArray(node)) { for (var i = 0; i &lt; node.length; i++) walk(node[i], fn, depth + 1); return; }
+    fn(node);
+    for (var k in node) { if (Object.prototype.hasOwnProperty.call(node, k)) walk(node[k], fn, depth + 1); }
+  }
+
+  function classify(name) {
+    var s = String(name || &quot;&quot;).toLowerCase().replace(/[^a-z0-9]+/g, &quot; &quot;).trim();
+    if (!s) return null;
+    var half = /\b(1st half|first half|half time|halftime|ht)\b/.test(s);
+    if (/\bdouble chance\b/.test(s)) return half ? &quot;HT_DC&quot; : &quot;FT_DC&quot;;
+    if (/\b(1x2|match result|three way|full time result|1 x 2)\b/.test(s)) return half ? &quot;HT_1X2&quot; : &quot;FT_1X2&quot;;
+    return null;
+  }
+
+  var SLOTS = {
+    FT_1X2: [&quot;home&quot;, &quot;draw&quot;, &quot;away&quot;], HT_1X2: [&quot;home&quot;, &quot;draw&quot;, &quot;away&quot;],
+    FT_DC: [&quot;home_draw&quot;, &quot;home_away&quot;, &quot;draw_away&quot;], HT_DC: [&quot;home_draw&quot;, &quot;home_away&quot;, &quot;draw_away&quot;]
+  };
+
+  function priceOf(o) {
+    var v = o.odds != null ? o.odds : (o.price != null ? o.price : o.oddsValue);
+    var n = parseFloat(v);
+    return isFinite(n) &amp;&amp; n &gt;= 1.001 &amp;&amp; n &lt; 5000 ? n : null;
+  }
+
+  function readMarket(market, kind) {
+    var outs = market.outcomes || market.selections || market.odds;
+    if (!Array.isArray(outs) || outs.length &lt; 3) return null;
+    var slots = SLOTS[kind], got = {};
+    for (var i = 0; i &lt; outs.length; i++) {
+      var price = priceOf(outs[i]);
+      if (price == null) continue;
+      var d = String(outs[i].desc || outs[i].description || outs[i].name || &quot;&quot;).toLowerCase().trim();
+      var key = null;
+      if (kind.indexOf(&quot;1X2&quot;) &gt; 0) {
+        if (/^(home|1)$/.test(d)) key = &quot;home&quot;;
+        else if (/^(draw|x)$/.test(d)) key = &quot;draw&quot;;
+        else if (/^(away|2)$/.test(d)) key = &quot;away&quot;;
+      } else {
+        if (/(home.*draw|^1x$)/.test(d)) key = &quot;home_draw&quot;;
+        else if (/(home.*away|^12$)/.test(d)) key = &quot;home_away&quot;;
+        else if (/(draw.*away|^x2$)/.test(d)) key = &quot;draw_away&quot;;
+      }
+      if (!key) key = slots[i];          // fall back to the printed order
+      if (key) got[key] = price;
+    }
+    for (var s = 0; s &lt; slots.length; s++) { if (got[slots[s]] == null) return null; }
+    return got;
+  }
+
+  function readEvent(node) {
+    var markets = node.markets || node.marketList || node.market;
+    if (!Array.isArray(markets) || !markets.length) return null;
+    var home = node.homeTeamName || node.home ||
+      (node.homeTeam &amp;&amp; (node.homeTeam.name || node.homeTeam.teamName));
+    var away = node.awayTeamName || node.away ||
+      (node.awayTeam &amp;&amp; (node.awayTeam.name || node.awayTeam.teamName));
+    if (typeof home !== &quot;string&quot; || typeof away !== &quot;string&quot;) return null;
+    var id = node.gameId || node.eventId || node.matchId || node.id;
+    if (id == null) return null;
+
+    var ev = { id: String(id), home: home, away: away,
+      league: String(node.sport &amp;&amp; node.sport.category &amp;&amp;
+        (node.sport.category.tournament &amp;&amp; node.sport.category.tournament.name) ||
+        node.tournamentName || node.categoryName || &quot;&quot;),
+      kickoff: node.estimateStartTime || node.startTime || node.kickOffTime || null,
+      ft: null, dc: null, ht: null };
+
+    for (var i = 0; i &lt; markets.length; i++) {
+      var m = markets[i];
+      var kind = classify(m.desc || m.description || m.name || m.marketName);
+      if (!kind) continue;
+      var got = readMarket(m, kind);
+      if (!got) continue;
+      if (kind === &quot;FT_1X2&quot; &amp;&amp; !ev.ft) ev.ft = got;
+      else if (kind === &quot;FT_DC&quot; &amp;&amp; !ev.dc) ev.dc = got;
+      else if (kind === &quot;HT_1X2&quot; &amp;&amp; !ev.ht) ev.ht = got;
+    }
+    return ev.ft ? ev : null;
+  }
+
+  function absorb(into, ev) {
+    var prev = into[ev.id];
+    if (!prev) { into[ev.id] = ev; return; }
+    prev.ft = prev.ft || ev.ft;            // another page may carry other markets
+    prev.dc = prev.dc || ev.dc;
+    prev.ht = prev.ht || ev.ht;
+    prev.league = prev.league || ev.league;
+    prev.kickoff = prev.kickoff || ev.kickoff;
+  }
+
+  function harvest(json, into) {
+    walk(json, function (node) {
+      var ev = readEvent(node);
+      if (ev) absorb(into, ev);
+    });
+    return into;
+  }
+
+  // ------------------------------------------------------------ the screen
+
+  function combine(a, b) { return Math.round(100 / (1 / a + 1 / b)) / 100; }
+
+  function evaluate(ev) {
+    var dc = ev.dc || { home_draw: combine(ev.ft.home, ev.ft.draw),
+      home_away: combine(ev.ft.home, ev.ft.away), draw_away: combine(ev.ft.draw, ev.ft.away) };
+    var fav = ev.ft.home &lt;= ev.ft.away ? &quot;home&quot; : &quot;away&quot;;
+    var dog = fav === &quot;home&quot; ? &quot;away&quot; : &quot;home&quot;;
+    var favDC = fav === &quot;home&quot; ? dc.home_draw : dc.draw_away;
+    var dogDC = dog === &quot;home&quot; ? dc.home_draw : dc.draw_away;
+    var checks = [];
+
+    function band(name, v, lo, hi, what) {
+      var ok = v &gt;= lo &amp;&amp; v &lt;= hi;
+      checks.push({ name: name, ok: ok, skip: false,
+        text: what + &quot; &quot; + v.toFixed(2) + (ok ? &quot; in &quot; : &quot; outside &quot;) + lo.toFixed(2) + &quot;–&quot; + hi.toFixed(2) });
+    }
+    function floor(name, v, lo, what) {
+      var ok = v &gt;= lo;
+      checks.push({ name: name, ok: ok, skip: false,
+        text: what + &quot; &quot; + v.toFixed(2) + (ok ? &quot; ≥ &quot; : &quot; &lt; &quot;) + lo.toFixed(2) });
+    }
+
+    band(&quot;ft_fav&quot;, ev.ft[fav], cfg.ft_fav_min, cfg.ft_fav_max, &quot;FT &quot; + fav);
+    floor(&quot;ft_dog&quot;, ev.ft[dog], cfg.ft_dog_min, &quot;FT &quot; + dog);
+    band(&quot;ft_dc_fav&quot;, favDC, cfg.ft_dc_fav_min, cfg.ft_dc_fav_max, &quot;FT &quot; + (fav === &quot;home&quot; ? &quot;1X&quot; : &quot;X2&quot;));
+    floor(&quot;ft_dc_dog&quot;, dogDC, cfg.ft_dc_dog_min, &quot;FT &quot; + (dog === &quot;home&quot; ? &quot;1X&quot; : &quot;X2&quot;));
+
+    if (!ev.ht) {
+      checks.push({ name: &quot;ht_fav&quot;, ok: false, skip: true, text: &quot;half-time odds not loaded&quot; });
+      checks.push({ name: &quot;ht_split&quot;, ok: false, skip: true, text: &quot;half-time odds not loaded&quot; });
+    } else {
+      var hf = ev.ht[fav], hd = ev.ht[dog], ratio = hd / hf;
+      band(&quot;ht_fav&quot;, hf, cfg.ht_fav_min, cfg.ht_fav_max, &quot;HT &quot; + fav);
+      checks.push({ name: &quot;ht_split&quot;, ok: ratio &gt;= cfg.ht_ratio_min, skip: false,
+        text: &quot;HT &quot; + dog + &quot; &quot; + hd.toFixed(2) + &quot; is &quot; + ratio.toFixed(2) + &quot;× HT &quot; + fav + &quot; &quot; + hf.toFixed(2) });
+    }
+
+    var failed = null, skipped = false;
+    for (var i = 0; i &lt; checks.length; i++) {
+      if (checks[i].skip) skipped = true;
+      else if (!checks[i].ok &amp;&amp; !failed) failed = checks[i];
+    }
+    return { ev: ev, dc: dc, fav: fav, dog: dog, checks: checks,
+      verdict: failed ? &quot;reject&quot; : (skipped ? &quot;needs-ht&quot; : &quot;show&quot;), failure: failed };
+  }
+
+  function clearedFullTime(r) {
+    for (var i = 0; i &lt; 4; i++) { if (!r.checks[i].ok) return false; }
+    return true;
+  }
+
+  // ------------------------------------------------------------- the sweep
+
+  function sameOrigin(u) {
+    try { return new URL(u, location.href).origin === location.origin; } catch (e) { return false; }
+  }
+
+  function getJSON(url) {
+    return nativeFetch.call(window, url, { credentials: &quot;include&quot;, headers: { &quot;Accept&quot;: &quot;application/json&quot; } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .catch(function () { return null; });
+  }
+
+  /** The recorded request that yielded the most events is our list endpoint. */
+  function bestListRequest() {
+    var best = null;
+    traffic.forEach(function (t) {
+      if (!sameOrigin(t.url)) return;
+      var n = Object.keys(harvest(t.json, {})).length;
+      if (n &amp;&amp; (!best || n &gt; best.n)) best = { url: t.url, n: n };
+    });
+    return best;
+  }
+
+  function withParam(url, key, value) {
+    try {
+      var u = new URL(url, location.href);
+      u.searchParams.set(key, value);
+      return u.toString();
+    } catch (e) { return null; }
+  }
+
+  var PAGE_KEYS = [&quot;pageNum&quot;, &quot;pageNo&quot;, &quot;page&quot;, &quot;pageIndex&quot;, &quot;currentPage&quot;];
+
+  /** Walk the list endpoint&#x27;s pages until it stops yielding anything new. */
+  function sweep(onProgress) {
+    var found = {};
+    traffic.forEach(function (t) { if (sameOrigin(t.url)) harvest(t.json, found); });
+
+    var list = bestListRequest();
+    if (!list) return Promise.resolve({ events: found, endpoint: null, pages: 0 });
+
+    var pageKey = null;
+    try {
+      var params = new URL(list.url, location.href).searchParams;
+      for (var i = 0; i &lt; PAGE_KEYS.length; i++) { if (params.has(PAGE_KEYS[i])) { pageKey = PAGE_KEYS[i]; break; } }
+    } catch (e) {}
+    if (!pageKey) pageKey = &quot;pageNum&quot;;
+
+    // Page 1 usually repeats what the site already fetched, so &quot;nothing new&quot;
+    // cannot be the stop signal. Stop when a page carries no games at all, or
+    // when it carries exactly the same ones as the page before it - which is
+    // what an endpoint that ignores the page parameter looks like.
+    var pages = 0, lastSignature = null;
+    function nextPage(n) {
+      if (n &gt; 40) return Promise.resolve();
+      var url = withParam(list.url, pageKey, n);
+      if (!url) return Promise.resolve();
+      return getJSON(url).then(function (json) {
+        if (!json) return;
+        var page = harvest(json, {});
+        var ids = Object.keys(page);
+        if (!ids.length) return;
+        var signature = ids.slice().sort().join(&quot;,&quot;);
+        if (signature === lastSignature) return;
+        lastSignature = signature;
+        pages++;
+        ids.forEach(function (id) { absorb(found, page[id]); });
+        onProgress(Object.keys(found).length);
+        return nextPage(n + 1);
+      });
+    }
+
+    return nextPage(1).then(function () {
+      return { events: found, endpoint: list.url, pages: pages };
+    });
+  }
+
+  /** Only games that already cleared the full-time checks are worth a detail call. */
+  function fillHalfTime(candidates, onProgress) {
+    var detail = null;
+    traffic.forEach(function (t) {
+      if (!sameOrigin(t.url)) return;
+      var ids = Object.keys(harvest(t.json, {}));
+      if (ids.length === 1 &amp;&amp; /event|match|game|detail/i.test(t.url)) detail = t.url;
+    });
+    if (!detail) return Promise.resolve(0);
+
+    var known = null;
+    traffic.some(function (t) {
+      var ids = Object.keys(harvest(t.json, {}));
+      if (ids.length === 1 &amp;&amp; t.url === detail) { known = ids[0]; return true; }
+      return false;
+    });
+    if (!known) return Promise.resolve(0);
+
+    var filled = 0, queue = candidates.slice(), running = 0;
+    return new Promise(function (resolve) {
+      function pump() {
+        if (!queue.length &amp;&amp; running === 0) return resolve(filled);
+        while (running &lt; 4 &amp;&amp; queue.length) {
+          var ev = queue.shift();
+          running++;
+          getJSON(detail.split(known).join(ev.id)).then(function (json) {
+            if (json) {
+              var one = harvest(json, {});
+              var got = one[ev.id];
+              if (got) { ev.ht = ev.ht || got.ht; ev.dc = ev.dc || got.dc; if (got.ht) filled++; }
+            }
+            running--; onProgress(); pump();
+          });
+        }
+      }
+      pump();
+    });
+  }
+
+  // ------------------------------------------------------------------- UI
+
+  var CSS = [
+    &quot;#vfs,#vfs *{box-sizing:border-box;font-family:-apple-system,Segoe UI,Roboto,sans-serif}&quot;,
+    &quot;#vfs-open{position:fixed;right:14px;bottom:88px;z-index:2147483000;background:#111;color:#fff;&quot;,
+    &quot;border:1px solid #333;border-radius:24px;padding:11px 18px;font-size:15px;font-weight:600;cursor:pointer;&quot;,
+    &quot;box-shadow:0 4px 16px rgba(0,0,0,.4)}&quot;,
+    &quot;#vfs{position:fixed;inset:0;z-index:2147483001;background:#0d0f13;color:#e9edf3;display:flex;&quot;,
+    &quot;flex-direction:column;font-size:15px}&quot;,
+    &quot;#vfs header{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #232a33;flex:0 0 auto}&quot;,
+    &quot;#vfs header b{font-size:17px;font-weight:600;flex:1}&quot;,
+    &quot;#vfs button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid #2c343f;background:#1a1f27;color:#e9edf3;padding:9px 14px}&quot;,
+    &quot;#vfs button.go{background:#1f9d57;border-color:#1f9d57;color:#fff;font-weight:600;font-size:16px;padding:13px}&quot;,
+    &quot;#vfs button.go[disabled]{opacity:.55;cursor:default}&quot;,
+    &quot;#vfs .body{flex:1 1 auto;overflow-y:auto;padding:14px 16px 40px}&quot;,
+    &quot;#vfs .count{font-size:15px;color:#96a1b0;margin:0 0 12px;font-variant-numeric:tabular-nums}&quot;,
+    &quot;#vfs .count b{color:#e9edf3}&quot;,
+    &quot;#vfs .track{height:6px;background:#1a1f27;border-radius:3px;overflow:hidden;margin:0 0 14px}&quot;,
+    &quot;#vfs .track i{display:block;height:100%;background:#1f9d57;width:0;transition:width .25s}&quot;,
+    &quot;#vfs .hit{border:1px solid #232a33;border-left:3px solid #1f9d57;border-radius:10px;background:#141920;margin-bottom:8px}&quot;,
+    &quot;#vfs .hit.partial{border-left-color:#4b7fc4}&quot;,
+    &quot;#vfs .hit .top{display:flex;align-items:center;gap:12px;padding:12px 13px}&quot;,
+    &quot;#vfs .gid{font-family:ui-monospace,Menlo,monospace;font-size:19px;font-weight:600;letter-spacing:.02em}&quot;,
+    &quot;#vfs .who{flex:1;min-width:0}&quot;,
+    &quot;#vfs .who .t{font-size:16px;font-weight:600}&quot;,
+    &quot;#vfs .who .m{font-size:12.5px;color:#8b95a3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}&quot;,
+    &quot;#vfs .copy{padding:8px 13px;font-size:13.5px}&quot;,
+    &quot;#vfs .odds{display:flex;gap:16px;flex-wrap:wrap;padding:0 13px 11px;font-size:13px;color:#96a1b0;&quot;,
+    &quot;font-variant-numeric:tabular-nums}&quot;,
+    &quot;#vfs .odds b{color:#e9edf3;font-weight:600}&quot;,
+    &quot;#vfs .msg{color:#8b95a3;font-size:14px;line-height:1.55;padding:18px 0}&quot;,
+    &quot;#vfs .msg code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:#c3cbd6}&quot;,
+    &quot;#vfs .knobs{display:none;grid-template-columns:1fr auto;gap:7px 12px;align-items:center;&quot;,
+    &quot;padding:13px;border:1px solid #232a33;border-radius:10px;margin-bottom:14px;background:#141920}&quot;,
+    &quot;#vfs .knobs.on{display:grid}&quot;,
+    &quot;#vfs .knobs label{font-size:13.5px;color:#96a1b0}&quot;,
+    &quot;#vfs .knobs input{width:80px;text-align:right;font:inherit;font-family:ui-monospace,Menlo,monospace;&quot;,
+    &quot;font-size:13.5px;background:#0d0f13;color:#e9edf3;border:1px solid #2c343f;border-radius:6px;padding:5px 8px}&quot;
+  ].join(&quot;&quot;);
+
+  var ui = null;
+
+  function esc(s) { return String(s).replace(/[&lt;&gt;&amp;&quot;]/g, function (c) {
+    return { &quot;&lt;&quot;: &quot;&amp;lt;&quot;, &quot;&gt;&quot;: &quot;&amp;gt;&quot;, &quot;&amp;&quot;: &quot;&amp;amp;&quot;, &#x27;&quot;&#x27;: &quot;&amp;quot;&quot; }[c]; }); }
+
+  function timeOf(ev) {
+    if (!ev.kickoff) return &quot;&quot;;
+    var n = Number(ev.kickoff);
+    var d = new Date(isFinite(n) &amp;&amp; n &gt; 1e11 ? n : ev.kickoff);
+    return isNaN(d.getTime()) ? &quot;&quot; : d.toTimeString().slice(0, 5);
+  }
+
+  function build() {
+    var style = document.createElement(&quot;style&quot;);
+    style.textContent = CSS;
+    document.head.appendChild(style);
+
+    var panel = document.createElement(&quot;div&quot;);
+    panel.id = &quot;vfs&quot;;
+    panel.hidden = true;
+    panel.innerHTML =
+      &#x27;&lt;header&gt;&lt;b&gt;vFootball Screener&lt;/b&gt;&#x27; +
+      &#x27;&lt;button id=&quot;vfs-knobs&quot;&gt;Odds&lt;/button&gt;&lt;button id=&quot;vfs-close&quot;&gt;Close&lt;/button&gt;&lt;/header&gt;&#x27; +
+      &#x27;&lt;div class=&quot;body&quot;&gt;&#x27; +
+      &#x27;&lt;div class=&quot;knobs&quot; id=&quot;vfs-knobbox&quot;&gt;&lt;/div&gt;&#x27; +
+      &#x27;&lt;button class=&quot;go&quot; id=&quot;vfs-find&quot; style=&quot;width:100%;margin-bottom:16px&quot;&gt;FIND GAMES&lt;/button&gt;&#x27; +
+      &#x27;&lt;p class=&quot;count&quot; id=&quot;vfs-count&quot;&gt;Tap FIND to sweep the card.&lt;/p&gt;&#x27; +
+      &#x27;&lt;div class=&quot;track&quot;&gt;&lt;i id=&quot;vfs-bar&quot;&gt;&lt;/i&gt;&lt;/div&gt;&#x27; +
+      &#x27;&lt;div id=&quot;vfs-out&quot;&gt;&lt;/div&gt;&lt;/div&gt;&#x27;;
+    document.body.appendChild(panel);
+
+    var opener = document.createElement(&quot;button&quot;);
+    opener.id = &quot;vfs-open&quot;;
+    opener.textContent = &quot;SCREEN&quot;;
+    document.body.appendChild(opener);
+
+    var box = panel.querySelector(&quot;#vfs-knobbox&quot;);
+    KNOBS.forEach(function (k) {
+      var label = document.createElement(&quot;label&quot;);
+      label.textContent = k[1];
+      label.htmlFor = &quot;vfs_&quot; + k[0];
+      var input = document.createElement(&quot;input&quot;);
+      input.type = &quot;number&quot;; input.step = &quot;0.01&quot;; input.id = &quot;vfs_&quot; + k[0];
+      input.value = cfg[k[0]].toFixed(2);
+      input.addEventListener(&quot;change&quot;, function () {
+        var v = parseFloat(input.value);
+        if (isFinite(v) &amp;&amp; v &gt; 0) { cfg[k[0]] = v; saveCfg(); }
+        input.value = cfg[k[0]].toFixed(2);
+      });
+      box.appendChild(label); box.appendChild(input);
+    });
+
+    opener.addEventListener(&quot;click&quot;, function () { panel.hidden = false; });
+    panel.querySelector(&quot;#vfs-close&quot;).addEventListener(&quot;click&quot;, function () { panel.hidden = true; });
+    panel.querySelector(&quot;#vfs-knobs&quot;).addEventListener(&quot;click&quot;, function () {
+      box.classList.toggle(&quot;on&quot;);
+    });
+    panel.querySelector(&quot;#vfs-find&quot;).addEventListener(&quot;click&quot;, run);
+
+    ui = {
+      panel: panel, find: panel.querySelector(&quot;#vfs-find&quot;),
+      count: panel.querySelector(&quot;#vfs-count&quot;), bar: panel.querySelector(&quot;#vfs-bar&quot;),
+      out: panel.querySelector(&quot;#vfs-out&quot;)
+    };
+  }
+
+  function say(text, pct) {
+    ui.count.innerHTML = text;
+    if (pct != null) ui.bar.style.width = Math.max(0, Math.min(100, pct)) + &quot;%&quot;;
+  }
+
+  function render(results, scanned) {
+    var keep = results.filter(function (r) { return r.verdict !== &quot;reject&quot;; });
+    keep.sort(function (a, b) { return (a.verdict === &quot;show&quot; ? 0 : 1) - (b.verdict === &quot;show&quot; ? 0 : 1); });
+
+    ui.out.textContent = &quot;&quot;;
+    if (!keep.length) {
+      var p = document.createElement(&quot;p&quot;);
+      p.className = &quot;msg&quot;;
+      p.textContent = &quot;Went through &quot; + scanned + &quot; games. None matched. Loosen the numbers under Odds, or try again when the card refreshes.&quot;;
+      ui.out.appendChild(p);
+      return;
+    }
+    keep.forEach(function (r) {
+      var ev = r.ev, when = timeOf(ev);
+      var card = document.createElement(&quot;div&quot;);
+      card.className = &quot;hit&quot; + (r.verdict === &quot;show&quot; ? &quot;&quot; : &quot; partial&quot;);
+      card.innerHTML =
+        &#x27;&lt;div class=&quot;top&quot;&gt;&lt;span class=&quot;gid&quot;&gt;&#x27; + esc(ev.id) + &#x27;&lt;/span&gt;&#x27; +
+        &#x27;&lt;span class=&quot;who&quot;&gt;&lt;span class=&quot;t&quot;&gt;&#x27; + esc(ev.home) + &quot; v &quot; + esc(ev.away) + &#x27;&lt;/span&gt;&#x27; +
+        &#x27;&lt;span class=&quot;m&quot;&gt;&#x27; + esc([when, ev.league, r.verdict === &quot;show&quot; ? &quot;&quot; : &quot;no half-time odds&quot;]
+          .filter(Boolean).join(&quot; · &quot;)) + &#x27;&lt;/span&gt;&lt;/span&gt;&#x27; +
+        &#x27;&lt;button class=&quot;copy&quot;&gt;Copy ID&lt;/button&gt;&lt;/div&gt;&#x27; +
+        &#x27;&lt;div class=&quot;odds&quot;&gt;&lt;span&gt;FT &lt;b&gt;&#x27; + ev.ft.home.toFixed(2) + &quot;&lt;/b&gt; / &lt;b&gt;&quot; + ev.ft.draw.toFixed(2) +
+        &quot;&lt;/b&gt; / &lt;b&gt;&quot; + ev.ft.away.toFixed(2) + &#x27;&lt;/b&gt;&lt;/span&gt;&#x27; +
+        &#x27;&lt;span&gt;DC &lt;b&gt;&#x27; + r.dc.home_draw.toFixed(2) + &quot;&lt;/b&gt; / &lt;b&gt;&quot; + r.dc.draw_away.toFixed(2) + &#x27;&lt;/b&gt;&lt;/span&gt;&#x27; +
+        (ev.ht ? &#x27;&lt;span&gt;HT &lt;b&gt;&#x27; + ev.ht.home.toFixed(2) + &quot;&lt;/b&gt; / &lt;b&gt;&quot; + ev.ht.draw.toFixed(2) +
+          &quot;&lt;/b&gt; / &lt;b&gt;&quot; + ev.ht.away.toFixed(2) + &#x27;&lt;/b&gt;&lt;/span&gt;&#x27; : &quot;&quot;) + &quot;&lt;/div&gt;&quot;;
+      card.querySelector(&quot;.copy&quot;).addEventListener(&quot;click&quot;, function () {
+        var b = this;
+        navigator.clipboard.writeText(ev.id).then(function () {
+          b.textContent = &quot;Copied&quot;; setTimeout(function () { b.textContent = &quot;Copy ID&quot;; }, 1500);
+        }, function () { b.textContent = ev.id; });
+      });
+      ui.out.appendChild(card);
+    });
+  }
+
+  function nothingFound() {
+    var p = document.createElement(&quot;p&quot;);
+    p.className = &quot;msg&quot;;
+    p.innerHTML = &quot;Could not see the card yet. Go to the &lt;b&gt;vFootball&lt;/b&gt; list, let the games appear, &quot; +
+      &quot;then tap FIND again.&lt;br&gt;&lt;br&gt;If it still finds nothing, tap &lt;code&gt;Odds&lt;/code&gt; → &quot; +
+      &quot;hold this button to copy what it did see, and send it over.&quot;;
+    var dump = document.createElement(&quot;button&quot;);
+    dump.textContent = &quot;Copy diagnostics&quot;;
+    dump.style.marginTop = &quot;10px&quot;;
+    dump.addEventListener(&quot;click&quot;, function () {
+      var report = traffic.filter(function (t) { return sameOrigin(t.url); }).slice(-12).map(function (t) {
+        return { url: t.url, sample: JSON.stringify(t.json).slice(0, 3000) };
+      });
+      navigator.clipboard.writeText(JSON.stringify(report, null, 1));
+      dump.textContent = &quot;Copied — paste it to Claude&quot;;
+    });
+    ui.out.appendChild(p);
+    ui.out.appendChild(dump);
+  }
+
+  function run() {
+    ui.find.disabled = true;
+    ui.out.textContent = &quot;&quot;;
+    say(&quot;Sweeping the card…&quot;, 4);
+
+    sweep(function (n) { say(&quot;Reading the card… &lt;b&gt;&quot; + n + &quot;&lt;/b&gt; games so far&quot;, Math.min(55, 6 + n / 18)); })
+      .then(function (res) {
+        var all = Object.keys(res.events).map(function (k) { return res.events[k]; });
+        if (!all.length) { say(&quot;Nothing found.&quot;); nothingFound(); return null; }
+
+        var first = all.map(evaluate);
+        var need = first.filter(function (r) { return r.verdict === &quot;needs-ht&quot; &amp;&amp; clearedFullTime(r); })
+                        .map(function (r) { return r.ev; });
+        say(&quot;Went through &lt;b&gt;&quot; + all.length + &quot;&lt;/b&gt; games. &quot; + need.length +
+            &quot; passed the full-time checks — fetching half-time odds…&quot;, 60);
+        if (!need.length) return { all: all, scanned: all.length };
+
+        var done = 0;
+        return fillHalfTime(need, function () {
+          done++;
+          say(&quot;Went through &lt;b&gt;&quot; + all.length + &quot;&lt;/b&gt; games. Half-time odds &quot; + done + &quot; of &quot; + need.length + &quot;…&quot;,
+              60 + (done / need.length) * 38);
+        }).then(function () { return { all: all, scanned: all.length }; });
+      })
+      .then(function (out) {
+        if (!out) return;
+        var results = out.all.map(evaluate);
+        var hits = results.filter(function (r) { return r.verdict === &quot;show&quot;; }).length;
+        say(&quot;Went through &lt;b&gt;&quot; + out.scanned + &quot;&lt;/b&gt; games — &lt;b&gt;&quot; + hits + &quot;&lt;/b&gt; matched.&quot;, 100);
+        render(results, out.scanned);
+      })
+      .catch(function (err) {
+        say(&quot;Something went wrong: &quot; + err.message);
+        nothingFound();
+      })
+      .then(function () { ui.find.disabled = false; });
+  }
+
+  if (document.readyState === &quot;loading&quot;) {
+    document.addEventListener(&quot;DOMContentLoaded&quot;, build);
+  } else {
+    build();
+  }
+})();
+</pre>
+
+  <h2>On your phone</h2>
+  <ol>
+    <li><b>Install Firefox for Android</b><small>Chrome cannot run these. Firefox can.</small></li>
+    <li><b>Add Tampermonkey</b><small>In Firefox: menu &rarr; Add-ons &rarr; search Tampermonkey &rarr; Add.</small></li>
+    <li><b>Make a new script</b><small>Tampermonkey &rarr; Dashboard &rarr; the <b>+</b> tab. Select everything in the box, delete it, paste. Ctrl+S or File &rarr; Save.</small></li>
+    <li><b>Open SportyBet vFootball</b><small>A dark <b>SCREEN</b> button sits at the bottom right. Tap it, then tap FIND.</small></li>
+  </ol>
+
+  <h2>On a computer</h2>
+  <ol>
+    <li><b>Add Tampermonkey to Chrome or Firefox</b><small>From the browser's own extension store.</small></li>
+    <li><b>Dashboard &rarr; + &rarr; paste &rarr; save</b><small>Same as above.</small></li>
+  </ol>
+
+  <p class="note">The numbers it screens on are yours to change &mdash; tap <b>Odds</b> inside the panel.
+  They are saved in that browser.<br><br>
+  If FIND comes back with nothing, be on the vFootball list page and let the games load first, then tap it again.
+  If it still finds nothing, tap <b>Copy diagnostics</b> and send me what it copied &mdash; that tells me
+  exactly what SportyBet returned and I can fix the reader in one go.</p>
+</div>
+
+<script>
+  document.getElementById("copy").addEventListener("click", function () {
+    var b = this, src = document.getElementById("src").textContent;
+    navigator.clipboard.writeText(src).then(function () {
+      b.textContent = "Copied \u2014 now paste it into Tampermonkey";
+      setTimeout(function () { b.textContent = "Copy the script"; }, 3000);
+    }, function () {
+      b.textContent = "Select the text below and copy it";
+    });
+  });
+</script>
