@@ -54,10 +54,10 @@
 <body>
 <div class="wrap">
   <h1>vFootball Screener</h1>
-  <p class="sub">Reads the SportyBet card and keeps the games matching your odds shape.</p>
+  <p class="sub">Reads the SportyBet <b>vFootball</b> card and keeps the games matching your odds shape. Virtual games only \u2014 real football is filtered out.</p>
 
   <button id="find">FIND GAMES</button>
-  <p id="status">Tap FIND to read the card.</p>
+  <p id="status">Tap FIND to read the vFootball card.</p>
   <div class="track"><i id="bar"></i></div>
   <div id="out"></div>
 
@@ -175,9 +175,12 @@
         "or try again when the next batch comes up.";
       out.appendChild(p);
     }
-    $("foot").textContent = "Read " + last.feedsReached + " feeds in " + last.tookMs +
-      "ms. SportyBet only serves part of the card to anything outside their own app, " +
-      "so this sees the games starting soonest, not the whole multi-day list.";
+    var wrong = (last.sports || []).filter(function (s) { return s !== "sr:sport:202120001"; });
+    $("foot").textContent = "Read " + last.feedsReached + " feeds in " + last.tookMs + "ms. " +
+      "Every game is checked to be vFootball before it is counted" +
+      (wrong.length ? " (and " + wrong.length + " other sport(s) slipped through - tell Claude)" : "") +
+      ". SportyBet only serves the next batch to anything outside their own app, so the " +
+      "full multi-day card is not reachable from here.";
   }
 
   function find() {
@@ -214,7 +217,6 @@
   });
 
   $("find").addEventListener("click", find);
-  find();
 })();
 </script>
 </body>

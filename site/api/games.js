@@ -11,21 +11,20 @@ const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
 const MARKET_IDS = "1,10,60";
 const WANTED = { "1X2": "ft", "Double Chance": "dc", "1st Half - 1X2": "ht" };
 
-// Every reachable feed is a small fixed window onto the card - none of them
-// pages, and adding pageSize makes them reject the request. Reading all of
-// them and merging is the most a server can see. The full multi-day card is
-// only served over POST, which SportyBet refuses off its own site.
+// Only two feeds actually honour sportId. The others -- configurableCustom-
+// Events, wapConfigurableMixHighlightEvents and recommendScrollEvents --
+// accept the parameter and return real football and tennis anyway, so they
+// are not listed here, and every event is checked against SPORT below
+// regardless. The full multi-day card is served only over POST, which
+// SportyBet refuses off its own site.
 const FEEDS = [
-  ["configurableCustomEvents", { marketId: MARKET_IDS, pageSize: "100", pageNum: "1" }],
-  ["wapConfigurableMixHighlightEvents", { marketId: MARKET_IDS, pageSize: "200", pageNum: "1" }],
   ["wapConfigurableUpcomingEvents", {}],
-  ["recommendScrollEvents/v2", {}, true],
   ["configurableLiveOrPrematchEvents",
     { tournamentId: "sv:league:1", marketId: MARKET_IDS, pageSize: "100", pageNum: "1" }],
 ];
 
-async function feed([path, params, noSport]) {
-  const q = new URLSearchParams(noSport ? params : { sportId: SPORT, ...params });
+async function feed([path, params]) {
+  const q = new URLSearchParams({ sportId: SPORT, ...params });
   const url = `${BASE}/${path}${q.toString() ? `?${q}` : ""}`;
   const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
   if (!r.ok) return [];
@@ -53,6 +52,9 @@ function legs(market) {
 }
 
 function normalise(ev) {
+  // Never trust the feed's filtering: drop anything that is not vFootball.
+  if ((ev.sport || {}).id !== SPORT) return null;
+
   const got = {};
   for (const m of ev.markets || []) {
     const slot = WANTED[m.desc];
@@ -69,6 +71,7 @@ function normalise(ev) {
     league: ev.tournamentName || ev.categoryName || "",
     kickoff: ev.estimateStartTime || null,
     status: ev.matchStatus || "",
+    sportId: ev.sport.id,
     upcoming: ev.matchStatus === "Not start",
     ft: { home: ft.Home, draw: ft.Draw, away: ft.Away },
     dc: dc && dc["Home or Draw"] != null
@@ -109,6 +112,7 @@ export default async function handler(req, res) {
 
   const games = [...byId.values()].sort((a, b) => (a.kickoff || 0) - (b.kickoff || 0));
   const screenable = games.filter((g) => g.upcoming && g.dc && g.ht).length;
+  const sports = [...new Set(games.map((g) => g.sportId))];
 
   res.setHeader("Cache-Control", "s-maxage=15, stale-while-revalidate=30");
   res.status(200).json({
@@ -119,6 +123,7 @@ export default async function handler(req, res) {
     count: games.length,
     upcoming: games.filter((g) => g.upcoming).length,
     screenable,
+    sports,
     games,
   });
 }
