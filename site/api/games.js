@@ -1,22 +1,19 @@
-// Reads the SportyBet vFootball card server-side and returns it normalised.
-// The browser cannot call SportyBet directly: they send no CORS headers.
+// What the page reads. Two sources, merged:
+//   - the stored card, pushed in by the collector running in your browser
+//   - the two feeds a server can still reach by itself, so the site is never
+//     empty even before anything has been collected.
+
+import { sql, rowToGame, cors } from "./_db.js";
 
 const BASE = "https://www.sportybet.com/api/ng/factsCenter";
 const SPORT = "sr:sport:202120001";
 const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36";
-
-// Market 1 is 1X2, 10 is Double Chance, 60 is 1st Half - 1X2: the whole
-// screen in one request, with no per-game detail call.
 const MARKET_IDS = "1,10,60";
 const WANTED = { "1X2": "ft", "Double Chance": "dc", "1st Half - 1X2": "ht" };
 
-// Only two feeds actually honour sportId. The others -- configurableCustom-
-// Events, wapConfigurableMixHighlightEvents and recommendScrollEvents --
-// accept the parameter and return real football and tennis anyway, so they
-// are not listed here, and every event is checked against SPORT below
-// regardless. The full multi-day card is served only over POST, which
-// SportyBet refuses off its own site.
+// Only these two honour sportId. The rest return real football whatever you
+// ask for, which is why every event is checked against SPORT below.
 const FEEDS = [
   ["wapConfigurableUpcomingEvents", {}],
   ["configurableLiveOrPrematchEvents",
@@ -25,15 +22,14 @@ const FEEDS = [
 
 async function feed([path, params]) {
   const q = new URLSearchParams({ sportId: SPORT, ...params });
-  const url = `${BASE}/${path}${q.toString() ? `?${q}` : ""}`;
-  const r = await fetch(url, { headers: { "User-Agent": UA, Accept: "application/json" } });
+  const r = await fetch(`${BASE}/${path}?${q}`, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+  });
   if (!r.ok) return [];
   const body = await r.json();
-  if (body.bizCode !== 10000) return [];
-  return collect(body.data);
+  return body.bizCode === 10000 ? collect(body.data) : [];
 }
 
-/** Events sit at different depths per feed, so find them by shape. */
 function collect(node, found = []) {
   if (Array.isArray(node)) { for (const n of node) collect(n, found); return found; }
   if (!node || typeof node !== "object") return found;
@@ -45,16 +41,14 @@ function collect(node, found = []) {
 function legs(market) {
   const by = {};
   for (const o of market.outcomes || []) {
-    const price = parseFloat(o.odds);
-    if (isFinite(price)) by[o.desc] = price;
+    const p = parseFloat(o.odds);
+    if (isFinite(p)) by[o.desc] = p;
   }
   return by;
 }
 
 function normalise(ev) {
-  // Never trust the feed's filtering: drop anything that is not vFootball.
   if ((ev.sport || {}).id !== SPORT) return null;
-
   const got = {};
   for (const m of ev.markets || []) {
     const slot = WANTED[m.desc];
@@ -62,7 +56,6 @@ function normalise(ev) {
   }
   const ft = got.ft;
   if (!ft || ft.Home == null || ft.Draw == null || ft.Away == null) return null;
-
   const dc = got.dc, ht = got.ht;
   return {
     id: String(ev.gameId),
@@ -71,7 +64,6 @@ function normalise(ev) {
     league: ev.tournamentName || ev.categoryName || "",
     kickoff: ev.estimateStartTime || null,
     status: ev.matchStatus || "",
-    sportId: ev.sport.id,
     upcoming: ev.matchStatus === "Not start",
     ft: { home: ft.Home, draw: ft.Draw, away: ft.Away },
     dc: dc && dc["Home or Draw"] != null
@@ -81,49 +73,58 @@ function normalise(ev) {
   };
 }
 
-/** A later feed may carry a market an earlier one lacked, so merge, don't skip. */
-function merge(into, game) {
+/** A live reading is fresher than a stored one, so it wins on the odds. */
+function merge(into, game, live) {
   const prev = into.get(game.id);
   if (!prev) { into.set(game.id, game); return; }
-  prev.dc = prev.dc || game.dc;
-  prev.ht = prev.ht || game.ht;
+  if (live) {
+    prev.ft = game.ft; prev.status = game.status; prev.upcoming = game.upcoming;
+  }
+  prev.dc = live ? (game.dc || prev.dc) : (prev.dc || game.dc);
+  prev.ht = live ? (game.ht || prev.ht) : (prev.ht || game.ht);
   prev.league = prev.league || game.league;
   prev.kickoff = prev.kickoff || game.kickoff;
 }
 
 export default async function handler(req, res) {
+  cors(res);
   const started = Date.now();
-  const settled = await Promise.allSettled(FEEDS.map(feed));
-  const reached = settled.filter((s) => s.status === "fulfilled").length;
+  const url = new URL(req.url, "http://x");
+  const openOnly = url.searchParams.get("open") === "1";
 
-  if (!reached) {
-    res.status(502).json({ ok: false, error: "Could not reach SportyBet." });
-    return;
-  }
+  const [stored, ...feeds] = await Promise.allSettled([
+    sql`SELECT * FROM games ORDER BY kickoff DESC NULLS LAST LIMIT 2000`,
+    ...FEEDS.map(feed),
+  ]);
 
   const byId = new Map();
-  for (const s of settled) {
-    if (s.status !== "fulfilled") continue;
-    for (const ev of s.value) {
-      const game = normalise(ev);
-      if (game) merge(byId, game);
+  if (stored.status === "fulfilled") {
+    for (const row of stored.value) merge(byId, rowToGame(row), false);
+  }
+  let live = 0;
+  for (const f of feeds) {
+    if (f.status !== "fulfilled") continue;
+    for (const ev of f.value) {
+      const g = normalise(ev);
+      if (g) { merge(byId, g, true); live++; }
     }
   }
 
-  const games = [...byId.values()].sort((a, b) => (a.kickoff || 0) - (b.kickoff || 0));
-  const screenable = games.filter((g) => g.upcoming && g.dc && g.ht).length;
-  const sports = [...new Set(games.map((g) => g.sportId))];
+  let games = [...byId.values()];
+  if (openOnly) games = games.filter((g) => g.upcoming);
+  games.sort((a, b) => (b.kickoff || 0) - (a.kickoff || 0));
 
-  res.setHeader("Cache-Control", "s-maxage=15, stale-while-revalidate=30");
+  res.setHeader("Cache-Control", "s-maxage=10, stale-while-revalidate=20");
   res.status(200).json({
     ok: true,
     fetchedAt: Date.now(),
     tookMs: Date.now() - started,
-    feedsReached: `${reached}/${FEEDS.length}`,
+    storedInDb: stored.status === "fulfilled" ? stored.value.length : 0,
+    fromLiveFeeds: live,
+    dbError: stored.status === "rejected" ? String(stored.reason?.message || stored.reason) : null,
     count: games.length,
     upcoming: games.filter((g) => g.upcoming).length,
-    screenable,
-    sports,
+    screenable: games.filter((g) => g.upcoming && g.dc && g.ht).length,
     games,
   });
 }
