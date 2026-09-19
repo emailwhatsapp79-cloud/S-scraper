@@ -59,7 +59,8 @@
     var hits = [], holds = [];
     games.forEach(function (g) {
       if (league !== "All" && V.leagueKey(g) !== league) return;
-      var r = V.screen(g);
+      var r;
+      try { r = V.screen(g); } catch (e) { return; }
       if (r.verdict === "show") hits.push([g, r]);
       else if (r.verdict === "hold") holds.push([g, r]);
     });

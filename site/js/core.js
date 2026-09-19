@@ -42,30 +42,53 @@
 
   function combine(a, b) { return Math.round(100 / (1 / a + 1 / b)) / 100; }
 
+  function n(v) {
+    var x = Number(v);
+    return isFinite(x) ? x : null;
+  }
+
   function band(name, v, lo, hi, what) {
+    if (v == null) return { name: name, ok: false, skip: true, text: what + " not loaded" };
     var ok = v >= lo && v <= hi;
     return { name: name, ok: ok, skip: false,
       text: what + " " + v.toFixed(2) + (ok ? " in " : " outside ") + lo.toFixed(2) + "–" + hi.toFixed(2) };
   }
   function floor(name, v, lo, what) {
+    if (v == null) return { name: name, ok: false, skip: true, text: what + " not loaded" };
     var ok = v >= lo;
     return { name: name, ok: ok, skip: false,
-      text: what + " " + v.toFixed(2) + (ok ? " ≥ " : " < ") + lo.toFixed(2) };
+      text: what + " " + v.toFixed(2) + (ok ? " \u2265 " : " < ") + lo.toFixed(2) };
   }
 
   function screen(g) {
-    var dc = g.dc || {
-      home_draw: combine(g.ft.home, g.ft.draw),
-      home_away: combine(g.ft.home, g.ft.away),
-      draw_away: combine(g.ft.draw, g.ft.away)
+    var ft = g.ft || {};
+    var fh = n(ft.home), fd = n(ft.draw), fa = n(ft.away);
+    if (fh == null || fd == null || fa == null) {
+      return {
+        ev: g, dc: null, fav: "home", dog: "away",
+        checks: [{ name: "ft", ok: false, skip: false, text: "full-time odds not loaded" }],
+        failure: { text: "full-time odds not loaded" },
+        verdict: "reject"
+      };
+    }
+    var raw = g.dc || {
+      home_draw: combine(fh, fd),
+      home_away: combine(fh, fa),
+      draw_away: combine(fd, fa)
     };
-    var fav = g.ft.home <= g.ft.away ? "home" : "away";
+    var dc = {
+      home_draw: n(raw.home_draw),
+      home_away: n(raw.home_away),
+      draw_away: n(raw.draw_away)
+    };
+    var fav = fh <= fa ? "home" : "away";
     var dog = fav === "home" ? "away" : "home";
+    var ftMap = { home: fh, draw: fd, away: fa };
     var favDC = fav === "home" ? dc.home_draw : dc.draw_away;
     var dogDC = dog === "home" ? dc.home_draw : dc.draw_away;
     var checks = [
-      band("ft_fav", g.ft[fav], cfg.ft_fav_min, cfg.ft_fav_max, "FT " + fav),
-      floor("ft_dog", g.ft[dog], cfg.ft_dog_min, "FT " + dog),
+      band("ft_fav", ftMap[fav], cfg.ft_fav_min, cfg.ft_fav_max, "FT " + fav),
+      floor("ft_dog", ftMap[dog], cfg.ft_dog_min, "FT " + dog),
       band("ft_dc_fav", favDC, cfg.ft_dc_fav_min, cfg.ft_dc_fav_max, "FT " + (fav === "home" ? "1X" : "X2")),
       floor("ft_dc_dog", dogDC, cfg.ft_dc_dog_min, "FT " + (dog === "home" ? "1X" : "X2"))
     ];
@@ -73,21 +96,26 @@
       checks.push({ name: "ht_fav", ok: false, skip: true, text: "half-time odds not loaded" });
       checks.push({ name: "ht_split", ok: false, skip: true, text: "half-time odds not loaded" });
     } else {
-      var hf = g.ht[fav], hd = g.ht[dog], ratio = hd / hf;
+      var hf = n(g.ht[fav]), hd = n(g.ht[dog]), ratio = (hf && hd) ? hd / hf : null;
       checks.push(band("ht_fav", hf, cfg.ht_fav_min, cfg.ht_fav_max, "HT " + fav));
       checks.push({
-        name: "ht_split", ok: ratio >= cfg.ht_ratio_min, skip: false,
-        text: "HT " + dog + " is " + ratio.toFixed(2) + "× HT " + fav
+        name: "ht_split", ok: ratio != null && ratio >= cfg.ht_ratio_min, skip: ratio == null,
+        text: ratio == null ? "half-time split not loaded" : ("HT " + dog + " is " + ratio.toFixed(2) + "\u00d7 HT " + fav)
       });
     }
-    var failed = null, skipped = false;
+    var failed = null, skipped = false, failedHt = null;
     checks.forEach(function (c) {
       if (c.skip) skipped = true;
-      else if (!c.ok && !failed) failed = c;
+      else if (!c.ok) {
+        if (c.name.indexOf("ht_") === 0) { if (!failedHt) failedHt = c; }
+        else if (!failed) failed = c;
+      }
     });
     return {
-      ev: g, dc: dc, fav: fav, dog: dog, checks: checks, failure: failed,
-      verdict: failed ? "reject" : (skipped ? "hold" : "show")
+      ev: g, dc: dc, fav: fav, dog: dog, checks: checks,
+      failure: failed || failedHt || null,
+      // Favourite shape (FT + DC) keeps the game on Matches. HT miss/fail is a hold, not a vanishing reject.
+      verdict: failed ? "reject" : (skipped || failedHt ? "hold" : "show")
     };
   }
 

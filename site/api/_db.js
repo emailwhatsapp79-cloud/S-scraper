@@ -1,5 +1,6 @@
 // One place for the database handle and the row shape.
 import { neon } from "@neondatabase/serverless";
+import { isUpcoming } from "./_shape.js";
 
 export const sql = neon(process.env.DATABASE_URL);
 
@@ -14,7 +15,6 @@ export function rowToGame(r) {
   // the feeds stop showing is never updated again. So the clock decides:
   // once kick-off has passed it is not upcoming, whatever the row says.
   const kickoff = r.kickoff ? Number(r.kickoff) : null;
-  const notStarted = kickoff == null || kickoff > Date.now();
   return {
     id: r.game_id,
     eventId: r.event_id || null,
@@ -23,7 +23,7 @@ export function rowToGame(r) {
     league: r.league || "",
     kickoff,
     status: r.status || "",
-    upcoming: r.status === "Not start" && notStarted,
+    upcoming: isUpcoming(r.status, kickoff),
     ft: { home: r.ft_home, draw: r.ft_draw, away: r.ft_away },
     dc: r.dc_1x == null ? null : { home_draw: r.dc_1x, home_away: r.dc_12, draw_away: r.dc_x2 },
     ht: r.ht_home == null ? null : { home: r.ht_home, draw: r.ht_draw, away: r.ht_away },

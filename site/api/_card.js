@@ -1,7 +1,7 @@
 // Full remaining-day vFootball card, over GET.
 // option=1 (and the WAP highlight feed) is a ~10-game window.
 // option=2 on each virtual league is the rest of today.
-import { WANTED } from "./_shape.js";
+import { WANTED, isUpcoming } from "./_shape.js";
 
 export const BASE = "https://www.sportybet.com/api/ng/factsCenter";
 export const SPORT = "sr:sport:202120001";
@@ -29,11 +29,25 @@ async function getJson(path, params) {
 }
 
 async function fetchLeague([tid, fallback]) {
-  const data = await getJson("pcUpcomingEvents", {
-    sportId: SPORT, tournamentId: tid, marketId: MARKET_IDS,
-    option: "2", timeline: "168", pageSize: "100", pageNum: "1",
-  });
-  return collectTournaments(data, fallback);
+  const found = [];
+  const seen = new Set();
+  for (let page = 1; page <= 6; page++) {
+    const data = await getJson("pcUpcomingEvents", {
+      sportId: SPORT, tournamentId: tid, marketId: MARKET_IDS,
+      option: "2", timeline: "168", pageSize: "100", pageNum: String(page),
+    });
+    const batch = collectTournaments(data, fallback);
+    let added = 0;
+    for (const ev of batch) {
+      const id = String(ev.gameId);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      found.push(ev);
+      added++;
+    }
+    if (batch.length < 100) break;
+  }
+  return found;
 }
 
 function collectTournaments(data, fallback) {
@@ -143,8 +157,7 @@ export function normalise(ev) {
     league: ev._league || [cat.name, tour.name].filter(Boolean).join(" · ") || "",
     kickoff: ev.estimateStartTime || null,
     status: ev.matchStatus || "",
-    upcoming: ev.matchStatus === "Not start" &&
-      (!ev.estimateStartTime || Number(ev.estimateStartTime) > Date.now()),
+    upcoming: isUpcoming(ev.matchStatus, ev.estimateStartTime),
     ft: { home: ft.Home, draw: ft.Draw, away: ft.Away },
     dc: dc && dc["Home or Draw"] != null
       ? { home_draw: dc["Home or Draw"], home_away: dc["Home or Away"], draw_away: dc["Draw or Away"] }

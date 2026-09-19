@@ -6,6 +6,7 @@ import { recordPicks } from "./_screen.js";
 import { settleGames } from "./_results.js";
 import { fetchCard, normalise } from "./_card.js";
 import { guard } from "./_gate.js";
+import { isUpcoming } from "./_shape.js";
 
 const CACHE_MS = 120000;
 
@@ -13,8 +14,9 @@ function merge(into, game, live) {
   const prev = into.get(game.id);
   if (!prev) { into.set(game.id, game); return; }
   if (live) {
-    prev.ft = game.ft; prev.status = game.status; prev.upcoming = game.upcoming;
+    prev.ft = game.ft; prev.status = game.status;
     prev.eventId = game.eventId || prev.eventId;
+    prev.upcoming = isUpcoming(game.status, game.kickoff || prev.kickoff);
   }
   prev.dc = live ? (game.dc || prev.dc) : (prev.dc || game.dc);
   prev.ht = live ? (game.ht || prev.ht) : (prev.ht || game.ht);
