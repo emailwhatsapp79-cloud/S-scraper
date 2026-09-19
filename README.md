@@ -4,6 +4,9 @@ A screener for SportyBet **vFootball**. It does not place bets and it does not
 browse. You hand it match odds as JSON, it hands back the short list of games
 whose odds sit inside the bands you set.
 
+The live site — [vfootball-screener.vercel.app](https://vfootball-screener.vercel.app) —
+reads today's remaining card itself. Open it; there is nothing to install.
+
 ```
 python3 -m sportyfilter samples/screenshot_games.json --all
 python3 -m sportyfilter samples/synthetic_pass.json -c config.json --json
@@ -84,25 +87,14 @@ on its own. The correction is what stops you backing the 3am pattern.
 
 ## Where the odds come from
 
-`web/sportybet-screener.user.js` is a userscript. Installed through Tampermonkey
-it runs inside sportybet.com, which makes it same-origin: it can call their
-endpoints directly, so nothing has to be pasted anywhere.
-
-It hardcodes no URLs. It watches the requests the site makes, takes whichever
-one yielded the most games as the list endpoint, and walks its pages until one
-comes back empty or repeats the page before it. Markets are matched on their
-printed names ("1X2", "Double Chance", "1st Half - 1X2") and outcomes on theirs,
-falling back to position. Half-time odds are fetched only for games that already
-cleared the four full-time checks, which keeps a 1000-game sweep to a few dozen
-detail calls.
-
-`web/install.html` is the install page: the script with a copy button and the
-Tampermonkey steps.
+The website reads SportyBet over GET. `pcUpcomingEvents` with `option=2` on
+each of the five virtual leagues returns the remaining day — this morning,
+442 upcoming games, each with 1X2, Double Chance and 1st Half 1X2. `option=1`
+and the WAP highlight feed are a 10-game strip; that was the earlier wall.
+POST `wapEvents` is still WAF-blocked from any server. We do not use it.
+Notes: `site/API_NOTES.md`.
 
 ```
 python3 -m unittest discover -s tests   # the rules, the ledger, the statistics
-node tests/js/run.js                    # the userscript, against a mock feed
 ```
 
-The JS tests boot the userscript in a fake DOM and drive it end to end — the
-sweep, the pagination, the screen and what it renders.

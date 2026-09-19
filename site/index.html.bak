@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>vFootball Screener</title>
+<style>
+  :root {
+    --bg:#0D0F13; --card:#151A21; --line:#232A33; --ink:#E9EDF3; --dim:#96A1B0;
+    --go:#1F9D57; --hit:#2FCB74; --hold:#5B8FD6;
+    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,"Segoe UI",Roboto,sans-serif;
+    padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+  .wrap{max-width:660px;margin:0 auto;padding:22px 16px 60px}
+  h1{font-size:21px;font-weight:600;margin:0 0 2px}
+  .sub{color:var(--dim);font-size:13.5px;margin:0 0 20px}
+  button{font:inherit;cursor:pointer;color:var(--ink);background:var(--card);
+    border:1px solid var(--line);border-radius:9px;padding:9px 14px}
+  button:focus-visible{outline:2px solid var(--hit);outline-offset:2px}
+  #find{width:100%;background:var(--go);border-color:var(--go);color:#fff;font-size:17px;
+    font-weight:600;padding:16px;margin-bottom:14px}
+  #find[disabled]{opacity:.6;cursor:default}
+  #status{font-size:15px;color:var(--dim);margin:0 0 10px;font-variant-numeric:tabular-nums}
+  #status b{color:var(--ink)}
+  .track{height:5px;background:var(--card);border-radius:3px;overflow:hidden;margin-bottom:18px}
+  .track i{display:block;height:100%;width:0;background:var(--go);transition:width .3s}
+  .game{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--hit);
+    border-radius:10px;margin-bottom:8px;padding:12px 13px}
+  .game.hold{border-left-color:var(--hold)}
+  .row1{display:flex;align-items:center;gap:12px}
+  .gid{font-family:var(--mono);font-size:20px;font-weight:600}
+  .who{flex:1;min-width:0}
+  .who b{display:block;font-size:16px;font-weight:600}
+  .who span{font-size:12.5px;color:var(--dim);display:block;overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  .mkt{margin-top:10px}
+  .mkt-t{font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin-bottom:4px}
+  .mkt-g{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+  .cell{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:6px 3px;text-align:center}
+  .cell b{display:block;font-family:var(--mono);font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
+  .cell span{font-size:10.5px;color:var(--dim);line-height:1.25;display:block;margin-top:1px}
+  .none{color:var(--dim);font-size:14px;line-height:1.6;padding:20px 0}
+  details{margin-top:16px}
+  summary{cursor:pointer;color:var(--dim);font-size:13.5px;padding:6px 0}
+  .knobs{display:grid;grid-template-columns:1fr auto;gap:7px 12px;align-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;padding:13px;margin-top:8px}
+  .knobs label{font-size:13.5px;color:var(--dim)}
+  .knobs input{width:82px;text-align:right;font:inherit;font-family:var(--mono);font-size:13.5px;
+    background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+  .foot{color:var(--dim);font-size:12.5px;margin-top:22px;line-height:1.6}
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>vFootball Screener</h1>
+  <p class="sub">Reads the SportyBet <b>vFootball</b> card and keeps the upcoming games matching your odds shape. Virtual games only, and only ones that have not kicked off.</p>
+
+  <button id="find">FIND GAMES</button>
+  <p id="status">Tap FIND to read the vFootball card.</p>
+  <div class="track"><i id="bar"></i></div>
+  <div id="out"></div>
+
+  <details>
+    <summary>Odds thresholds</summary>
+    <div class="knobs" id="knobs"></div>
+  </details>
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var DEFAULTS = {
+    ft_fav_min:1.50, ft_fav_max:2.50, ft_dog_min:3.70,
+    ft_dc_fav_min:1.17, ft_dc_fav_max:1.30, ft_dc_dog_min:1.89,
+    ht_fav_min:1.10, ht_fav_max:3.00, ht_ratio_min:1.70
+  };
+  var LABELS = {
+    ft_fav_min:"FT favourite from", ft_fav_max:"FT favourite to", ft_dog_min:"FT other side min",
+    ft_dc_fav_min:"FT fav DC from", ft_dc_fav_max:"FT fav DC to", ft_dc_dog_min:"FT other DC min",
+    ht_fav_min:"HT favourite from", ht_fav_max:"HT favourite to", ht_ratio_min:"HT other side ×"
+  };
+  var cfg = Object.assign({}, DEFAULTS);
+  try {
+    var s = JSON.parse(localStorage.getItem("vfs") || "null");
+    if (s) Object.keys(DEFAULTS).forEach(function (k) { if (typeof s[k] === "number") cfg[k] = s[k]; });
+  } catch (e) {}
+  function save() { try { localStorage.setItem("vfs", JSON.stringify(cfg)); } catch (e) {} }
+
+  function combine(a, b) { return Math.round(100 / (1 / a + 1 / b)) / 100; }
+
+  function screen(g) {
+    var dc = g.dc || { home_draw: combine(g.ft.home, g.ft.draw),
+      home_away: combine(g.ft.home, g.ft.away), draw_away: combine(g.ft.draw, g.ft.away) };
+    var fav = g.ft.home <= g.ft.away ? "home" : "away";
+    var dog = fav === "home" ? "away" : "home";
+    var favDC = fav === "home" ? dc.home_draw : dc.draw_away;
+    var dogDC = dog === "home" ? dc.home_draw : dc.draw_away;
+
+    var ok = g.ft[fav] >= cfg.ft_fav_min && g.ft[fav] <= cfg.ft_fav_max
+          && g.ft[dog] >= cfg.ft_dog_min
+          && favDC >= cfg.ft_dc_fav_min && favDC <= cfg.ft_dc_fav_max
+          && dogDC >= cfg.ft_dc_dog_min;
+    if (!ok) return { verdict: "reject" };
+    if (!g.ht) return { verdict: "hold", dc: dc, fav: fav };
+
+    var hf = g.ht[fav], hd = g.ht[dog];
+    var htOk = hf >= cfg.ht_fav_min && hf <= cfg.ht_fav_max && (hd / hf) >= cfg.ht_ratio_min;
+    return { verdict: htOk ? "show" : "reject", dc: dc, fav: fav, ratio: hd / hf };
+  }
+
+  var $ = function (id) { return document.getElementById(id); };
+  function el(t, c, x) { var n = document.createElement(t); if (c) n.className = c;
+    if (x != null) n.textContent = x; return n; }
+
+  function clock(ms) {
+    if (!ms) return "";
+    var d = new Date(Number(ms));
+    return isNaN(d) ? "" : d.toTimeString().slice(0, 5);
+  }
+
+  function market(title, pairs) {
+    var box = el("div", "mkt");
+    box.appendChild(el("div", "mkt-t", title));
+    var grid = el("div", "mkt-g");
+    pairs.forEach(function (p) {
+      var cell = el("div", "cell");
+      cell.appendChild(el("b", null, p[1] == null ? "\u2014" : p[1].toFixed(2)));
+      cell.appendChild(el("span", null, p[0]));
+      grid.appendChild(cell);
+    });
+    box.appendChild(grid);
+    return box;
+  }
+
+  function card(g, r) {
+    var box = el("div", "game" + (r.verdict === "hold" ? " hold" : ""));
+    var row = el("div", "row1");
+    row.appendChild(el("span", "gid", g.id));
+    var who = el("div", "who");
+    who.appendChild(el("b", null, g.home + " v " + g.away));
+    who.appendChild(el("span", null, [clock(g.kickoff), g.league,
+      r.verdict === "hold" ? "no half-time odds" : ""].filter(Boolean).join(" \u00b7 ")));
+    row.appendChild(who);
+    var copy = el("button", null, "Copy ID");
+    copy.addEventListener("click", function () {
+      navigator.clipboard.writeText(g.id).then(function () {
+        copy.textContent = "Copied";
+        setTimeout(function () { copy.textContent = "Copy ID"; }, 1500);
+      }, function () { copy.textContent = g.id; });
+    });
+    row.appendChild(copy);
+    box.appendChild(row);
+
+    box.appendChild(market("Full time", [
+      ["Home", g.ft.home], ["Draw", g.ft.draw], ["Away", g.ft.away]]));
+    box.appendChild(market("Full time \u2014 two chances" + (g.dc ? "" : " (worked out)"), [
+      ["Home or Draw", r.dc.home_draw],
+      ["Home or Away", r.dc.home_away],
+      ["Draw or Away", r.dc.draw_away]]));
+    box.appendChild(market("Half time", [
+      ["Home", g.ht ? g.ht.home : null],
+      ["Draw", g.ht ? g.ht.draw : null],
+      ["Away", g.ht ? g.ht.away : null]]));
+    return box;
+  }
+
+  var last = null;
+
+  function render() {
+    if (!last) return;
+    var out = $("out"); out.textContent = "";
+    var hits = [], holds = [];
+    last.games.forEach(function (g) {
+      var r = screen(g);
+      if (r.verdict === "show") hits.push([g, r]);
+      else if (r.verdict === "hold") holds.push([g, r]);
+    });
+    hits.concat(holds).forEach(function (p) { out.appendChild(card(p[0], p[1])); });
+
+    $("status").innerHTML = "Went through <b>" + last.count +
+      "</b> upcoming vFootball games — <b>" + hits.length + "</b> matched.";
+    $("bar").style.width = "100%";
+
+    if (!hits.length && !holds.length) {
+      var p = el("p", "none");
+      p.textContent = "None of the upcoming games match. Loosen the thresholds below, " +
+        "or try again when the next batch comes up.";
+      out.appendChild(p);
+    }
+    $("foot").textContent =
+      "Upcoming only — games that already kicked off are not shown. " +
+      (last.liveSeen || 0) + " running game(s) skipped. " +
+      last.savedThisVisit + " saved · " + last.storedInDb + " on record · " +
+      last.tookMs + "ms." +
+      (last.dbError ? "  Read problem: " + last.dbError : "") +
+      (last.saveError ? "  Save problem: " + last.saveError : "");
+  }
+
+  function find() {
+    var b = $("find");
+    b.disabled = true;
+    $("status").textContent = "Reading the card…";
+    $("bar").style.width = "35%";
+    $("out").textContent = "";
+
+    fetch("/api/games")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.error || "SportyBet did not answer");
+        last = d; render();
+      })
+      .catch(function (e) {
+        $("status").textContent = "Could not read the card: " + e.message;
+        $("bar").style.width = "0";
+      })
+      .then(function () { b.disabled = false; });
+  }
+
+  Object.keys(DEFAULTS).forEach(function (k) {
+    var lab = el("label", null, LABELS[k]); lab.htmlFor = "k_" + k;
+    var inp = document.createElement("input");
+    inp.type = "number"; inp.step = "0.01"; inp.id = "k_" + k; inp.value = cfg[k].toFixed(2);
+    inp.addEventListener("change", function () {
+      var v = parseFloat(inp.value);
+      if (isFinite(v) && v > 0) { cfg[k] = v; save(); }
+      inp.value = cfg[k].toFixed(2);
+      render();
+    });
+    $("knobs").appendChild(lab); $("knobs").appendChild(inp);
+  });
+
+  $("find").addEventListener("click", find);
+})();
+</script>
+</body>
+</html>

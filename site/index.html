@@ -57,10 +57,10 @@
 <body>
 <div class="wrap">
   <h1>vFootball Screener</h1>
-  <p class="sub">Reads the SportyBet <b>vFootball</b> card and keeps the upcoming games matching your odds shape. Virtual games only, and only ones that have not kicked off.</p>
+  <p class="sub">Reads today's remaining SportyBet <b>vFootball</b> card and keeps the upcoming games matching your odds shape. Nothing to install. Virtual games only, and only ones that have not kicked off.</p>
 
   <button id="find">FIND GAMES</button>
-  <p id="status">Tap FIND to read the vFootball card.</p>
+  <p id="status">Reading today's card...</p>
   <div class="track"><i id="bar"></i></div>
   <div id="out"></div>
 
@@ -194,18 +194,19 @@
       out.appendChild(p);
     }
     $("foot").textContent =
-      "Upcoming only — games that already kicked off are not shown. " +
-      (last.liveSeen || 0) + " running game(s) skipped. " +
+      "Upcoming only — the rest of today, not a 10-game strip. " +
+      (last.fromLiveFeeds ? last.fromLiveFeeds + " read from SportyBet this visit. " : "") +
       last.savedThisVisit + " saved · " + last.storedInDb + " on record · " +
       last.tookMs + "ms." +
       (last.dbError ? "  Read problem: " + last.dbError : "") +
-      (last.saveError ? "  Save problem: " + last.saveError : "");
+      (last.saveError ? "  Save problem: " + last.saveError : "") +
+      (last.feedErrors && last.feedErrors.length ? "  Feed: " + last.feedErrors.join("; ") : "");
   }
 
   function find() {
     var b = $("find");
     b.disabled = true;
-    $("status").textContent = "Reading the card…";
+    $("status").textContent = "Reading today's card...";
     $("bar").style.width = "35%";
     $("out").textContent = "";
 
@@ -236,6 +237,7 @@
   });
 
   $("find").addEventListener("click", find);
+  find();
 })();
 </script>
 </body>
