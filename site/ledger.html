@@ -10,9 +10,9 @@
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Games that have <b>finished</b>, with their full-time result. Nothing in play — only what's played out.</p>
-
+  <p class="lede">Finished games only — with their full-time result. Two separate records:</p>
   <div class="chips" id="views"></div>
+  <p class="lede" id="caption" style="margin-top:2px"></p>
 
   <div class="stats" id="stats" hidden>
     <div class="stat"><b id="s-hit">—</b><span>Hit-rate</span></div>
@@ -36,7 +36,7 @@
   function paintViews() {
     var box = document.getElementById("views");
     box.textContent = "";
-    [["screen", "Screen's picks"], ["slips", "My slips"]].forEach(function (v) {
+    [["screen", "\ud83c\udfaf Screen picked"], ["slips", "\ud83e\uddfe I booked"]].forEach(function (v) {
       var b = V.el("button", "chip" + (view === v[0] ? " on" : ""), v[1]);
       b.addEventListener("click", function () { view = v[0]; render(); });
       box.appendChild(b);
@@ -97,8 +97,13 @@
     }).catch(function (e) { document.getElementById("out").innerHTML = '<p class="err">' + e.message + "</p>"; });
   }
 
+  var CAPTIONS = {
+    screen: "Every game the screen matched on its own — recorded automatically, whether or not you booked it.",
+    slips: "Only the slips you saved yourself on Betslip."
+  };
   function render() {
     paintViews();
+    document.getElementById("caption").textContent = CAPTIONS[view];
     document.getElementById("stats").hidden = true;
     document.getElementById("out").innerHTML = '<div class="skel"></div><div class="skel"></div>';
     if (view === "screen") renderScreen(); else renderSlips();
