@@ -1,6 +1,7 @@
-// Paper slips. Nothing here is sent to SportyBet.
+// Paper slips, plus a SportyBet share code when they will issue one.
 import { sql, rowToGame } from "./_db.js";
 import { fetchEvent, scoreOf } from "./_card.js";
+import { shareSelections } from "./_share.js";
 
 let schemaReady = false;
 
@@ -40,6 +41,9 @@ export async function ensureSlips() {
       won TEXT,
       PRIMARY KEY (slip_id, game_id)
     )`;
+  await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_code TEXT`;
+  await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_url TEXT`;
+  await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_error TEXT`;
   schemaReady = true;
 }
 
@@ -113,6 +117,9 @@ function shapeSlip(s) {
     status: s.status,
     settledAt: s.settled_at,
     returned: s.returned == null ? null : Number(s.returned),
+    shareCode: s.share_code || null,
+    shareUrl: s.share_url || null,
+    shareError: s.share_error || null,
   };
 }
 
@@ -134,6 +141,15 @@ function shapeLeg(l) {
     ft: l.ft_home == null ? null : { home: l.ft_home, away: l.ft_away },
     won: l.won == null ? null : l.won === "yes",
   };
+}
+
+async function tryShare(legs) {
+  try {
+    const got = await shareSelections(legs);
+    return { shareCode: got.shareCode, shareUrl: got.shareUrl, shareError: null };
+  } catch (e) {
+    return { shareCode: null, shareUrl: null, shareError: String(e?.message || e) };
+  }
 }
 
 export async function createSlip(stake, incoming) {
@@ -167,10 +183,11 @@ export async function createSlip(stake, incoming) {
   const combined = round2(legs.reduce((acc, l) => acc * l.price, 1));
   const potential = round2(n * combined);
   const id = crypto.randomUUID();
+  const share = await tryShare(legs);
 
   await sql`
-    INSERT INTO slips (id, stake, combined_odds, potential, status)
-    VALUES (${id}, ${n}, ${combined}, ${potential}, 'open')`;
+    INSERT INTO slips (id, stake, combined_odds, potential, status, share_code, share_url, share_error)
+    VALUES (${id}, ${n}, ${combined}, ${potential}, 'open', ${share.shareCode}, ${share.shareUrl}, ${share.shareError})`;
   for (let i = 0; i < legs.length; i++) {
     const l = legs[i];
     await sql`
@@ -185,6 +202,28 @@ export async function createSlip(stake, incoming) {
   await refreshSlips();
   const all = await listSlips();
   return all.find((s) => s.id === id);
+}
+
+export async function reshareSlip(slipId) {
+  await ensureSlips();
+  const rows = await sql`SELECT * FROM slip_legs WHERE slip_id = ${slipId} ORDER BY pos ASC`;
+  if (!rows.length) throw new Error("That slip is gone");
+  const legs = rows.map((l) => ({
+    eventId: l.event_id,
+    home: l.home,
+    away: l.away,
+    selection: l.selection,
+    price: Number(l.price),
+  }));
+  const share = await tryShare(legs);
+  await sql`
+    UPDATE slips SET share_code = ${share.shareCode}, share_url = ${share.shareUrl}, share_error = ${share.shareError}
+    WHERE id = ${slipId}`;
+  const all = await listSlips();
+  const slip = all.find((s) => s.id === slipId);
+  if (!slip) throw new Error("That slip is gone");
+  if (share.shareError) throw new Error(share.shareError);
+  return slip;
 }
 
 export async function refreshSlips() {

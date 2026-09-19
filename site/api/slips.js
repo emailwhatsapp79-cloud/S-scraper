@@ -1,6 +1,6 @@
 // Paper book. GET lists slips (and refreshes scores). POST saves a new slip.
 import { cors } from "./_db.js";
-import { listSlips, createSlip, refreshSlips } from "./_slips.js";
+import { listSlips, createSlip, refreshSlips, reshareSlip } from "./_slips.js";
 
 export default async function handler(req, res) {
   cors(res);
@@ -10,7 +10,9 @@ export default async function handler(req, res) {
   try {
     if (req.method === "POST") {
       const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-      const slip = await createSlip(body.stake, body.legs || body.gameIds);
+      const slip = body.slipId
+        ? await reshareSlip(body.slipId)
+        : await createSlip(body.stake, body.legs || body.gameIds);
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ ok: true, tookMs: Date.now() - started, slip });
     }

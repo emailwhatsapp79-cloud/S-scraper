@@ -475,6 +475,39 @@
     h.appendChild(tot);
     card.appendChild(h);
 
+    if (sp.shareCode) {
+      var code = el("div", "codebox");
+      code.appendChild(el("div", "mkt-t", "SportyBet code"));
+      var crow = el("div", "row1");
+      crow.appendChild(el("span", "gid", sp.shareCode));
+      var copy = el("button", "copy", "Copy");
+      copy.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var done = function () {
+          copy.textContent = "Copied";
+          copy.classList.add("done");
+          setTimeout(function () { copy.textContent = "Copy"; copy.classList.remove("done"); }, 1400);
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(sp.shareCode).then(done, function () { copy.textContent = sp.shareCode; });
+        } else copy.textContent = sp.shareCode;
+      });
+      crow.appendChild(copy);
+      code.appendChild(crow);
+      if (sp.shareUrl) {
+        var link = document.createElement("a");
+        link.href = String(sp.shareUrl).replace(/^http:\/\//, "https://");
+        link.textContent = "Open on SportyBet";
+        link.target = "_blank";
+        link.rel = "noopener";
+        code.appendChild(link);
+      }
+      card.appendChild(code);
+    } else if (sp.shareError) {
+      var fail = el("p", "err", "No code: " + sp.shareError);
+      card.appendChild(fail);
+    }
+
     sp.legs.forEach(function (l) {
       var row = el("div", "leg");
       var left = el("div");

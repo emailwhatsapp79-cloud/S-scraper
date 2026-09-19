@@ -15,7 +15,7 @@
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">A paper bet slip. Tap Home, Away, Home or Draw or Draw or Away on Matches — those odds go in here and combine. Nothing is placed on SportyBet.</p>
+  <p class="lede">Tap prices on Matches, then book here. SportyBet issues a share code — no login, no money moved. Paste that code in the app to load the slip.</p>
 
   <section id="draft"></section>
   <h2 style="font-size:16px;margin:22px 0 8px">Live &amp; open slips</h2>
@@ -90,10 +90,10 @@
     money.appendChild(a); money.appendChild(b);
     box.appendChild(money);
 
-    var go = V.el("button", "primary", "Save paper slip · " + legs.length + " legs");
+    var go = V.el("button", "primary", "Book · get SportyBet code");
     go.addEventListener("click", function () {
       go.disabled = true;
-      go.textContent = "Saving…";
+      go.textContent = "Booking…";
       fetch("/api/slips", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -102,17 +102,20 @@
           legs: legs.map(function (l) { return { gameId: l.id, selection: l.selection }; })
         })
       }).then(function (r) { return r.json(); }).then(function (d) {
-        if (!d.ok) throw new Error(d.error || "Could not save");
+        if (!d.ok) throw new Error(d.error || "Could not book");
         V.saveBook([]);
         renderDraft();
         loadSlips();
+        if (d.slip && d.slip.shareCode) {
+          try { navigator.clipboard.writeText(d.slip.shareCode); } catch (e) {}
+        }
       }).catch(function (e) {
         go.disabled = false;
         go.textContent = e.message;
       });
     });
     box.appendChild(go);
-    box.appendChild(V.el("p", "note", "Paper only. Combined odds " + odds.toFixed(2) + " · " + legs.length + " legs."));
+    box.appendChild(V.el("p", "note", "No login, no stake placed. Combined odds " + odds.toFixed(2) + " · " + legs.length + " legs. The code loads this slip on SportyBet."));
   }
 
   function badge(status) {

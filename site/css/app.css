@@ -418,3 +418,13 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
 .slip.won  { border-left: 3px solid var(--go, #1f9d57); }
 .slip.lost { border-left: 3px solid var(--bad, #c8434e); }
 .stat.bad b { color: var(--bad, #c8434e); }
+
+.codebox {
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  border-radius: var(--r2);
+  padding: 12px;
+  margin: 8px 0 10px;
+}
+.codebox .gid { font-size: 26px; letter-spacing: 0.12em; }
+.codebox a { display: inline-block; margin-top: 8px; font-size: 13.5px; font-weight: 650; }
