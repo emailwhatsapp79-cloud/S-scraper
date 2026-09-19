@@ -401,6 +401,13 @@
       });
   }
 
+  function fetchAnalytics() {
+    return fetch("/api/analytics").then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "Could not read analytics");
+      return d;
+    });
+  }
+
   function fetchPicks(settle) {
     return fetch("/api/picks?scope=settled" + (settle ? "&settle=1" : ""))
       .then(function (r) { return r.json(); })
@@ -477,6 +484,9 @@
         '<a href="/ledger" data-nav="ledger">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>' +
           "History</a>" +
+        '<a href="/lab" data-nav="lab">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6l-5 8a2 2 0 0 0 1.8 3h12.4a2 2 0 0 0 1.8-3l-5-8V3"/><path d="M8 3h8M8 13h8"/></svg>' +
+          "Lab</a>" +
         '<a href="/rules" data-nav="rules">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>' +
           "Rules</a>";
@@ -883,6 +893,38 @@
     };
   }
 
+  // Did the favourite double chance land, given the final score.
+  function dcWon(selection, hg, ag) {
+    if (hg == null || ag == null) return null;
+    if (selection === "1X") return hg >= ag;
+    if (selection === "X2") return ag >= hg;
+    if (selection === "1") return hg > ag;
+    if (selection === "2") return ag > hg;
+    if (selection === "X") return hg === ag;
+    if (selection === "12") return hg !== ag;
+    return null;
+  }
+
+  // Bonferroni-widened z: honest band when several buckets are compared at once.
+  var ZTAB = { 1: 1.960, 2: 2.241, 3: 2.394, 4: 2.498, 6: 2.638, 8: 2.734, 12: 2.859, 24: 3.023 };
+  function zFor(k) {
+    var keys = Object.keys(ZTAB).map(Number).sort(function (a, b) { return a - b; });
+    for (var i = 0; i < keys.length; i++) if (k <= keys[i]) return ZTAB[keys[i]];
+    return 3.2;
+  }
+
+  // Run the current bands over one settled game; return the pick + whether it won.
+  function analyse(g) {
+    var r = screen(g);                       // uses live cfg thresholds
+    if (r.verdict !== "show") return null;
+    var selection = r.fav === "home" ? "1X" : "X2";
+    var price = r.fav === "home" ? r.dc.home_draw : r.dc.draw_away;
+    var res = g.res || {};
+    var won = dcWon(selection, res.hg, res.ag);
+    if (won == null) return null;
+    return { league: leagueKey(g), kickoff: g.kickoff, price: price, won: won };
+  }
+
   w.VFS = {
     cfg: cfg, defaults: DEFAULTS, labels: LABELS, save: save,
     hydrate: hydrate, enablePings: enablePings, noticeSlips: noticeSlips,
@@ -895,6 +937,7 @@
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
     injectChrome: injectChrome, paintSlip: paintSlip,
     naira: naira, wilson: wilson, legStats: legStats, slipCard: slipCard,
-    pickCard: pickCard, pickStats: pickStats
+    pickCard: pickCard, pickStats: pickStats,
+    dcWon: dcWon, zFor: zFor, analyse: analyse, fetchAnalytics: fetchAnalytics
   };
 })(window);

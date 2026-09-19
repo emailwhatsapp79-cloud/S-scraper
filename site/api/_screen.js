@@ -62,18 +62,30 @@ async function ensure() {
 /** Record every matching game as an auto-pick. First sighting wins (odds kept). */
 export async function recordPicks(games, opts = {}) {
   await ensure();
-  let recorded = 0;
+  const rows = [];
   for (const g of games || []) {
     if (!opts.past && !g.upcoming) continue;
     const p = match(g);
     if (!p) continue;
-    const rows = await sql`
-      INSERT INTO picks (game_id, event_id, home, away, league, kickoff, selection, selection_label, price)
-      VALUES (${g.id}, ${g.eventId || null}, ${g.home}, ${g.away}, ${g.league || ""},
-              ${g.kickoff || null}, ${p.selection}, ${p.label}, ${p.price})
-      ON CONFLICT (game_id) DO NOTHING
-      RETURNING game_id`;
-    if (rows.length) recorded += 1;
+    rows.push([g.id, g.eventId || null, g.home, g.away, g.league || "",
+               g.kickoff || null, p.selection, p.label, p.price]);
+  }
+  if (!rows.length) return 0;
+
+  // One bulk insert per 50 rows, not one round-trip per game — this was the poll's 504.
+  const F = 9;
+  let recorded = 0;
+  for (let i = 0; i < rows.length; i += 50) {
+    const chunk = rows.slice(i, i + 50);
+    const values = chunk.map((_, j) => {
+      const b = j * F;
+      return "(" + Array.from({ length: F }, (_, k) => `$${b + k + 1}`).join(",") + ")";
+    }).join(",");
+    const r = await sql(
+      `INSERT INTO picks (game_id, event_id, home, away, league, kickoff, selection, selection_label, price)
+       VALUES ${values} ON CONFLICT (game_id) DO NOTHING RETURNING game_id`,
+      chunk.flat());
+    recorded += r.length;
   }
   return recorded;
 }

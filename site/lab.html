@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lab · vFootball</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="wrap">
+  <p class="lede">Backtest the screen over <b id="pool">…</b> finished games. Change the bands below and everything re-scores instantly. Bands don't affect Matches — this is just the test bench.</p>
+
+  <div class="stats" id="head" hidden>
+    <div class="stat"><b id="h-n">—</b><span>Matched</span></div>
+    <div class="stat go"><b id="h-hit">—</b><span>Hit-rate</span></div>
+    <div class="stat" id="roi-tile"><b id="h-roi">—</b><span>Flat ROI</span></div>
+  </div>
+  <p class="note" id="verdict"></p>
+
+  <details id="bands"><summary>Bands</summary><div class="knobs" id="knobs"></div>
+    <button class="ghost" id="reset" type="button" style="margin-top:8px">Reset to defaults</button>
+  </details>
+
+  <h2 class="lab-h">By league</h2><div id="by-league"></div>
+  <h2 class="lab-h">By time of day</h2><div id="by-time"></div>
+  <h2 class="lab-h">By odds</h2><div id="by-odds"></div>
+
+  <p class="note" id="note"></p>
+</main>
+<script src="/js/core.js"></script>
+<script>
+(function () {
+  var V = window.VFS;
+  V.injectChrome("lab");
+  var GAMES = [];
+
+  function pct(x) { return (x * 100).toFixed(1) + "%"; }
+  function wl(list) {
+    var n = list.length, wins = 0, imp = 0, ret = 0;
+    list.forEach(function (p) { if (p.won) { wins++; ret += p.price; } if (p.price > 1) imp += 1 / p.price; });
+    var band = V.wilson(wins, n);
+    return { n: n, wins: wins, hit: n ? wins / n : 0, be: n ? imp / n : 0,
+      lo: band[0], hi: band[1], roi: n ? (ret - n) / n : 0 };
+  }
+
+  function bucketRows(el, groups, order) {
+    var box = document.getElementById(el);
+    box.textContent = "";
+    var keys = order || Object.keys(groups);
+    var z = V.zFor(keys.filter(function (k) { return groups[k] && groups[k].length; }).length || 1);
+    keys.forEach(function (k) {
+      var list = groups[k]; if (!list || !list.length) return;
+      var n = list.length, wins = 0, imp = 0;
+      list.forEach(function (p) { if (p.won) wins++; if (p.price > 1) imp += 1 / p.price; });
+      var be = imp / n, band = V.wilson(wins, n, z), edge = band[0] > be;
+      var row = V.el("div", "rule");
+      row.innerHTML =
+        '<div class="lab-row"><b>' + k + '</b>' +
+        '<span class="lab-n">' + wins + '/' + n + '</span>' +
+        '<span class="lab-hit">' + pct(wins / n) + '</span></div>' +
+        '<div class="lab-bar"><i style="width:' + (wins / n * 100).toFixed(0) + '%"></i>' +
+        '<u style="left:' + (be * 100).toFixed(0) + '%"></u></div>' +
+        '<div class="lab-sub">band ' + pct(band[0]) + '–' + pct(band[1]) + ' · break-even ' + pct(be) +
+        (n < 20 ? ' · thin' : edge ? ' · <b class="ok">edge</b>' : '') + '</div>';
+      box.appendChild(row);
+    });
+    if (!box.children.length) box.appendChild(V.el("p", "note", "No settled games in this cut yet."));
+  }
+
+  function run() {
+    var picks = [];
+    GAMES.forEach(function (g) { var a = V.analyse(g); if (a) picks.push(a); });
+
+    var st = wl(picks);
+    document.getElementById("h-n").textContent = st.n;
+    document.getElementById("h-hit").textContent = st.n ? pct(st.hit) : "—";
+    document.getElementById("h-roi").textContent = st.n ? (st.roi >= 0 ? "+" : "") + pct(st.roi) : "—";
+    document.getElementById("roi-tile").classList.toggle("go", st.roi >= 0);
+    document.getElementById("roi-tile").classList.toggle("bad", st.roi < 0);
+    document.getElementById("head").hidden = false;
+
+    var v = document.getElementById("verdict");
+    if (st.n < 30) v.textContent = "Only " + st.n + " matched & settled — too few to trust. Collect more, or loosen the bands.";
+    else if (st.lo > st.be) v.textContent = "Beating the prices overall: band " + pct(st.lo) + "–" + pct(st.hi) + " clears break-even " + pct(st.be) + ".";
+    else if (st.hi < st.be) v.textContent = "Losing to the prices overall: " + pct(st.lo) + "–" + pct(st.hi) + " is below break-even " + pct(st.be) + ".";
+    else v.textContent = "Overall, indistinguishable from the prices: " + pct(st.lo) + "–" + pct(st.hi) + " straddles break-even " + pct(st.be) + ".";
+
+    var byL = {}; picks.forEach(function (p) { (byL[p.league] = byL[p.league] || []).push(p); });
+    bucketRows("by-league", byL, ["England", "Spain", "Italy", "Germany", "France"]);
+
+    var byT = { "Night 00–06": [], "Morning 06–12": [], "Afternoon 12–18": [], "Evening 18–24": [] };
+    picks.forEach(function (p) {
+      if (!p.kickoff) return;
+      var h = new Date(Number(p.kickoff)).getHours();
+      var k = h < 6 ? "Night 00–06" : h < 12 ? "Morning 06–12" : h < 18 ? "Afternoon 12–18" : "Evening 18–24";
+      byT[k].push(p);
+    });
+    bucketRows("by-time", byT, Object.keys(byT));
+
+    var byO = { "1.17–1.22": [], "1.22–1.26": [], "1.26–1.30": [] };
+    picks.forEach(function (p) {
+      var k = p.price < 1.22 ? "1.17–1.22" : p.price < 1.26 ? "1.22–1.26" : "1.26–1.30";
+      byO[k].push(p);
+    });
+    bucketRows("by-odds", byO, Object.keys(byO));
+
+    document.getElementById("note").textContent = st.n + " matched of " + GAMES.length + " settled games. Breakdown bands are Bonferroni-widened, so slicing can't fake an edge.";
+  }
+
+  V.paintKnobs(document.getElementById("knobs"), run);
+  document.getElementById("reset").addEventListener("click", function () {
+    Object.keys(V.defaults).forEach(function (k) { V.cfg[k] = V.defaults[k]; });
+    V.save();
+    V.paintKnobs(document.getElementById("knobs"), run);
+    run();
+  });
+
+  V.fetchAnalytics().then(function (d) {
+    GAMES = d.games || [];
+    document.getElementById("pool").textContent = GAMES.length;
+    run();
+  }).catch(function (e) {
+    document.getElementById("verdict").innerHTML = '<span class="err">' + e.message + "</span>";
+  });
+})();
+</script>
+</body>
+</html>

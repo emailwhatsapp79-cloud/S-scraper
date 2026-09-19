@@ -4,6 +4,7 @@ import { store } from "./_store.js";
 import { fetchCard, normalise } from "./_card.js";
 import { refreshSlips } from "./_slips.js";
 import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
+import { settleGames } from "./_results.js";
 
 export default async function handler(req, res) {
   cors(res);
@@ -24,10 +25,11 @@ export default async function handler(req, res) {
   try { slips = await refreshSlips(); }
   catch (e) { slips = { error: String(e?.message || e) }; }
 
-  let picked = 0, settled = 0, pickError = null;
+  let picked = 0, settled = 0, gamesSettled = 0, pickError = null;
   try {
     picked = (await recordPicks(games)) + (await recordStoredPicks());
-    settled = await settlePicks();
+    settled = await settlePicks(45);
+    gamesSettled = (await settleGames(45)).settled;
   } catch (e) { pickError = String(e?.message || e); }
 
   res.setHeader("Cache-Control", "no-store");
@@ -40,6 +42,7 @@ export default async function handler(req, res) {
     slips,
     picked,
     settled,
+    gamesSettled,
     pickError,
     saveError,
     feedErrors: errors.length ? errors : null,

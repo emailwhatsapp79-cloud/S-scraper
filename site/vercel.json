@@ -10,6 +10,7 @@
     { "source": "/card", "destination": "/card.html" },
     { "source": "/book", "destination": "/book.html" },
     { "source": "/ledger", "destination": "/ledger.html" },
+    { "source": "/lab", "destination": "/lab.html" },
     { "source": "/rules", "destination": "/rules.html" }
   ]
 }

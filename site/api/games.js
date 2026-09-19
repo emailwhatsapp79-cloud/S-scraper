@@ -3,6 +3,7 @@
 import { sql, rowToGame } from "./_db.js";
 import { store } from "./_store.js";
 import { recordPicks } from "./_screen.js";
+import { settleGames } from "./_results.js";
 import { fetchCard, normalise } from "./_card.js";
 import { guard } from "./_gate.js";
 
