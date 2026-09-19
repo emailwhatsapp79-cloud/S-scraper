@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Ledger · vFootball</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="wrap">
+  <p class="lede">Games already kicked off, kept from earlier reads. Odds are what was showing when they were last seen — not a live book.</p>
+  <div class="stats" id="stats" hidden>
+    <div class="stat"><b id="s-n">—</b><span>On record</span></div>
+    <div class="stat"><b id="s-pass">—</b><span>Would have matched</span></div>
+    <div class="stat"><b id="s-day">—</b><span>Days held</span></div>
+  </div>
+  <div id="out">
+    <div class="skel"></div><div class="skel"></div>
+  </div>
+  <p class="note" id="note"></p>
+</main>
+<script src="/js/core.js"></script>
+<script>
+(function () {
+  var V = window.VFS;
+  V.injectChrome("ledger");
+
+  V.fetchHistory("past").then(function (d) {
+    var games = d.games || [];
+    var passed = 0;
+    games.forEach(function (g) { if (V.screen(g).verdict === "show") passed++; });
+    var days = {};
+    games.forEach(function (g) { days[V.dayLabel(g.kickoff)] = 1; });
+    document.getElementById("s-n").textContent = String(d.stored || games.length);
+    document.getElementById("s-pass").textContent = String(passed);
+    document.getElementById("s-day").textContent = String(Object.keys(days).length);
+    document.getElementById("stats").hidden = false;
+
+    var out = document.getElementById("out");
+    out.textContent = "";
+    if (!games.length) {
+      out.appendChild(V.el("div", "empty", "Nothing stored yet. Open Matches once and the day’s card is kept."));
+      return;
+    }
+    var day = "";
+    games.slice(0, 250).forEach(function (g) {
+      var label = V.dayLabel(g.kickoff);
+      if (label !== day) { day = label; out.appendChild(V.el("div", "day", day)); }
+      out.appendChild(V.compactRow(g, V.screen(g)));
+    });
+    document.getElementById("note").textContent = "Showing " + Math.min(250, games.length) +
+      " kicked-off games · " + (d.stored || 0) + " rows in the database";
+  }).catch(function (e) {
+    document.getElementById("out").innerHTML = '<p class="err">' + e.message + "</p>";
+  });
+})();
+</script>
+</body>
+</html>

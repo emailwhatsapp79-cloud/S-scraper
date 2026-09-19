@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Rules · vFootball</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="wrap">
+  <p class="lede">Sides are never hardcoded. The favourite is whichever full-time home or away leg is shorter; every check is written against fav and dog, so an away-favourite is screened the same way, mirrored.</p>
+
+  <article class="rule">
+    <div class="n">01 · FT 1X2</div>
+    <h2>Favourite in a band, dog long</h2>
+    <p>Favourite between 1.50 and 2.50. The other side at least 3.70, no ceiling. A level game dies here.</p>
+  </article>
+  <article class="rule">
+    <div class="n">02 · Double chance</div>
+    <h2>Favourite-or-draw tight, dog-or-draw long</h2>
+    <p>1X (or X2 if away is favourite) between 1.17 and 1.30. The other double-chance at least 1.89. This is the natural back if a game clears.</p>
+  </article>
+  <article class="rule">
+    <div class="n">03 · Half time</div>
+    <h2>Split, not a coin-flip</h2>
+    <p>Favourite’s half-time 1X2 between 1.10 and 3.00, and the other half-time leg at least 1.70× that price. Check six is what throws out the level games that look fine at full time.</p>
+  </article>
+  <article class="rule">
+    <div class="n">04 · Upcoming only</div>
+    <h2>If it has kicked off, it cannot be backed</h2>
+    <p>The site reads the rest of today’s vFootball card from SportyBet over GET. Live games are recorded, then dropped from Matches. Nothing is placed on an account.</p>
+  </article>
+
+  <h2 style="font-size:16px;margin:22px 0 8px">Your bands</h2>
+  <p class="lede" style="margin-bottom:8px">Stored on this phone. Change a number and Matches re-screens instantly next time you open it.</p>
+  <div class="knobs" id="knobs"></div>
+  <button class="reset" id="reset" type="button">Reset to defaults</button>
+</main>
+<script src="/js/core.js"></script>
+<script>
+(function () {
+  var V = window.VFS;
+  V.injectChrome("rules");
+  V.paintKnobs(document.getElementById("knobs"));
+  document.getElementById("reset").addEventListener("click", function () {
+    Object.keys(V.defaults).forEach(function (k) { V.cfg[k] = V.defaults[k]; });
+    V.save();
+    V.paintKnobs(document.getElementById("knobs"));
+  });
+})();
+</script>
+</body>
+</html>
