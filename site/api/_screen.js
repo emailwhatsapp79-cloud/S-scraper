@@ -87,13 +87,13 @@ export async function recordStoredPicks() {
 const dcHit = (sel, h, a) =>
   sel === "1X" ? h >= a : sel === "X2" ? a >= h : sel === "12" ? h !== a : null;
 
-/** Settle picks whose games have ended. Batched so the request never hangs. */
+/** Settle picks whose games have ended. vFootball runs ~30 real minutes. */
 export async function settlePicks(limit = 60) {
   await ensure();
-  const now = Date.now();
+  const cutoff = Date.now() - 28 * 60 * 1000;
   const open = await sql`
     SELECT * FROM picks
-    WHERE won IS NULL AND kickoff IS NOT NULL AND kickoff < ${now - 60000}
+    WHERE won IS NULL AND kickoff IS NOT NULL AND kickoff < ${cutoff}
       AND event_id IS NOT NULL
     ORDER BY kickoff ASC LIMIT ${limit}`;
   if (!open.length) return 0;
