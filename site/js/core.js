@@ -82,9 +82,7 @@
     };
   }
 
-  function naturalPick(g, r) {
-    r = r || screen(g);
-    var price = r.fav === "home" ? r.dc.home_draw : r.dc.draw_away;
+  function makePick(g, selection, price, label) {
     return {
       id: g.id,
       eventId: g.eventId || null,
@@ -92,11 +90,14 @@
       away: g.away,
       league: g.league || "",
       kickoff: g.kickoff || null,
-      selection: r.fav === "home" ? "1X" : "X2",
-      label: r.fav === "home" ? "Home or Draw" : "Draw or Away",
-      price: Number(price),
-      fav: r.fav
+      selection: selection,
+      label: label,
+      price: Number(price)
     };
+  }
+
+  function bookLeg(id) {
+    return loadBook().filter(function (l) { return l.id === id; })[0] || null;
   }
 
   function acca(prices) {
@@ -120,8 +121,9 @@
   }
   function toggleBook(pick) {
     var legs = loadBook();
+    var prev = legs.filter(function (l) { return l.id === pick.id; })[0];
     var kept = legs.filter(function (l) { return l.id !== pick.id; });
-    if (kept.length === legs.length) kept.push(pick);
+    if (!prev || prev.selection !== pick.selection) kept.push(pick);
     return saveBook(kept);
   }
 
@@ -183,14 +185,29 @@
     return b;
   }
 
-  function market(title, pairs, favKey) {
+  function market(title, pairs, favKey, pick) {
     var box = el("div", "mkt");
     box.appendChild(el("div", "mkt-t", title));
     var grid = el("div", "mkt-g");
     pairs.forEach(function (p) {
-      var cell = el("div", "cell" + (p[2] === favKey ? " fav" : ""));
+      var sel = p[3];
+      var on = pick && pick.picked === sel;
+      var can = pick && sel && p[1] != null;
+      var cell = el("div", "cell" + (p[2] === favKey ? " fav" : "") + (can ? " tap" : "") + (on ? " on" : ""));
       cell.appendChild(el("b", null, p[1] == null ? "—" : Number(p[1]).toFixed(2)));
       cell.appendChild(el("span", null, p[0]));
+      if (can) {
+        cell.setAttribute("role", "button");
+        cell.tabIndex = 0;
+        var go = function (e) {
+          e.stopPropagation();
+          pick.onPick(makePick(pick.game, sel, p[1], p[0]));
+        };
+        cell.addEventListener("click", go);
+        cell.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); }
+        });
+      }
       grid.appendChild(cell);
     });
     box.appendChild(grid);
@@ -228,31 +245,31 @@
     row.appendChild(copyBtn(g.id));
     box.appendChild(row);
     if (!opts.compact) {
+      var picked = bookLeg(g.id);
+      var tap = opts.pickable ? {
+        game: g,
+        picked: picked ? picked.selection : "",
+        onPick: function (p) {
+          toggleBook(p);
+          if (opts.onPick) opts.onPick();
+        }
+      } : null;
       box.appendChild(market("Full time", [
-        ["Home", g.ft.home, "home"], ["Draw", g.ft.draw, "draw"], ["Away", g.ft.away, "away"]
-      ], r.fav));
+        ["Home", g.ft.home, "home", "1"],
+        ["Draw", g.ft.draw, "draw", "X"],
+        ["Away", g.ft.away, "away", "2"]
+      ], r.fav, tap));
       box.appendChild(market("Two chances" + (g.dc ? "" : " · worked out"), [
-        ["Home or Draw", r.dc.home_draw, "home"],
-        ["Home or Away", r.dc.home_away, ""],
-        ["Draw or Away", r.dc.draw_away, "away"]
-      ], r.fav));
+        ["Home or Draw", r.dc.home_draw, "home", "1X"],
+        ["Home or Away", r.dc.home_away, "", "12"],
+        ["Draw or Away", r.dc.draw_away, "away", "X2"]
+      ], r.fav, tap));
       box.appendChild(market("Half time", [
         ["Home", g.ht ? g.ht.home : null, "home"],
         ["Draw", g.ht ? g.ht.draw : null, "draw"],
         ["Away", g.ht ? g.ht.away : null, "away"]
-      ], r.fav));
+      ], r.fav, null));
       if (opts.checks) box.appendChild(checksBox(r));
-    }
-    if (opts.pickable) {
-      var pick = naturalPick(g, r);
-      var btn = el("button", "add" + (picked ? " on" : ""),
-        picked ? pick.label + " · in slip" : "Add " + pick.label + "  " + pick.price.toFixed(2));
-      btn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        var legs = toggleBook(pick);
-        if (opts.onPick) opts.onPick(legs);
-      });
-      box.appendChild(btn);
     }
     return box;
   }
@@ -278,17 +295,17 @@
     extra.appendChild(actions);
     extra.appendChild(market("Full time", [
       ["Home", g.ft.home, "home"], ["Draw", g.ft.draw, "draw"], ["Away", g.ft.away, "away"]
-    ], r.fav));
+    ], r.fav, null));
     extra.appendChild(market("Two chances" + (g.dc ? "" : " · worked out"), [
       ["Home or Draw", r.dc.home_draw, "home"],
       ["Home or Away", r.dc.home_away, ""],
       ["Draw or Away", r.dc.draw_away, "away"]
-    ], r.fav));
+    ], r.fav, null));
     extra.appendChild(market("Half time", [
       ["Home", g.ht ? g.ht.home : null, "home"],
       ["Draw", g.ht ? g.ht.draw : null, "draw"],
       ["Away", g.ht ? g.ht.away : null, "away"]
-    ], r.fav));
+    ], r.fav, null));
     extra.appendChild(checksBox(r));
     box.appendChild(extra);
     row.addEventListener("click", function () { extra.hidden = !extra.hidden; });
@@ -402,7 +419,7 @@
 
   w.VFS = {
     cfg: cfg, defaults: DEFAULTS, labels: LABELS, save: save,
-    screen: screen, naturalPick: naturalPick, acca: acca,
+    screen: screen, makePick: makePick, acca: acca,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
     card: card, compactRow: compactRow,
     until: until, clock: clock, dayLabel: dayLabel, leagueKey: leagueKey,

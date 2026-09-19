@@ -15,7 +15,7 @@
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">A paper bet slip. Favourite-or-draw at full time, combined as an accumulator. Nothing is placed on SportyBet — it only tracks whether that leg landed.</p>
+  <p class="lede">A paper bet slip. Tap Home, Away, Home or Draw or Draw or Away on Matches — those odds go in here and combine. Nothing is placed on SportyBet.</p>
 
   <section id="draft"></section>
   <h2 style="font-size:16px;margin:22px 0 8px">Saved slips</h2>
@@ -45,7 +45,7 @@
     var legs = V.loadBook();
     if (!legs.length) {
       var empty = V.el("div", "empty");
-      empty.innerHTML = "<b>Slip is empty.</b><br>On Matches, tap Add Home or Draw (or Draw or Away) on the games that passed.";
+      empty.innerHTML = "<b>Slip is empty.</b><br>On Matches, tap Home, Away, Home or Draw or Draw or Away.";
       box.appendChild(empty);
       return;
     }
@@ -97,7 +97,10 @@
       fetch("/api/slips", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ stake: stake, gameIds: legs.map(function (l) { return l.id; }) })
+        body: JSON.stringify({
+          stake: stake,
+          legs: legs.map(function (l) { return { gameId: l.id, selection: l.selection }; })
+        })
       }).then(function (r) { return r.json(); }).then(function (d) {
         if (!d.ok) throw new Error(d.error || "Could not save");
         V.saveBook([]);
@@ -109,7 +112,7 @@
       });
     });
     box.appendChild(go);
-    box.appendChild(V.el("p", "note", "Paper only. Combined odds " + odds.toFixed(2) + " · " + legs.length + " × favourite-or-draw."));
+    box.appendChild(V.el("p", "note", "Paper only. Combined odds " + odds.toFixed(2) + " · " + legs.length + " legs."));
   }
 
   function badge(status) {

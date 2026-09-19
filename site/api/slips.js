@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   try {
     if (req.method === "POST") {
       const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-      const slip = await createSlip(body.stake, body.gameIds);
+      const slip = await createSlip(body.stake, body.legs || body.gameIds);
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ ok: true, tookMs: Date.now() - started, slip });
     }

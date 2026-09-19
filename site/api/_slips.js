@@ -47,27 +47,40 @@ function combine(a, b) {
   return Math.round(100 / (1 / a + 1 / b)) / 100;
 }
 
-export function naturalPick(game) {
+function dcOdds(game) {
   const ft = game.ft || {};
-  if (ft.home == null || ft.away == null) return null;
-  const fav = ft.home <= ft.away ? "home" : "away";
-  let dc = game.dc;
-  if (!dc && ft.draw != null) {
-    dc = {
-      home_draw: combine(ft.home, ft.draw),
-      home_away: combine(ft.home, ft.away),
-      draw_away: combine(ft.draw, ft.away),
-    };
-  }
-  if (!dc) return null;
-  if (fav === "home") {
-    return { selection: "1X", label: "Home or Draw", price: Number(dc.home_draw), fav };
-  }
-  return { selection: "X2", label: "Draw or Away", price: Number(dc.draw_away), fav };
+  if (game.dc && game.dc.home_draw != null) return game.dc;
+  if (ft.home == null || ft.draw == null || ft.away == null) return null;
+  return {
+    home_draw: combine(ft.home, ft.draw),
+    home_away: combine(ft.home, ft.away),
+    draw_away: combine(ft.draw, ft.away),
+  };
+}
+
+const LABELS = {
+  "1": "Home", X: "Draw", "2": "Away",
+  "1X": "Home or Draw", "12": "Home or Away", X2: "Draw or Away",
+};
+
+export function resolvePick(game, selection) {
+  const sel = String(selection || "");
+  if (!LABELS[sel]) return null;
+  const ft = game.ft || {};
+  const dc = dcOdds(game);
+  const price = ({
+    "1": ft.home, X: ft.draw, "2": ft.away,
+    "1X": dc && dc.home_draw, "12": dc && dc.home_away, X2: dc && dc.draw_away,
+  })[sel];
+  if (!isFinite(price) || price <= 1) return null;
+  return { selection: sel, label: LABELS[sel], price: Number(price) };
 }
 
 export function dcHit(selection, home, away) {
   if (home == null || away == null) return null;
+  if (selection === "1") return home > away;
+  if (selection === "X") return home === away;
+  if (selection === "2") return away > home;
   if (selection === "1X") return home >= away;
   if (selection === "X2") return away >= home;
   if (selection === "12") return home !== away;
@@ -123,23 +136,23 @@ function shapeLeg(l) {
   };
 }
 
-export async function createSlip(stake, gameIds) {
+export async function createSlip(stake, incoming) {
   await ensureSlips();
-  const ids = [...new Set((gameIds || []).map(String))].slice(0, 12);
-  if (!ids.length) throw new Error("Pick at least one game");
+  const raw = Array.isArray(incoming) ? incoming : [];
+  if (!raw.length) throw new Error("Pick at least one game");
   const n = Number(stake);
   if (!isFinite(n) || n <= 0) throw new Error("Stake has to be a number above 0");
 
+  const ids = [...new Set(raw.map((l) => String(l.gameId || l.id || "")).filter(Boolean))].slice(0, 12);
   const rows = await sql`SELECT * FROM games WHERE game_id = ANY(${ids})`;
   const byId = new Map(rows.map((r) => [r.game_id, rowToGame(r)]));
   const legs = [];
-  for (const id of ids) {
+  for (const row of raw.slice(0, 12)) {
+    const id = String(row.gameId || row.id || "");
     const g = byId.get(id);
     if (!g) throw new Error(`Game ${id} is not on the stored card`);
-    const pick = naturalPick(g);
-    if (!pick || !isFinite(pick.price) || pick.price <= 1) {
-      throw new Error(`${g.home} v ${g.away} has no double-chance price`);
-    }
+    const pick = resolvePick(g, row.selection);
+    if (!pick) throw new Error(`${g.home} v ${g.away} has no price for that pick`);
     legs.push({
       gameId: g.id,
       eventId: g.eventId,
