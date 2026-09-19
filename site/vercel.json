@@ -1,16 +1,43 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["cpt1"],
-  "functions": { "api/*.js": { "maxDuration": 30 } },
+  "regions": [
+    "cpt1"
+  ],
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 30
+    }
+  },
   "crons": [
-    { "path": "/api/poll", "schedule": "15 23 * * *" },
-    { "path": "/api/nudge", "schedule": "*/5 * * * *" }
+    {
+      "path": "/api/poll",
+      "schedule": "15 23 * * *"
+    },
+    {
+      "path": "/api/nudge",
+      "schedule": "20 23 * * *"
+    }
   ],
   "rewrites": [
-    { "source": "/card", "destination": "/card.html" },
-    { "source": "/book", "destination": "/book.html" },
-    { "source": "/ledger", "destination": "/ledger.html" },
-    { "source": "/lab", "destination": "/lab.html" },
-    { "source": "/rules", "destination": "/rules.html" }
+    {
+      "source": "/card",
+      "destination": "/card.html"
+    },
+    {
+      "source": "/book",
+      "destination": "/book.html"
+    },
+    {
+      "source": "/ledger",
+      "destination": "/ledger.html"
+    },
+    {
+      "source": "/lab",
+      "destination": "/lab.html"
+    },
+    {
+      "source": "/rules",
+      "destination": "/rules.html"
+    }
   ]
 }
