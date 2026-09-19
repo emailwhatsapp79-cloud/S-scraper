@@ -474,12 +474,19 @@
       sel.appendChild(el("span", "pick", l.label));            // the favourable side picked
       sel.appendChild(document.createTextNode(" @ " + Number(l.price).toFixed(2)));
       left.appendChild(sel);
-      // full-time score line
+      // score line — only call it "FT" once the game has actually ended
+      var ended = l.won === true || l.won === false || /^end/i.test(l.status || "");
       var ftLine = "";
-      if (l.ft) ftLine = "FT " + l.ft.home + ":" + l.ft.away;
-      else if (l.setScore && l.status && l.status !== "Not start") ftLine = l.status + " " + l.setScore;
-      else if (l.kickoff) ftLine = clock(l.kickoff);
-      if (ftLine) left.appendChild(el("div", "score", ftLine));
+      if (ended && l.ft) ftLine = "FT " + l.ft.home + ":" + l.ft.away;
+      else if (/^(H1|H2|HT)/i.test(l.status || "") && l.setScore) {
+        ftLine = l.status + " " + l.setScore + (l.played ? " " + l.played : "");
+      } else if (l.kickoff) ftLine = clock(l.kickoff);
+      if (ftLine) {
+        var sc = el("div", "score");
+        if (ended) sc.innerHTML = "FT <b>" + l.ft.home + ":" + l.ft.away + "</b>";
+        else sc.textContent = ftLine;
+        left.appendChild(sc);
+      }
       row.appendChild(left);
 
       var mark;
