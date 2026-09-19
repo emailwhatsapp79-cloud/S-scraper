@@ -18,7 +18,7 @@
   <p class="lede">Tap prices on Matches, then book here. SportyBet issues a share code — no login, no money moved. Paste that code in the app to load the slip.</p>
 
   <section id="draft"></section>
-  <h2 style="font-size:16px;margin:22px 0 8px">Live &amp; open slips</h2>
+  <h2 id="slips-h" style="font-size:16px;margin:22px 0 8px">Live &amp; open slips</h2>
   <p class="lede" style="margin-bottom:8px">Scores update while they play. Once a slip is settled it moves to <a href="/ledger">History</a>.</p>
   <div id="slips">
     <div class="skel"></div>
@@ -132,6 +132,20 @@
     active.sort(function (a, b) {
       return (a.status === "live" ? 0 : 1) - (b.status === "live" ? 0 : 1);
     });
+    var liveN = active.filter(function (s) { return s.status === "live"; }).length;
+    var openN = active.length - liveN;
+    var h = document.getElementById("slips-h");
+    if (!h) {
+      /* keep heading if the node is missing */
+    } else if (!active.length) {
+      h.textContent = "Live & open slips · 0";
+    } else if (liveN && openN) {
+      h.textContent = "Live & open slips · " + active.length;
+    } else if (liveN) {
+      h.textContent = "Live slips · " + liveN;
+    } else {
+      h.textContent = "Open slips · " + openN;
+    }
     if (!active.length) {
       var e = V.el("div", "empty");
       e.innerHTML = "No live or open slips.<br>Finished ones are on <a href=\"/ledger\">History</a>.";
