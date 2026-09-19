@@ -1,6 +1,6 @@
 // Paper slips. Nothing here is sent to SportyBet.
 import { sql, rowToGame } from "./_db.js";
-import { fetchLive, fetchEvent, scoreOf } from "./_card.js";
+import { fetchEvent, scoreOf } from "./_card.js";
 
 let schemaReady = false;
 
@@ -184,18 +184,19 @@ export async function refreshSlips() {
     WHERE slip_id IN (SELECT id FROM slips WHERE status IN ('open', 'live'))`;
 
   let liveMap = new Map();
-  try {
-    const live = await fetchLive();
-    for (const ev of live) {
-      const snap = scoreOf(ev);
-      if (snap) liveMap.set(snap.gameId, snap);
+  const eventIds = [...new Set(legs.map((l) => l.event_id).filter(Boolean))];
+  const snaps = await Promise.all(eventIds.map((id) => fetchEvent(id)));
+  for (const ev of snaps) {
+    const snap = scoreOf(ev);
+    if (snap) {
+      liveMap.set(snap.gameId, snap);
+      if (snap.eventId) liveMap.set(snap.eventId, snap);
     }
-  } catch { /* live feed is optional; event lookup still runs */ }
+  }
 
   let updated = 0;
   for (const leg of legs) {
-    let snap = liveMap.get(leg.game_id);
-    if (!snap && leg.event_id) snap = scoreOf(await fetchEvent(leg.event_id));
+    const snap = liveMap.get(leg.game_id) || liveMap.get(leg.event_id);
     if (!snap) continue;
     const won = snap.ended ? dcHit(leg.selection, snap.ftHome, snap.ftAway) : null;
     const wonText = won == null ? null : (won ? "yes" : "no");

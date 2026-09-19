@@ -78,10 +78,10 @@
     V.tick();
   }
 
-  function load() {
+  function load(force) {
     var btn = document.getElementById("refresh");
     if (btn) btn.disabled = true;
-    V.fetchGames().then(function (d) { last = d; render(); })
+    V.fetchGames(force).then(function (d) { last = d; render(); })
       .catch(function (e) {
         document.getElementById("out").innerHTML = '<p class="err">' + e.message + "</p>";
       })
@@ -91,8 +91,8 @@
   document.getElementById("q").addEventListener("input", function (e) {
     q = e.target.value; render();
   });
-  document.getElementById("refresh").addEventListener("click", load);
-  load();
+  document.getElementById("refresh").addEventListener("click", function () { load(true); });
+  load(false);
 })();
 </script>
 </body>

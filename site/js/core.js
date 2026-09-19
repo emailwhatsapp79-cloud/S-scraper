@@ -112,6 +112,7 @@
   }
   function saveBook(legs) {
     try { localStorage.setItem(BOOK_KEY, JSON.stringify(legs)); } catch (e) {}
+    paintSlip();
     return legs;
   }
   function inBook(id) {
@@ -306,8 +307,8 @@
     });
   }
 
-  function fetchGames() {
-    return fetch("/api/games").then(function (r) { return r.json(); }).then(function (d) {
+  function fetchGames(force) {
+    return fetch("/api/games" + (force ? "?force=1" : "")).then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) throw new Error(d.error || "SportyBet did not answer");
       return d;
     });
@@ -322,11 +323,13 @@
       });
   }
 
-  function fetchSlips() {
-    return fetch("/api/slips").then(function (r) { return r.json(); }).then(function (d) {
-      if (!d.ok) throw new Error(d.error || "Could not read slips");
-      return d;
-    });
+  function fetchSlips(live) {
+    return fetch("/api/slips" + (live ? "?live=1" : ""))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.error || "Could not read slips");
+        return d;
+      });
   }
 
   function paintKnobs(root, onChange) {
@@ -348,6 +351,14 @@
   }
 
   setInterval(tick, 30000);
+
+  function paintSlip() {
+    var n = loadBook().length;
+    var badge = document.querySelector(".slip-tab .n");
+    if (badge) badge.textContent = n ? String(n) : "";
+    var tab = document.querySelector(".slip-tab");
+    if (tab) tab.classList.toggle("full", n > 0);
+  }
 
   function injectChrome(active, extra) {
     extra = extra || "";
@@ -371,9 +382,10 @@
         '<a href="/card" data-nav="card">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>' +
           "Card</a>" +
-        '<a href="/book" data-nav="book">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12v12H6z"/><path d="M9 7V5h6v2"/><path d="M9 12h6"/></svg>' +
-          "Book</a>" +
+        '<a href="/book" class="slip-tab" data-nav="book" aria-label="Betslip">' +
+          '<span class="n"></span>' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v16l-3.2-1.6-3.3 1.6-3.3-1.6L5.5 21V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M9 8h6M9 12h6M9 16h3.5"/></svg>' +
+          "Betslip</a>" +
         '<a href="/ledger" data-nav="ledger">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h11a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V6a2 2 0 0 1 2-2z"/></svg>' +
           "Ledger</a>" +
@@ -385,6 +397,7 @@
     document.querySelectorAll(".nav a").forEach(function (a) {
       if (a.getAttribute("data-nav") === active) a.classList.add("on");
     });
+    paintSlip();
   }
 
   w.VFS = {
@@ -395,6 +408,6 @@
     until: until, clock: clock, dayLabel: dayLabel, leagueKey: leagueKey,
     fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips,
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
-    injectChrome: injectChrome
+    injectChrome: injectChrome, paintSlip: paintSlip
   };
 })(window);

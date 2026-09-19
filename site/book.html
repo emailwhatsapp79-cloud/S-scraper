@@ -160,16 +160,17 @@
     });
   }
 
-  function loadSlips() {
-    V.fetchSlips().then(function (d) { renderSlips(d.slips || []); })
+  function loadSlips(live) {
+    V.fetchSlips(live).then(function (d) { renderSlips(d.slips || []); })
       .catch(function (e) {
         document.getElementById("slips").innerHTML = '<p class="err">' + e.message + "</p>";
       });
   }
 
   renderDraft();
-  loadSlips();
-  setInterval(loadSlips, 60000);
+  loadSlips(false);
+  loadSlips(true);
+  setInterval(function () { loadSlips(true); }, 60000);
 })();
 </script>
 </body>

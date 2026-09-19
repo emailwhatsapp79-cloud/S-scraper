@@ -1,8 +1,10 @@
-// Page reader. The card is five GETs — one per virtual league, option=2 —
-// which is the remaining day, not the 10-game highlight window.
+// Page reader. Hits SportyBet at most once every couple of minutes;
+// otherwise the stored remaining-day card is returned immediately.
 import { sql, rowToGame, cors } from "./_db.js";
 import { store } from "./_store.js";
 import { fetchCard, normalise } from "./_card.js";
+
+const CACHE_MS = 120000;
 
 function merge(into, game, live) {
   const prev = into.get(game.id);
@@ -17,6 +19,12 @@ function merge(into, game, live) {
   prev.kickoff = prev.kickoff || game.kickoff;
 }
 
+function seenMs(row) {
+  if (!row?.last_seen) return 0;
+  const t = new Date(row.last_seen).getTime();
+  return isFinite(t) ? t : 0;
+}
+
 export default async function handler(req, res) {
   cors(res);
   if (req.method === "OPTIONS") return res.status(204).end();
@@ -24,27 +32,41 @@ export default async function handler(req, res) {
   const started = Date.now();
   const url = new URL(req.url, "http://x");
   const includeLive = url.searchParams.get("live") === "1";
+  const force = url.searchParams.get("force") === "1";
+  const cutoff = Date.now() - 2 * 60 * 1000;
 
-  const [stored, card] = await Promise.allSettled([
-    sql`SELECT * FROM games ORDER BY kickoff DESC NULLS LAST LIMIT 2000`,
-    fetchCard(),
-  ]);
+  let storedRows = [];
+  let dbError = null;
+  try {
+    storedRows = await sql`
+      SELECT * FROM games
+      WHERE kickoff IS NULL OR kickoff > ${cutoff}
+      ORDER BY kickoff ASC NULLS LAST
+      LIMIT 800`;
+  } catch (e) {
+    dbError = String(e?.message || e);
+  }
+
+  const newest = storedRows.reduce((t, r) => Math.max(t, seenMs(r)), 0);
+  const age = newest ? Date.now() - newest : Infinity;
+  const cached = !force && storedRows.length > 0 && age < CACHE_MS;
 
   const byId = new Map();
-  if (stored.status === "fulfilled") {
-    for (const row of stored.value) merge(byId, rowToGame(row), false);
-  }
+  for (const row of storedRows) merge(byId, rowToGame(row), false);
 
   const fresh = [];
   let feedErrors = [];
-  if (card.status === "fulfilled") {
-    feedErrors = card.value.errors || [];
-    for (const ev of card.value.events) {
-      const g = normalise(ev);
-      if (g) { merge(byId, g, true); fresh.push(g); }
+  if (!cached) {
+    const card = await Promise.allSettled([fetchCard()]).then((r) => r[0]);
+    if (card.status === "fulfilled") {
+      feedErrors = card.value.errors || [];
+      for (const ev of card.value.events) {
+        const g = normalise(ev);
+        if (g) { merge(byId, g, true); fresh.push(g); }
+      }
+    } else {
+      feedErrors = [String(card.reason?.message || card.reason)];
     }
-  } else {
-    feedErrors = [String(card.reason?.message || card.reason)];
   }
 
   let games = [...byId.values()];
@@ -52,20 +74,24 @@ export default async function handler(req, res) {
   games.sort((a, b) => (a.kickoff || 0) - (b.kickoff || 0));
 
   let saved = 0, saveError = null;
-  try { saved = await store(fresh); }
-  catch (e) { saveError = String(e?.message || e); }
+  if (fresh.length) {
+    try { saved = await store(fresh); }
+    catch (e) { saveError = String(e?.message || e); }
+  }
 
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
     ok: true,
+    cached,
+    cacheAgeMs: Number.isFinite(age) ? age : null,
     fetchedAt: Date.now(),
     tookMs: Date.now() - started,
-    storedInDb: stored.status === "fulfilled" ? stored.value.length : 0,
+    storedInDb: storedRows.length,
     fromLiveFeeds: fresh.length,
     savedThisVisit: saved,
     saveError,
     feedErrors: feedErrors.length ? feedErrors : null,
-    dbError: stored.status === "rejected" ? String(stored.reason?.message || stored.reason) : null,
+    dbError,
     count: games.length,
     upcoming: games.filter((g) => g.upcoming).length,
     liveSeen: fresh.filter((g) => !g.upcoming).length,

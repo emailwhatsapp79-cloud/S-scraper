@@ -18,9 +18,9 @@ export default async function handler(req, res) {
     if (req.method !== "GET") return res.status(405).json({ ok: false, error: "GET or POST" });
 
     const url = new URL(req.url, "http://x");
-    const skipRefresh = url.searchParams.get("fresh") === "0";
+    const refreshNow = url.searchParams.get("live") === "1";
     let refresh = null;
-    if (!skipRefresh) {
+    if (refreshNow) {
       try { refresh = await refreshSlips(); }
       catch (e) { refresh = { error: String(e?.message || e) }; }
     }
