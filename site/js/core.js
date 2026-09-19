@@ -512,7 +512,64 @@
     };
   }
 
-  // One saved-slip card, shared by Betslip and History.
+  function matchState(l) {
+    if (l.won === true || l.won === false || /^end/i.test(l.status || "")) return "ended";
+    if (/^(H1|H2|HT|1H|2H|LIVE)/i.test(l.status || "")) return "live";
+    if (l.kickoff && Number(l.kickoff) <= Date.now() - 15000) return "live";
+    return "wait";
+  }
+
+  function scorePair(l) {
+    if (l.ft && l.ft.home != null && l.ft.away != null) return [l.ft.home, l.ft.away];
+    var raw = l.setScore || "";
+    var m = String(raw).trim().match(/^(\d+)\s*[:\-]\s*(\d+)$/);
+    if (m) return [Number(m[1]), Number(m[2])];
+    return null;
+  }
+
+  function phaseLabel(l, st) {
+    if (st === "ended") return "FT";
+    var status = l.status || "LIVE";
+    var played = String(l.played || "");
+    var min = played.match(/^(\d+)/);
+    if (min) return status + " · " + min[1] + "'";
+    return status;
+  }
+
+  function legRow(l) {
+    var st = matchState(l);
+    var row = el("div", "leg " + st);
+    var left = el("div", "leg-teams");
+    left.appendChild(teamsBlock(l.home, l.away));
+    if (l.label) {
+      var sel = el("div", "sel");
+      sel.appendChild(el("span", "pick", l.label));
+      sel.appendChild(document.createTextNode(" @ " + Number(l.price).toFixed(2)));
+      left.appendChild(sel);
+    }
+    row.appendChild(left);
+
+    var mid = el("div", "leg-mid");
+    var pair = scorePair(l);
+    if (st === "wait") {
+      mid.appendChild(el("div", "kick", clock(l.kickoff) || "—"));
+      var t = until(l.kickoff);
+      if (t.text && t.text !== "kicked off") mid.appendChild(el("div", "phase", t.text));
+    } else {
+      var a = pair ? pair[0] : 0, b = pair ? pair[1] : 0;
+      mid.appendChild(el("div", "scoreboard", a + " – " + b));
+      mid.appendChild(el("div", "phase", phaseLabel(l, st)));
+    }
+    row.appendChild(mid);
+
+    var mark;
+    if (l.won === true) mark = el("div", "yes", "Yes");
+    else if (l.won === false) mark = el("div", "no", "No");
+    else if (st === "live") mark = el("div", "live-pill", "LIVE");
+    else mark = el("div", "wait-pill", "Wait");
+    row.appendChild(mark);
+    return row;
+  }
   function slipCard(sp) {
     var card = el("div", "slip " + sp.status);
     var h = el("div", "slip-h");
@@ -559,59 +616,13 @@
       card.appendChild(fail);
     }
 
-    sp.legs.forEach(function (l) {
-      var row = el("div", "leg");
-      var left = el("div");
-      left.appendChild(teamsBlock(l.home, l.away));
-      var sel = el("div", "sel");
-      sel.appendChild(el("span", "pick", l.label));            // the favourable side picked
-      sel.appendChild(document.createTextNode(" @ " + Number(l.price).toFixed(2)));
-      left.appendChild(sel);
-      // score line — only call it "FT" once the game has actually ended
-      var ended = l.won === true || l.won === false || /^end/i.test(l.status || "");
-      var ftLine = "";
-      if (ended && l.ft) ftLine = "FT " + l.ft.home + ":" + l.ft.away;
-      else if (/^(H1|H2|HT)/i.test(l.status || "") && l.setScore) {
-        ftLine = l.status + " " + l.setScore + (l.played ? " " + l.played : "");
-      } else if (l.kickoff) ftLine = clock(l.kickoff);
-      if (ftLine) {
-        var sc = el("div", "score");
-        if (ended) sc.innerHTML = "FT <b>" + l.ft.home + ":" + l.ft.away + "</b>";
-        else sc.textContent = ftLine;
-        left.appendChild(sc);
-      }
-      row.appendChild(left);
-
-      var mark;
-      if (l.won === true) mark = el("div", "yes", "Yes");
-      else if (l.won === false) mark = el("div", "no", "No");
-      else if (/^(H1|H2|HT)/i.test(l.status || "")) mark = el("div", "sel", "live");
-      else mark = el("div", "sel", "wait");
-      row.appendChild(mark);
-      card.appendChild(row);
-    });
+    sp.legs.forEach(function (l) { card.appendChild(legRow(l)); });
     return card;
   }
 
-  // One auto-pick row (screen's own selection), settled with its FT score.
   function pickCard(pk) {
     var card = el("div", "slip " + (pk.won === true ? "won" : pk.won === false ? "lost" : ""));
-    var row = el("div", "leg");
-    var left = el("div");
-    left.appendChild(teamsBlock(pk.home, pk.away));
-    var sel = el("div", "sel");
-    sel.appendChild(el("span", "pick", pk.label));
-    sel.appendChild(document.createTextNode(" @ " + Number(pk.price).toFixed(2)));
-    left.appendChild(sel);
-    var sc = el("div", "score");
-    if (pk.ft) sc.innerHTML = "FT <b>" + pk.ft.home + ":" + pk.ft.away + "</b>";
-    else sc.textContent = pk.status || "";
-    left.appendChild(sc);
-    row.appendChild(left);
-    var mark = pk.won === true ? el("div", "yes", "Yes")
-      : pk.won === false ? el("div", "no", "No") : el("div", "sel", "—");
-    row.appendChild(mark);
-    card.appendChild(row);
+    card.appendChild(legRow(pk));
     return card;
   }
 
@@ -637,6 +648,7 @@
     screen: screen, makePick: makePick, acca: acca,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
     card: card, compactRow: compactRow,
+    until: until, clock: clock, dayLabel: dayLabel,
     leagueKey: leagueKey, teamsBlock: teamsBlock, crest: crest,
     fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips, fetchPicks: fetchPicks,
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
