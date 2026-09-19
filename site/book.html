@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Book · vFootball</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="wrap">
+  <p class="lede">A paper bet slip. Favourite-or-draw at full time, combined as an accumulator. Nothing is placed on SportyBet — it only tracks whether that leg landed.</p>
+
+  <section id="draft"></section>
+  <h2 style="font-size:16px;margin:22px 0 8px">Saved slips</h2>
+  <p class="lede" style="margin-bottom:8px">Live scores while they play. After full time: did Home or Draw / Draw or Away enter — yes or no.</p>
+  <div id="slips">
+    <div class="skel"></div>
+  </div>
+</main>
+<script src="/js/core.js"></script>
+<script>
+(function () {
+  var V = window.VFS;
+  V.injectChrome("book");
+  var stake = 100;
+  try {
+    var s = parseFloat(localStorage.getItem("vfs_stake"));
+    if (isFinite(s) && s > 0) stake = s;
+  } catch (e) {}
+
+  function naira(n) {
+    return "₦" + Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  function renderDraft() {
+    var box = document.getElementById("draft");
+    box.textContent = "";
+    var legs = V.loadBook();
+    if (!legs.length) {
+      var empty = V.el("div", "empty");
+      empty.innerHTML = "<b>Slip is empty.</b><br>On Matches, tap Add Home or Draw (or Draw or Away) on the games that passed.";
+      box.appendChild(empty);
+      return;
+    }
+    var odds = V.acca(legs.map(function (l) { return l.price; }));
+    var ret = Math.round(stake * odds * 100) / 100;
+    legs.forEach(function (l, i) {
+      var row = V.el("div", "leg");
+      var left = V.el("div");
+      left.appendChild(V.el("b", null, l.home + " v " + l.away));
+      left.appendChild(V.el("div", "sel", l.label + " · " + Number(l.price).toFixed(2) +
+        (l.kickoff ? " · " + V.clock(l.kickoff) : "")));
+      row.appendChild(left);
+      var rm = V.el("button", "rm", "Remove");
+      rm.addEventListener("click", function () {
+        var next = V.loadBook().filter(function (_, j) { return j !== i; });
+        V.saveBook(next);
+        renderDraft();
+      });
+      row.appendChild(rm);
+      box.appendChild(row);
+    });
+
+    var money = V.el("div", "money");
+    var a = V.el("div");
+    a.appendChild(V.el("label", null, "Stake"));
+    var inp = document.createElement("input");
+    inp.type = "number"; inp.min = "1"; inp.step = "1"; inp.value = String(stake);
+    inp.addEventListener("change", function () {
+      var v = parseFloat(inp.value);
+      if (isFinite(v) && v > 0) {
+        stake = v;
+        try { localStorage.setItem("vfs_stake", String(stake)); } catch (e) {}
+      }
+      inp.value = String(stake);
+      renderDraft();
+    });
+    a.appendChild(inp);
+    var b = V.el("div");
+    b.appendChild(V.el("label", null, "To return"));
+    var read = V.el("div", "read", naira(ret) + "  @ " + odds.toFixed(2));
+    b.appendChild(read);
+    money.appendChild(a); money.appendChild(b);
+    box.appendChild(money);
+
+    var go = V.el("button", "primary", "Save paper slip · " + legs.length + " legs");
+    go.addEventListener("click", function () {
+      go.disabled = true;
+      go.textContent = "Saving…";
+      fetch("/api/slips", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ stake: stake, gameIds: legs.map(function (l) { return l.id; }) })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.ok) throw new Error(d.error || "Could not save");
+        V.saveBook([]);
+        renderDraft();
+        loadSlips();
+      }).catch(function (e) {
+        go.disabled = false;
+        go.textContent = e.message;
+      });
+    });
+    box.appendChild(go);
+    box.appendChild(V.el("p", "note", "Paper only. Combined odds " + odds.toFixed(2) + " · " + legs.length + " × favourite-or-draw."));
+  }
+
+  function badge(status) {
+    return V.el("span", "badge " + status, status);
+  }
+
+  function renderSlips(slips) {
+    var box = document.getElementById("slips");
+    box.textContent = "";
+    if (!slips.length) {
+      box.appendChild(V.el("div", "empty", "No saved slips yet. They live here, separate from the full game ledger."));
+      return;
+    }
+    slips.forEach(function (s) {
+      var card = V.el("div", "slip");
+      var h = V.el("div", "slip-h");
+      h.appendChild(badge(s.status));
+      h.appendChild(V.el("span", "sel", s.legs.length + " legs · " + naira(s.stake)));
+      var tot = V.el("span", "tot");
+      if (s.status === "won") tot.textContent = "won " + naira(s.returned);
+      else if (s.status === "lost") tot.textContent = "lost";
+      else tot.textContent = s.combinedOdds.toFixed(2) + " → " + naira(s.potential);
+      h.appendChild(tot);
+      card.appendChild(h);
+      s.legs.forEach(function (l) {
+        var row = V.el("div", "leg");
+        var left = V.el("div");
+        left.appendChild(V.el("b", null, l.home + " v " + l.away));
+        var line = l.label + " @ " + Number(l.price).toFixed(2);
+        if (l.status && l.status !== "Not start") {
+          line += " · " + l.status;
+          if (l.setScore) line += " " + l.setScore;
+          if (l.played) line += " " + l.played;
+        } else if (l.kickoff) {
+          line += " · " + V.clock(l.kickoff);
+        }
+        left.appendChild(V.el("div", "sel", line));
+        row.appendChild(left);
+        var mark;
+        if (l.won === true) mark = V.el("div", "yes", "Yes");
+        else if (l.won === false) mark = V.el("div", "no", "No");
+        else if (/^(H1|H2|HT)/i.test(l.status || "")) mark = V.el("div", "sel", "live");
+        else mark = V.el("div", "sel", "wait");
+        row.appendChild(mark);
+        card.appendChild(row);
+      });
+      box.appendChild(card);
+    });
+  }
+
+  function loadSlips() {
+    V.fetchSlips().then(function (d) { renderSlips(d.slips || []); })
+      .catch(function (e) {
+        document.getElementById("slips").innerHTML = '<p class="err">' + e.message + "</p>";
+      });
+  }
+
+  renderDraft();
+  loadSlips();
+  setInterval(loadSlips, 60000);
+})();
+</script>
+</body>
+</html>

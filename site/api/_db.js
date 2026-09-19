@@ -17,6 +17,7 @@ export function rowToGame(r) {
   const notStarted = kickoff == null || kickoff > Date.now();
   return {
     id: r.game_id,
+    eventId: r.event_id || null,
     home: r.home,
     away: r.away,
     league: r.league || "",

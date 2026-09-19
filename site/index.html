@@ -17,7 +17,7 @@
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Upcoming vFootball only — the rest of today, screened to the six checks on Rules.</p>
+  <p class="lede">Upcoming vFootball only — add the favourite-or-draw leg to a paper slip. Nothing is sent to SportyBet.</p>
   <div class="stats" id="stats" hidden>
     <div class="stat"><b id="s-scan">—</b><span>Scanned</span></div>
     <div class="stat go"><b id="s-hit">—</b><span>Matched</span></div>
@@ -29,6 +29,13 @@
   </div>
   <p class="note" id="note"></p>
 </main>
+<div class="dock" id="dock" hidden>
+  <div>
+    <b id="dock-n">0</b> in slip<br>
+    <span class="note" style="margin:0">acca <b id="dock-odds">—</b></span>
+  </div>
+  <a class="go" id="dock-go" href="/book">Open book</a>
+</div>
 <script src="/js/core.js"></script>
 <script>
 (function () {
@@ -36,7 +43,20 @@
   V.injectChrome("matches", '<button class="ghost" id="refresh" type="button">Refresh</button>');
   var league = "All";
   var last = null;
-  var timer = null;
+
+  function dock() {
+    var legs = V.loadBook();
+    var d = document.getElementById("dock");
+    if (!legs.length) {
+      d.hidden = true;
+      document.body.classList.remove("has-dock");
+      return;
+    }
+    d.hidden = false;
+    document.body.classList.add("has-dock");
+    document.getElementById("dock-n").textContent = String(legs.length);
+    document.getElementById("dock-odds").textContent = V.acca(legs.map(function (l) { return l.price; })).toFixed(2);
+  }
 
   function chips(games) {
     var counts = { All: games.length };
@@ -79,7 +99,12 @@
       out.appendChild(empty);
     } else {
       hits.concat(holds).forEach(function (p) {
-        out.appendChild(V.card(p[0], p[1], { checks: true }));
+        out.appendChild(V.card(p[0], p[1], {
+          checks: true,
+          pickable: true,
+          picked: V.inBook(p[0].id),
+          onPick: function () { render(); dock(); }
+        }));
       });
     }
     var n = document.getElementById("note");
@@ -87,6 +112,7 @@
       last.savedThisVisit + " saved · " + last.tookMs + "ms" +
       (last.saveError ? " · save: " + last.saveError : "") +
       (last.feedErrors && last.feedErrors.length ? " · " + last.feedErrors.join("; ") : "");
+    dock();
     V.tick();
   }
 
@@ -103,8 +129,9 @@
   }
 
   document.getElementById("refresh").addEventListener("click", function () { load(false); });
+  dock();
   load(false);
-  timer = setInterval(function () { load(true); }, 180000);
+  setInterval(function () { load(true); }, 180000);
 })();
 </script>
 </body>

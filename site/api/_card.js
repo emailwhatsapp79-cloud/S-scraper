@@ -17,18 +17,23 @@ export const LEAGUES = [
   ["sv:league:5", "France"],
 ];
 
+async function getJson(path, params) {
+  const q = new URLSearchParams(params);
+  const r = await fetch(`${BASE}/${path}?${q}`, {
+    headers: { "User-Agent": UA, Accept: "application/json" },
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const body = await r.json();
+  if (body.bizCode !== 10000) throw new Error(`bizCode ${body.bizCode}`);
+  return body.data;
+}
+
 async function fetchLeague([tid, fallback]) {
-  const q = new URLSearchParams({
+  const data = await getJson("pcUpcomingEvents", {
     sportId: SPORT, tournamentId: tid, marketId: MARKET_IDS,
     option: "2", timeline: "168", pageSize: "100", pageNum: "1",
   });
-  const r = await fetch(`${BASE}/pcUpcomingEvents?${q}`, {
-    headers: { "User-Agent": UA, Accept: "application/json" },
-  });
-  if (!r.ok) throw new Error(`${fallback} HTTP ${r.status}`);
-  const body = await r.json();
-  if (body.bizCode !== 10000) throw new Error(`${fallback} bizCode ${body.bizCode}`);
-  return collectTournaments(body.data, fallback);
+  return collectTournaments(data, fallback);
 }
 
 function collectTournaments(data, fallback) {
@@ -42,15 +47,71 @@ function collectTournaments(data, fallback) {
   return found;
 }
 
+function collect(node, found = []) {
+  if (Array.isArray(node)) { for (const n of node) collect(n, found); return found; }
+  if (!node || typeof node !== "object") return found;
+  if (node.gameId && node.homeTeamName) found.push(node);
+  for (const v of Object.values(node)) collect(v, found);
+  return found;
+}
+
 export async function fetchCard() {
   const results = await Promise.allSettled(LEAGUES.map(fetchLeague));
   const events = [];
   const errors = [];
-  results.forEach((r, i) => {
+  results.forEach((r) => {
     if (r.status === "fulfilled") events.push(...r.value);
     else errors.push(String(r.reason?.message || r.reason));
   });
   return { events, errors };
+}
+
+export async function fetchLive() {
+  const results = await Promise.allSettled(LEAGUES.map(([tid, name]) =>
+    getJson("configurableLiveOrPrematchEvents", {
+      sportId: SPORT, tournamentId: tid, marketId: MARKET_IDS,
+      pageSize: "100", pageNum: "1",
+    }).then((data) => collect(data).map((ev) => ({ ...ev, _league: name }))),
+  ));
+  const events = [];
+  for (const r of results) if (r.status === "fulfilled") events.push(...r.value);
+  return events;
+}
+
+export async function fetchEvent(eventId) {
+  if (!eventId) return null;
+  try {
+    return await getJson("event", { eventId, marketId: MARKET_IDS });
+  } catch {
+    return null;
+  }
+}
+
+export function parseScore(s) {
+  if (s == null) return null;
+  const m = String(s).trim().match(/^(\d+)\s*[:\-]\s*(\d+)$/);
+  if (!m) return null;
+  return { home: Number(m[1]), away: Number(m[2]) };
+}
+
+export function scoreOf(ev) {
+  if (!ev) return null;
+  const ft = parseScore(ev.setScore);
+  const ht = Array.isArray(ev.gameScore) && ev.gameScore[0] ? parseScore(ev.gameScore[0]) : null;
+  const status = ev.matchStatus || "";
+  return {
+    gameId: String(ev.gameId),
+    eventId: ev.eventId || null,
+    status,
+    played: ev.playedSeconds || "",
+    setScore: ev.setScore || "",
+    ftHome: ft ? ft.home : null,
+    ftAway: ft ? ft.away : null,
+    htHome: ht ? ht.home : null,
+    htAway: ht ? ht.away : null,
+    ended: /^end/i.test(status),
+    live: /^(H1|H2|HT|1H|2H|LIVE)/i.test(status),
+  };
 }
 
 function legs(market) {

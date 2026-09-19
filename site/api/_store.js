@@ -27,6 +27,7 @@ export async function store(games) {
          ft_home, ft_draw, ft_away, dc_1x, dc_12, dc_x2, ht_home, ht_draw, ht_away)
        VALUES ${values}
        ON CONFLICT (game_id) DO UPDATE SET
+         event_id = COALESCE(EXCLUDED.event_id, games.event_id),
          status  = EXCLUDED.status,
          kickoff = COALESCE(EXCLUDED.kickoff, games.kickoff),
          league  = COALESCE(NULLIF(EXCLUDED.league,''), games.league),

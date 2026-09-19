@@ -82,6 +82,48 @@
     };
   }
 
+  function naturalPick(g, r) {
+    r = r || screen(g);
+    var price = r.fav === "home" ? r.dc.home_draw : r.dc.draw_away;
+    return {
+      id: g.id,
+      eventId: g.eventId || null,
+      home: g.home,
+      away: g.away,
+      league: g.league || "",
+      kickoff: g.kickoff || null,
+      selection: r.fav === "home" ? "1X" : "X2",
+      label: r.fav === "home" ? "Home or Draw" : "Draw or Away",
+      price: Number(price),
+      fav: r.fav
+    };
+  }
+
+  function acca(prices) {
+    var n = 1;
+    prices.forEach(function (p) { n *= Number(p); });
+    return Math.round(n * 100) / 100;
+  }
+
+  var BOOK_KEY = "vfs_book";
+  function loadBook() {
+    try { return JSON.parse(localStorage.getItem(BOOK_KEY) || "[]") || []; }
+    catch (e) { return []; }
+  }
+  function saveBook(legs) {
+    try { localStorage.setItem(BOOK_KEY, JSON.stringify(legs)); } catch (e) {}
+    return legs;
+  }
+  function inBook(id) {
+    return loadBook().some(function (l) { return l.id === id; });
+  }
+  function toggleBook(pick) {
+    var legs = loadBook();
+    var kept = legs.filter(function (l) { return l.id !== pick.id; });
+    if (kept.length === legs.length) kept.push(pick);
+    return saveBook(kept);
+  }
+
   function until(ms) {
     if (!ms) return { text: "", cls: "" };
     var d = Number(ms) - Date.now();
@@ -167,7 +209,8 @@
 
   function card(g, r, opts) {
     opts = opts || {};
-    var box = el("div", "game" + (r.verdict === "show" ? " match" : r.verdict === "hold" ? " hold" : ""));
+    var picked = opts.picked || inBook(g.id);
+    var box = el("div", "game" + (r.verdict === "show" ? " match" : r.verdict === "hold" ? " hold" : "") + (picked ? " picked" : ""));
     var row = el("div", "row1");
     row.appendChild(el("span", "gid", g.id));
     var who = el("div", "who");
@@ -198,6 +241,17 @@
         ["Away", g.ht ? g.ht.away : null, "away"]
       ], r.fav));
       if (opts.checks) box.appendChild(checksBox(r));
+    }
+    if (opts.pickable) {
+      var pick = naturalPick(g, r);
+      var btn = el("button", "add" + (picked ? " on" : ""),
+        picked ? pick.label + " · in slip" : "Add " + pick.label + "  " + pick.price.toFixed(2));
+      btn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var legs = toggleBook(pick);
+        if (opts.onPick) opts.onPick(legs);
+      });
+      box.appendChild(btn);
     }
     return box;
   }
@@ -268,6 +322,13 @@
       });
   }
 
+  function fetchSlips() {
+    return fetch("/api/slips").then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "Could not read slips");
+      return d;
+    });
+  }
+
   function paintKnobs(root, onChange) {
     root.textContent = "";
     Object.keys(DEFAULTS).forEach(function (k) {
@@ -310,6 +371,9 @@
         '<a href="/card" data-nav="card">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>' +
           "Card</a>" +
+        '<a href="/book" data-nav="book">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12v12H6z"/><path d="M9 7V5h6v2"/><path d="M9 12h6"/></svg>' +
+          "Book</a>" +
         '<a href="/ledger" data-nav="ledger">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h11a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V6a2 2 0 0 1 2-2z"/></svg>' +
           "Ledger</a>" +
@@ -325,9 +389,11 @@
 
   w.VFS = {
     cfg: cfg, defaults: DEFAULTS, labels: LABELS, save: save,
-    screen: screen, card: card, compactRow: compactRow,
+    screen: screen, naturalPick: naturalPick, acca: acca,
+    loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
+    card: card, compactRow: compactRow,
     until: until, clock: clock, dayLabel: dayLabel, leagueKey: leagueKey,
-    fetchGames: fetchGames, fetchHistory: fetchHistory,
+    fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips,
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
     injectChrome: injectChrome
   };

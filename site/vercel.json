@@ -5,6 +5,7 @@
   "crons": [{ "path": "/api/poll", "schedule": "15 23 * * *" }],
   "rewrites": [
     { "source": "/card", "destination": "/card.html" },
+    { "source": "/book", "destination": "/book.html" },
     { "source": "/ledger", "destination": "/ledger.html" },
     { "source": "/rules", "destination": "/rules.html" }
   ]
