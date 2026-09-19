@@ -128,6 +128,10 @@
     var active = (slips || []).filter(function (s) {
       return s.status === "open" || s.status === "live";
     });
+    // Live bets ride to the top; open ones keep their newest-first order below.
+    active.sort(function (a, b) {
+      return (a.status === "live" ? 0 : 1) - (b.status === "live" ? 0 : 1);
+    });
     if (!active.length) {
       var e = V.el("div", "empty");
       e.innerHTML = "No live or open slips.<br>Finished ones are on <a href=\"/ledger\">History</a>.";
