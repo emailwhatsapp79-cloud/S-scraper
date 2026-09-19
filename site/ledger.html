@@ -10,16 +10,18 @@
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Every slip you booked — the favourite side the screen picked, and how it finished. Paper only.</p>
+  <p class="lede">Games that have <b>finished</b>, with their full-time result. Nothing in play — only what's played out.</p>
+
+  <div class="chips" id="views"></div>
 
   <div class="stats" id="stats" hidden>
-    <div class="stat"><b id="s-hit">—</b><span>Leg hit-rate</span></div>
+    <div class="stat"><b id="s-hit">—</b><span>Hit-rate</span></div>
     <div class="stat"><b id="s-be">—</b><span>Break-even</span></div>
-    <div class="stat" id="pnl-tile"><b id="s-pnl">—</b><span>Paper P&amp;L</span></div>
+    <div class="stat" id="pnl-tile"><b id="s-pnl">—</b><span>Flat P&amp;L</span></div>
   </div>
   <p class="note" id="verdict"></p>
 
-  <div id="slips"><div class="skel"></div><div class="skel"></div></div>
+  <div id="out"><div class="skel"></div><div class="skel"></div></div>
   <p class="note" id="note"></p>
 </main>
 <script src="/js/core.js"></script>
@@ -27,75 +29,82 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("ledger");
+  var view = "screen";  // "screen" = auto-picks, "slips" = my booked slips
 
   function pct(x) { return (x * 100).toFixed(1) + "%"; }
 
-  function render(slips) {
-    // settled first, then live/open — all grouped by day (settled date, else booked date)
-    var settled = slips.filter(function (s) { return s.status === "won" || s.status === "lost"; });
-    var active = slips.filter(function (s) { return s.status === "open" || s.status === "live"; });
-
-    var st = V.legStats(slips);
-    if (st.legs > 0) {
-      document.getElementById("s-hit").textContent = pct(st.hit) + " (" + st.wins + "/" + st.legs + ")";
-      document.getElementById("s-be").textContent = pct(st.breakeven);
-      var pnl = document.getElementById("s-pnl");
-      pnl.textContent = (st.pnl >= 0 ? "+" : "") + V.naira(st.pnl);
-      document.getElementById("pnl-tile").classList.toggle("go", st.pnl >= 0);
-      document.getElementById("pnl-tile").classList.toggle("bad", st.pnl < 0);
-      document.getElementById("stats").hidden = false;
-
-      var v = document.getElementById("verdict");
-      if (st.legs < 30) {
-        v.textContent = "Only " + st.legs + " settled picks — too few to tell yet. Interval " +
-          pct(st.lo) + "–" + pct(st.hi) + " vs break-even " + pct(st.breakeven) + ".";
-      } else if (st.lo > st.breakeven) {
-        v.textContent = "Beating the prices: whole interval " + pct(st.lo) + "–" + pct(st.hi) +
-          " sits above break-even " + pct(st.breakeven) + ".";
-      } else if (st.hi < st.breakeven) {
-        v.textContent = "Losing to the prices: interval " + pct(st.lo) + "–" + pct(st.hi) +
-          " is below break-even " + pct(st.breakeven) + ".";
-      } else {
-        v.textContent = "Indistinguishable from the prices so far: " + pct(st.lo) + "–" + pct(st.hi) +
-          " straddles break-even " + pct(st.breakeven) + ".";
-      }
-    }
-
-    var box = document.getElementById("slips");
+  function paintViews() {
+    var box = document.getElementById("views");
     box.textContent = "";
-    if (!slips.length) {
-      box.appendChild(V.el("div", "empty",
-        "No slips yet. On Matches, tap a side to build a slip, then save it on Betslip — it shows up here with its result."));
-      return;
-    }
-
-    function group(title, list) {
-      if (!list.length) return;
-      box.appendChild(V.el("div", "day", title));
-      var lastDay = "\u0000";
-      list.forEach(function (sp) {
-        var when = sp.settledAt || sp.createdAt;
-        var d = V.dayLabel(when ? Date.parse(when) : null);
-        if (d && d !== lastDay) { lastDay = d; box.appendChild(V.el("div", "day sub", d)); }
-        box.appendChild(V.slipCard(sp));
-      });
-    }
-    if (active.length) group("In play / open", active);
-    group(settled.length ? "Settled" : "", settled);
-    document.getElementById("note").textContent =
-      slips.length + " slip(s) · " + st.slipsWon + " won, " + st.slipsLost + " lost, " +
-      active.length + " running.";
+    [["screen", "Screen's picks"], ["slips", "My slips"]].forEach(function (v) {
+      var b = V.el("button", "chip" + (view === v[0] ? " on" : ""), v[1]);
+      b.addEventListener("click", function () { view = v[0]; render(); });
+      box.appendChild(b);
+    });
   }
 
-  function load() {
-    V.fetchSlips(true)
-      .then(function (d) { render(d.slips || []); })
-      .catch(function (e) {
-        document.getElementById("slips").innerHTML = '<p class="err">' + e.message + "</p>";
-      });
+  function stats(st) {
+    var wrap = document.getElementById("stats");
+    if (!st.legs) { wrap.hidden = true; document.getElementById("verdict").textContent = ""; return; }
+    document.getElementById("s-hit").textContent = pct(st.hit) + " (" + st.wins + "/" + st.legs + ")";
+    document.getElementById("s-be").textContent = pct(st.breakeven);
+    var pnl = document.getElementById("s-pnl");
+    pnl.textContent = (st.pnl >= 0 ? "+" : "") + (Math.round(st.pnl * 100) / 100) + "u";
+    document.getElementById("pnl-tile").classList.toggle("go", st.pnl >= 0);
+    document.getElementById("pnl-tile").classList.toggle("bad", st.pnl < 0);
+    wrap.hidden = false;
+    var v = document.getElementById("verdict");
+    if (st.legs < 30) v.textContent = "Only " + st.legs + " settled — too few to tell. Band " + pct(st.lo) + "–" + pct(st.hi) + " vs break-even " + pct(st.breakeven) + ".";
+    else if (st.lo > st.breakeven) v.textContent = "Beating the prices: " + pct(st.lo) + "–" + pct(st.hi) + " is above break-even " + pct(st.breakeven) + ".";
+    else if (st.hi < st.breakeven) v.textContent = "Losing to the prices: " + pct(st.lo) + "–" + pct(st.hi) + " is below break-even " + pct(st.breakeven) + ".";
+    else v.textContent = "Indistinguishable so far: " + pct(st.lo) + "–" + pct(st.hi) + " straddles break-even " + pct(st.breakeven) + ".";
   }
-  load();
-  setInterval(load, 60000);
+
+  function group(out, items, dateOf, cardOf) {
+    var last = "\u0000";
+    items.forEach(function (it) {
+      var d = V.dayLabel(dateOf(it));
+      if (d && d !== last) { last = d; out.appendChild(V.el("div", "day", d)); }
+      out.appendChild(cardOf(it));
+    });
+  }
+
+  function renderScreen() {
+    V.fetchPicks(true).then(function (d) {
+      var picks = (d.picks || []).filter(function (p) { return p.won === true || p.won === false; });
+      stats(V.pickStats(picks));
+      var out = document.getElementById("out"); out.textContent = "";
+      if (!picks.length) {
+        out.appendChild(V.el("div", "empty", "No finished picks yet. The screen records every match it makes; they show here once they've played."));
+      } else {
+        group(out, picks, function (p) { return p.settledAt ? Date.parse(p.settledAt) : p.kickoff; }, V.pickCard);
+      }
+      document.getElementById("note").textContent = picks.length + " settled pick(s), newest first.";
+    }).catch(function (e) { document.getElementById("out").innerHTML = '<p class="err">' + e.message + "</p>"; });
+  }
+
+  function renderSlips() {
+    V.fetchSlips(false).then(function (d) {
+      var slips = (d.slips || []).filter(function (s) { return s.status === "won" || s.status === "lost"; });
+      stats(V.legStats(slips));
+      var out = document.getElementById("out"); out.textContent = "";
+      if (!slips.length) {
+        out.appendChild(V.el("div", "empty", "No settled slips yet. Book a slip on Betslip; once its games finish it appears here."));
+      } else {
+        group(out, slips, function (s) { return s.settledAt ? Date.parse(s.settledAt) : (s.createdAt ? Date.parse(s.createdAt) : null); }, V.slipCard);
+      }
+      document.getElementById("note").textContent = slips.length + " settled slip(s).";
+    }).catch(function (e) { document.getElementById("out").innerHTML = '<p class="err">' + e.message + "</p>"; });
+  }
+
+  function render() {
+    paintViews();
+    document.getElementById("stats").hidden = true;
+    document.getElementById("out").innerHTML = '<div class="skel"></div><div class="skel"></div>';
+    if (view === "screen") renderScreen(); else renderSlips();
+  }
+  render();
+  setInterval(render, 60000);
 })();
 </script>
 </body>

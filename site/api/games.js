@@ -2,6 +2,7 @@
 // otherwise the stored remaining-day card is returned immediately.
 import { sql, rowToGame, cors } from "./_db.js";
 import { store } from "./_store.js";
+import { recordPicks } from "./_screen.js";
 import { fetchCard, normalise } from "./_card.js";
 
 const CACHE_MS = 120000;
@@ -78,6 +79,8 @@ export default async function handler(req, res) {
     try { saved = await store(fresh); }
     catch (e) { saveError = String(e?.message || e); }
   }
+
+  try { await recordPicks(fresh); } catch (e) { /* never fail a read over a pick */ }
 
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({

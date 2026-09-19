@@ -340,6 +340,15 @@
       });
   }
 
+  function fetchPicks(settle) {
+    return fetch("/api/picks?scope=settled" + (settle ? "&settle=1" : ""))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.error || "Could not read picks");
+        return d;
+      });
+  }
+
   function fetchSlips(live) {
     return fetch("/api/slips" + (live ? "?live=1" : ""))
       .then(function (r) { return r.json(); })
@@ -500,15 +509,55 @@
     return card;
   }
 
+  // One auto-pick row (screen's own selection), settled with its FT score.
+  function pickCard(pk) {
+    var card = el("div", "slip " + (pk.won === true ? "won" : pk.won === false ? "lost" : ""));
+    var row = el("div", "leg");
+    var left = el("div");
+    left.appendChild(el("b", null, pk.home + " v " + pk.away));
+    var sel = el("div", "sel");
+    sel.appendChild(el("span", "pick", pk.label));
+    sel.appendChild(document.createTextNode(" @ " + Number(pk.price).toFixed(2)));
+    left.appendChild(sel);
+    var sc = el("div", "score");
+    if (pk.ft) sc.innerHTML = "FT <b>" + pk.ft.home + ":" + pk.ft.away + "</b>";
+    else sc.textContent = pk.status || "";
+    left.appendChild(sc);
+    row.appendChild(left);
+    var mark = pk.won === true ? el("div", "yes", "Yes")
+      : pk.won === false ? el("div", "no", "No") : el("div", "sel", "—");
+    row.appendChild(mark);
+    card.appendChild(row);
+    return card;
+  }
+
+  // Flat-stake stats over settled auto-picks (one unit each).
+  function pickStats(picks) {
+    var n = 0, wins = 0, implied = 0, ret = 0;
+    picks.forEach(function (pk) {
+      if (pk.won === true || pk.won === false) {
+        n++; if (pk.won) { wins++; ret += pk.price; }
+        if (pk.price > 1) implied += 1 / pk.price;
+      }
+    });
+    var band = wilson(wins, n);
+    return {
+      legs: n, wins: wins, hit: n ? wins / n : 0,
+      breakeven: n ? implied / n : 0, lo: band[0], hi: band[1],
+      staked: n, returned: ret, pnl: ret - n, roi: n ? (ret - n) / n : 0
+    };
+  }
+
   w.VFS = {
     cfg: cfg, defaults: DEFAULTS, labels: LABELS, save: save,
     screen: screen, makePick: makePick, acca: acca,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
     card: card, compactRow: compactRow,
     until: until, clock: clock, dayLabel: dayLabel, leagueKey: leagueKey,
-    fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips,
+    fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips, fetchPicks: fetchPicks,
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
     injectChrome: injectChrome, paintSlip: paintSlip,
-    naira: naira, wilson: wilson, legStats: legStats, slipCard: slipCard
+    naira: naira, wilson: wilson, legStats: legStats, slipCard: slipCard,
+    pickCard: pickCard, pickStats: pickStats
   };
 })(window);
