@@ -403,3 +403,18 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important }
 }
+
+/* --- booked-slip history additions --- */
+.leg .pick { color: var(--ink); font-weight: 600; }
+.leg .score {
+  font-size: 12.5px; color: var(--dim); margin-top: 2px;
+  font-variant-numeric: tabular-nums; letter-spacing: .01em;
+}
+.leg .score b { color: var(--ink); }
+.day.sub {
+  font-size: 12px; letter-spacing: .04em; text-transform: none;
+  opacity: .75; margin-top: 10px;
+}
+.slip.won  { border-left: 3px solid var(--go, #1f9d57); }
+.slip.lost { border-left: 3px solid var(--bad, #c8434e); }
+.stat.bad b { color: var(--bad, #c8434e); }

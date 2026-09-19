@@ -18,8 +18,8 @@
   <p class="lede">A paper bet slip. Tap Home, Away, Home or Draw or Draw or Away on Matches — those odds go in here and combine. Nothing is placed on SportyBet.</p>
 
   <section id="draft"></section>
-  <h2 style="font-size:16px;margin:22px 0 8px">Saved slips</h2>
-  <p class="lede" style="margin-bottom:8px">Live scores while they play. After full time: did Home or Draw / Draw or Away enter — yes or no.</p>
+  <h2 style="font-size:16px;margin:22px 0 8px">Live &amp; open slips</h2>
+  <p class="lede" style="margin-bottom:8px">Scores update while they play. Once a slip is settled it moves to <a href="/ledger">History</a>.</p>
   <div id="slips">
     <div class="skel"></div>
   </div>
@@ -122,45 +122,16 @@
   function renderSlips(slips) {
     var box = document.getElementById("slips");
     box.textContent = "";
-    if (!slips.length) {
-      box.appendChild(V.el("div", "empty", "No saved slips yet. They live here, separate from the full game ledger."));
+    var active = (slips || []).filter(function (s) {
+      return s.status === "open" || s.status === "live";
+    });
+    if (!active.length) {
+      var e = V.el("div", "empty");
+      e.innerHTML = "No live or open slips.<br>Finished ones are on <a href=\"/ledger\">History</a>.";
+      box.appendChild(e);
       return;
     }
-    slips.forEach(function (s) {
-      var card = V.el("div", "slip");
-      var h = V.el("div", "slip-h");
-      h.appendChild(badge(s.status));
-      h.appendChild(V.el("span", "sel", s.legs.length + " legs · " + naira(s.stake)));
-      var tot = V.el("span", "tot");
-      if (s.status === "won") tot.textContent = "won " + naira(s.returned);
-      else if (s.status === "lost") tot.textContent = "lost";
-      else tot.textContent = s.combinedOdds.toFixed(2) + " → " + naira(s.potential);
-      h.appendChild(tot);
-      card.appendChild(h);
-      s.legs.forEach(function (l) {
-        var row = V.el("div", "leg");
-        var left = V.el("div");
-        left.appendChild(V.el("b", null, l.home + " v " + l.away));
-        var line = l.label + " @ " + Number(l.price).toFixed(2);
-        if (l.status && l.status !== "Not start") {
-          line += " · " + l.status;
-          if (l.setScore) line += " " + l.setScore;
-          if (l.played) line += " " + l.played;
-        } else if (l.kickoff) {
-          line += " · " + V.clock(l.kickoff);
-        }
-        left.appendChild(V.el("div", "sel", line));
-        row.appendChild(left);
-        var mark;
-        if (l.won === true) mark = V.el("div", "yes", "Yes");
-        else if (l.won === false) mark = V.el("div", "no", "No");
-        else if (/^(H1|H2|HT)/i.test(l.status || "")) mark = V.el("div", "sel", "live");
-        else mark = V.el("div", "sel", "wait");
-        row.appendChild(mark);
-        card.appendChild(row);
-      });
-      box.appendChild(card);
-    });
+    active.forEach(function (sp) { box.appendChild(V.slipCard(sp)); });
   }
 
   function loadSlips(live) {

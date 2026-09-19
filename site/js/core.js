@@ -404,8 +404,8 @@
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v16l-3.2-1.6-3.3 1.6-3.3-1.6L5.5 21V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M9 8h6M9 12h6M9 16h3.5"/></svg>' +
           "Betslip</a>" +
         '<a href="/ledger" data-nav="ledger">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h11a2 2 0 0 1 2 2v14l-4-2-4 2-4-2-4 2V6a2 2 0 0 1 2-2z"/></svg>' +
-          "Ledger</a>" +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>' +
+          "History</a>" +
         '<a href="/rules" data-nav="rules">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>' +
           "Rules</a>";
@@ -417,6 +417,82 @@
     paintSlip();
   }
 
+  function naira(n) {
+    return "\u20a6" + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+
+  // Wilson score interval — honest band on a hit rate, wide at small n.
+  function wilson(wins, n, z) {
+    z = z || 1.96;
+    if (!n) return [0, 1];
+    var p = wins / n, d = 1 + z * z / n;
+    var c = (p + z * z / (2 * n)) / d;
+    var h = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / d;
+    return [Math.max(0, c - h), Math.min(1, c + h)];
+  }
+
+  // Stats over settled legs (each screened pick is one leg).
+  function legStats(slips) {
+    var n = 0, wins = 0, implied = 0, staked = 0, ret = 0, sw = 0, sl = 0;
+    slips.forEach(function (sp) {
+      if (sp.status === "won") { sw++; staked += sp.stake; ret += sp.returned || 0; }
+      else if (sp.status === "lost") { sl++; staked += sp.stake; }
+      sp.legs.forEach(function (l) {
+        if (l.won === true || l.won === false) {
+          n++; if (l.won) wins++; if (l.price > 1) implied += 1 / l.price;
+        }
+      });
+    });
+    var band = wilson(wins, n);
+    return {
+      legs: n, wins: wins, hit: n ? wins / n : 0,
+      breakeven: n ? implied / n : 0, lo: band[0], hi: band[1],
+      slipsWon: sw, slipsLost: sl, staked: staked, returned: ret,
+      pnl: ret - staked, roi: staked ? (ret - staked) / staked : 0
+    };
+  }
+
+  // One saved-slip card, shared by Betslip and History.
+  function slipCard(sp) {
+    var card = el("div", "slip " + sp.status);
+    var h = el("div", "slip-h");
+    var b = el("span", "badge " + sp.status, sp.status);
+    h.appendChild(b);
+    h.appendChild(el("span", "sel", sp.legs.length + " legs \u00b7 " + naira(sp.stake)));
+    var tot = el("span", "tot");
+    if (sp.status === "won") tot.textContent = "won " + naira(sp.returned);
+    else if (sp.status === "lost") tot.textContent = "lost";
+    else tot.textContent = Number(sp.combinedOdds).toFixed(2) + " \u2192 " + naira(sp.potential);
+    h.appendChild(tot);
+    card.appendChild(h);
+
+    sp.legs.forEach(function (l) {
+      var row = el("div", "leg");
+      var left = el("div");
+      left.appendChild(el("b", null, l.home + " v " + l.away));
+      var sel = el("div", "sel");
+      sel.appendChild(el("span", "pick", l.label));            // the favourable side picked
+      sel.appendChild(document.createTextNode(" @ " + Number(l.price).toFixed(2)));
+      left.appendChild(sel);
+      // full-time score line
+      var ftLine = "";
+      if (l.ft) ftLine = "FT " + l.ft.home + ":" + l.ft.away;
+      else if (l.setScore && l.status && l.status !== "Not start") ftLine = l.status + " " + l.setScore;
+      else if (l.kickoff) ftLine = clock(l.kickoff);
+      if (ftLine) left.appendChild(el("div", "score", ftLine));
+      row.appendChild(left);
+
+      var mark;
+      if (l.won === true) mark = el("div", "yes", "Yes");
+      else if (l.won === false) mark = el("div", "no", "No");
+      else if (/^(H1|H2|HT)/i.test(l.status || "")) mark = el("div", "sel", "live");
+      else mark = el("div", "sel", "wait");
+      row.appendChild(mark);
+      card.appendChild(row);
+    });
+    return card;
+  }
+
   w.VFS = {
     cfg: cfg, defaults: DEFAULTS, labels: LABELS, save: save,
     screen: screen, makePick: makePick, acca: acca,
@@ -425,6 +501,7 @@
     until: until, clock: clock, dayLabel: dayLabel, leagueKey: leagueKey,
     fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips,
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
-    injectChrome: injectChrome, paintSlip: paintSlip
+    injectChrome: injectChrome, paintSlip: paintSlip,
+    naira: naira, wilson: wilson, legStats: legStats, slipCard: slipCard
   };
 })(window);
