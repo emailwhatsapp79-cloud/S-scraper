@@ -15,14 +15,14 @@ export async function store(games) {
     g.ht?.home ?? null, g.ht?.draw ?? null, g.ht?.away ?? null,
   ]);
 
-  let saved = 0;
+  const jobs = [];
   for (let i = 0; i < rows.length; i += 50) {
     const chunk = rows.slice(i, i + 50);
     const values = chunk.map((_, j) => {
       const b = j * FIELDS;
       return "(" + Array.from({ length: FIELDS }, (_, k) => `$${b + k + 1}`).join(",") + ")";
     }).join(",");
-    await sql(
+    jobs.push(sql(
       `INSERT INTO games (game_id, event_id, home, away, league, kickoff, status,
          ft_home, ft_draw, ft_away, dc_1x, dc_12, dc_x2, ht_home, ht_draw, ht_away)
        VALUES ${values}
@@ -40,8 +40,8 @@ export async function store(games) {
          ht_away = COALESCE(EXCLUDED.ht_away, games.ht_away),
          last_seen = now()`,
       chunk.flat(),
-    );
-    saved += chunk.length;
+    ));
   }
-  return saved;
+  await Promise.all(jobs);
+  return rows.length;
 }

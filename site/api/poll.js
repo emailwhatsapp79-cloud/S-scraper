@@ -27,9 +27,9 @@ export default async function handler(req, res) {
 
   let picked = 0, settled = 0, gamesSettled = 0, pickError = null;
   try {
-    picked = (await recordPicks(games)) + (await recordStoredPicks());
-    settled = await settlePicks(45);
-    gamesSettled = (await settleGames(45)).settled;
+    picked = await recordPicks(games);
+    settled = await settlePicks(25);
+    gamesSettled = (await settleGames(25)).settled;
   } catch (e) { pickError = String(e?.message || e); }
 
   res.setHeader("Cache-Control", "no-store");
