@@ -2,17 +2,36 @@
 // auto-record every game the screen matches (independent of the browser knobs).
 import { fetchEvent, scoreOf } from "./_card.js";
 import { sql, rowToGame } from "./_db.js";
+import { loadPrefs } from "./_vault.js";
 
+// Defaults match the browser DEFAULTS in core.js. The recorder reads the saved
+// bands from the vault so History's auto-picks and the Matches screen never
+// disagree; these are only the fallback when nothing has been saved yet.
 export const CFG = {
   ft_fav_min: 1.50, ft_fav_max: 2.50, ft_dog_min: 3.70,
   ft_dc_fav_min: 1.17, ft_dc_fav_max: 1.30, ft_dc_dog_min: 1.89,
-  ht_fav_min: 1.10, ht_fav_max: 3.00, ht_ratio_min: 1.70,
+  ht_fav_min: 1.50, ht_fav_max: 3.50, ht_ratio_min: 1.70,
 };
+
+/** The saved bands merged over the defaults — the one screen everything uses. */
+export async function loadCfg() {
+  try {
+    const { shape } = await loadPrefs();
+    if (!shape) return { ...CFG };
+    const out = { ...CFG };
+    for (const k of Object.keys(CFG)) {
+      if (typeof shape[k] === "number" && isFinite(shape[k])) out[k] = shape[k];
+    }
+    return out;
+  } catch {
+    return { ...CFG };
+  }
+}
 
 const combine = (a, b) => Math.round(100 / (1 / a + 1 / b)) / 100;
 
 /** Returns the pick when a game clears all six checks, else null. */
-export function match(g) {
+export function match(g, cfg = CFG) {
   if (!g || !g.ft || !g.ht) return null;                 // ht is required for a SHOW
   const ft = g.ft;
   const dc = g.dc || {
@@ -26,13 +45,13 @@ export function match(g) {
   const dogDC = dog === "home" ? dc.home_draw : dc.draw_away;
 
   const band = (v, lo, hi) => v >= lo && v <= hi;
-  if (!band(ft[fav], CFG.ft_fav_min, CFG.ft_fav_max)) return null;
-  if (!(ft[dog] >= CFG.ft_dog_min)) return null;
-  if (!band(favDC, CFG.ft_dc_fav_min, CFG.ft_dc_fav_max)) return null;
-  if (!(dogDC >= CFG.ft_dc_dog_min)) return null;
+  if (!band(ft[fav], cfg.ft_fav_min, cfg.ft_fav_max)) return null;
+  if (!(ft[dog] >= cfg.ft_dog_min)) return null;
+  if (!band(favDC, cfg.ft_dc_fav_min, cfg.ft_dc_fav_max)) return null;
+  if (!(dogDC >= cfg.ft_dc_dog_min)) return null;
   const hf = g.ht[fav], hd = g.ht[dog];
-  if (!band(hf, CFG.ht_fav_min, CFG.ht_fav_max)) return null;
-  if (!(hd / hf >= CFG.ht_ratio_min)) return null;
+  if (!band(hf, cfg.ht_fav_min, cfg.ht_fav_max)) return null;
+  if (!(hd / hf >= cfg.ht_ratio_min)) return null;
 
   return {
     selection: fav === "home" ? "1X" : "X2",
@@ -62,10 +81,11 @@ async function ensure() {
 /** Record every matching game as an auto-pick. First sighting wins (odds kept). */
 export async function recordPicks(games, opts = {}) {
   await ensure();
+  const cfg = opts.cfg || await loadCfg();
   const rows = [];
   for (const g of games || []) {
     if (!opts.past && !g.upcoming) continue;
-    const p = match(g);
+    const p = match(g, cfg);
     if (!p) continue;
     rows.push([g.id, g.eventId || null, g.home, g.away, g.league || "",
                g.kickoff || null, p.selection, p.label, p.price]);
