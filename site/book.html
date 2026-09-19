@@ -18,8 +18,13 @@
   <p class="lede">Tap prices on Matches, then book here. SportyBet issues a share code — no login, no money moved. Paste that code in the app to load the slip.</p>
 
   <section id="draft"></section>
-  <h2 id="slips-h" style="font-size:16px;margin:22px 0 8px">Live &amp; open slips</h2>
-  <p class="lede" style="margin-bottom:8px">Scores update while they play. Once a slip is settled it moves to <a href="/ledger">History</a>.</p>
+  <div class="slips-head">
+    <div>
+      <h2>Live & open</h2>
+      <p class="lede" style="margin:2px 0 0">Scores update while they play. Settled slips go to <a href="/ledger">History</a>.</p>
+    </div>
+    <div class="slips-counts" id="slips-counts"></div>
+  </div>
   <div id="slips">
     <div class="skel"></div>
   </div>
@@ -134,17 +139,17 @@
     });
     var liveN = active.filter(function (s) { return s.status === "live"; }).length;
     var openN = active.length - liveN;
-    var h = document.getElementById("slips-h");
-    if (!h) {
-      /* keep heading if the node is missing */
-    } else if (!active.length) {
-      h.textContent = "Live & open slips · 0";
-    } else if (liveN && openN) {
-      h.textContent = "Live & open slips · " + active.length;
-    } else if (liveN) {
-      h.textContent = "Live slips · " + liveN;
-    } else {
-      h.textContent = "Open slips · " + openN;
+    var counts = document.getElementById("slips-counts");
+    if (counts) {
+      counts.textContent = "";
+      function chip(n, label, cls) {
+        var c = V.el("div", "count " + cls + (n ? "" : " zero"));
+        c.appendChild(V.el("b", null, String(n)));
+        c.appendChild(V.el("span", null, label));
+        counts.appendChild(c);
+      }
+      chip(liveN, "Live", "live");
+      chip(openN, "Open", "open");
     }
     if (!active.length) {
       var e = V.el("div", "empty");

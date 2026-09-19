@@ -378,6 +378,56 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
 .badge.won { background: var(--go-dim); color: var(--go) }
 .badge.lost { background: rgba(226,93,106,.16); color: var(--bad) }
 
+.slips-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 22px 0 12px;
+}
+.slips-head > div:first-child { flex: 1; min-width: 0 }
+.slips-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.slips-counts { display: flex; gap: 8px; flex: 0 0 auto }
+.slips-counts .count {
+  min-width: 58px;
+  padding: 7px 12px 6px;
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.slips-counts .count b {
+  display: block;
+  font: 700 22px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+}
+.slips-counts .count span {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.slips-counts .count.live { background: var(--hold-dim) }
+.slips-counts .count.live b,
+.slips-counts .count.live span { color: var(--hold) }
+.slips-counts .count.open { background: var(--go-dim) }
+.slips-counts .count.open b,
+.slips-counts .count.open span { color: var(--go) }
+.slips-counts .count.zero { background: var(--card); box-shadow: var(--shadow) }
+.slips-counts .count.zero b,
+.slips-counts .count.zero span { color: var(--faint) }
+.slips-counts .count.live:not(.zero) {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--hold) 35%, transparent);
+}
+
 .slip { background: var(--card); box-shadow: var(--shadow); border-radius: var(--r); padding: 14px; margin-bottom: 10px }
 .slip-h { display: flex; align-items: center; gap: 10px; margin-bottom: 8px }
 .slip-h .tot { margin-left: auto; font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums }
