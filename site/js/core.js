@@ -4,7 +4,7 @@
   var DEFAULTS = {
     ft_fav_min: 1.50, ft_fav_max: 2.50, ft_dog_min: 3.70,
     ft_dc_fav_min: 1.17, ft_dc_fav_max: 1.30, ft_dc_dog_min: 1.89,
-    ht_fav_min: 1.10, ht_fav_max: 3.00, ht_ratio_min: 1.70
+    ht_fav_min: 1.50, ht_fav_max: 3.50, ht_ratio_min: 1.70
   };
   var LABELS = {
     ft_fav_min: "FT favourite from", ft_fav_max: "FT favourite to", ft_dog_min: "FT other side min",

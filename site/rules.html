@@ -20,17 +20,17 @@
   <article class="rule">
     <div class="n">01 · FT 1X2</div>
     <h2>Favourite in a band, dog long</h2>
-    <p>Favourite between 1.50 and 2.50. The other side at least 3.70, no ceiling. A level game dies here.</p>
+    <p>Favourite between <b id="r-ffmin"></b> and <b id="r-ffmax"></b>. The other side at least <b id="r-fdmin"></b>, no ceiling. A level game dies here.</p>
   </article>
   <article class="rule">
     <div class="n">02 · Double chance</div>
     <h2>Favourite-or-draw tight, dog-or-draw long</h2>
-    <p>1X (or X2 if away is favourite) between 1.17 and 1.30. The other double-chance at least 1.89. This is the natural back if a game clears.</p>
+    <p>1X (or X2 if away is favourite) between <b id="r-dcmin"></b> and <b id="r-dcmax"></b>. The other double-chance at least <b id="r-dcdog"></b>. This is the natural back if a game clears.</p>
   </article>
   <article class="rule">
     <div class="n">03 · Half time</div>
     <h2>Split, not a coin-flip</h2>
-    <p>Favourite’s half-time 1X2 between 1.10 and 3.00, and the other half-time leg at least 1.70× that price. Check six is what throws out the level games that look fine at full time.</p>
+    <p>Straight half-time 1X2 only — no half-time double chance. Favourite’s half-time price between <b id="r-htmin"></b> and <b id="r-htmax"></b>, and the other half-time leg at least <b id="r-htx"></b>× that price (double or more is the sweet spot, no ceiling). This is what throws out the level games that look fine at full time.</p>
   </article>
   <article class="rule">
     <div class="n">04 · Upcoming only</div>
@@ -67,15 +67,31 @@
   var V = window.VFS;
   V.injectChrome("rules");
 
+  // Keep the narrative rule cards in step with the live bands so they can't drift.
+  function fillRuleText() {
+    var c = V.cfg, f2 = function (x) { return Number(x).toFixed(2); };
+    var map = {
+      "r-ffmin": f2(c.ft_fav_min), "r-ffmax": f2(c.ft_fav_max), "r-fdmin": f2(c.ft_dog_min),
+      "r-dcmin": f2(c.ft_dc_fav_min), "r-dcmax": f2(c.ft_dc_fav_max), "r-dcdog": f2(c.ft_dc_dog_min),
+      "r-htmin": f2(c.ht_fav_min), "r-htmax": f2(c.ht_fav_max), "r-htx": Number(c.ht_ratio_min).toFixed(2)
+    };
+    Object.keys(map).forEach(function (id) {
+      var n = document.getElementById(id); if (n) n.textContent = map[id];
+    });
+  }
+
   window.addEventListener("vfs-ready", function () {
-    V.paintKnobs(document.getElementById("knobs"));
+    V.paintKnobs(document.getElementById("knobs"), fillRuleText);
+    fillRuleText();
   });
-  V.paintKnobs(document.getElementById("knobs"));
+  V.paintKnobs(document.getElementById("knobs"), fillRuleText);
+  fillRuleText();
 
   document.getElementById("reset").addEventListener("click", function () {
     Object.keys(V.defaults).forEach(function (k) { V.cfg[k] = V.defaults[k]; });
     V.save();
-    V.paintKnobs(document.getElementById("knobs"));
+    V.paintKnobs(document.getElementById("knobs"), fillRuleText);
+    fillRuleText();
   });
 
   var pingBtn = document.getElementById("pings");
