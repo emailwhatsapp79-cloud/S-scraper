@@ -598,9 +598,18 @@
     try { localStorage.setItem("vfs_pinged", JSON.stringify(s)); } catch (e) {}
   }
 
-  function ping(title, body, tag) {
+  function ping(title, body, tag, kind) {
+    playKind(kind);
     if (!("Notification" in window) || Notification.permission !== "granted") return;
-    var opts = { body: body || "", tag: tag || title, icon: "/favicon.svg" };
+    var sound = kind === "yes" ? "/sounds/yes.wav" : kind === "no" ? "/sounds/no.wav" : kind === "kick" ? "/sounds/kick.wav" : "";
+    var opts = {
+      body: body || "",
+      tag: tag || title,
+      icon: "/favicon.svg",
+      renotify: true,
+      vibrate: kind === "yes" ? [80, 40, 80, 40, 160] : kind === "no" ? [240, 80, 240] : [100, 50, 100]
+    };
+    if (sound) opts.sound = sound;
     if (navigator.serviceWorker && navigator.serviceWorker.ready) {
       navigator.serviceWorker.ready.then(function (reg) {
         try { reg.showNotification(title, opts); } catch (e) { try { new Notification(title, opts); } catch (e2) {} }
@@ -608,6 +617,15 @@
     } else {
       try { new Notification(title, opts); } catch (e) {}
     }
+  }
+
+  function playKind(kind) {
+    var src = kind === "yes" ? "/sounds/yes.wav" : kind === "no" ? "/sounds/no.wav" : kind === "kick" ? "/sounds/kick.wav" : "";
+    if (!src) return;
+    try {
+      var a = new Audio(src);
+      a.play().catch(function () {});
+    } catch (e) {}
   }
 
   function watchPings() {
@@ -620,7 +638,7 @@
       var k = "kick-" + l.id;
       if (d > 0 && d <= 5 * 60 * 1000 && !seen[k]) {
         pingMark(k);
-        ping("Kicks soon", l.home + " v " + l.away, k);
+        ping("Kicks soon", l.home + " v " + l.away, k, "kick");
       }
     });
   }
@@ -629,12 +647,50 @@
     if (!slips || !slips.length) return;
     var seen = pingSeen();
     slips.forEach(function (sp) {
+      (sp.legs || []).forEach(function (l) {
+        if (l.won !== true && l.won !== false) return;
+        var k = "leg-" + sp.id + "-" + l.gameId + "-" + (l.won ? "yes" : "no");
+        if (seen[k]) return;
+        pingMark(k);
+        ping(l.won ? "Yes" : "No",
+          (l.home || "") + " v " + (l.away || "") + " · " + (l.label || ""),
+          k, l.won ? "yes" : "no");
+      });
       if (sp.status !== "won" && sp.status !== "lost") return;
-      var k = "slip-" + sp.id + "-" + sp.status;
-      if (seen[k]) return;
-      pingMark(k);
-      ping(sp.status === "won" ? "Slip landed" : "Slip missed",
-        (sp.shareCode ? sp.shareCode + " · " : "") + sp.legs.length + " legs", k);
+      var sk = "slip-" + sp.id + "-" + sp.status;
+      if (seen[sk]) return;
+      pingMark(sk);
+      ping(sp.status === "won" ? "Bet landed" : "Bet missed",
+        (sp.shareCode ? sp.shareCode + " · " : "") + sp.legs.length + " legs",
+        sk, sp.status === "won" ? "yes" : "no");
+    });
+  }
+
+  function b64ToBytes(b64) {
+    var pad = "=".repeat((4 - (b64.length % 4)) % 4);
+    var raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  function subscribePush() {
+    return fetch("/api/push").then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.publicKey || !navigator.serviceWorker) return;
+      return navigator.serviceWorker.ready.then(function (reg) {
+        if (!reg.pushManager) return;
+        return reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: b64ToBytes(d.publicKey)
+        });
+      }).then(function (sub) {
+        if (!sub) return;
+        return fetch("/api/push", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(sub.toJSON())
+        });
+      });
     });
   }
 
@@ -642,19 +698,23 @@
     if (!("Notification" in window)) return Promise.reject(new Error("This browser will not ping"));
     return Notification.requestPermission().then(function (p) {
       if (p !== "granted") throw new Error("Notifications are off");
-      if (navigator.serviceWorker) {
-        return navigator.serviceWorker.register("/sw.js").then(function () {
-          ping("Pings on", "Booked match in five minutes, or a slip settling.", "ping-test");
-          return p;
-        });
-      }
-      ping("Pings on", "Booked match in five minutes, or a slip settling.", "ping-test");
-      return p;
+      var ready = navigator.serviceWorker
+        ? navigator.serviceWorker.register("/sw.js").then(function () { return subscribePush(); })
+        : Promise.resolve();
+      return ready.then(function () {
+        ping("Pings on", "Yes, No, and the full bet — even if the phone is locked.", "ping-test", "yes");
+        return p;
+      });
     });
   }
 
   if (navigator.serviceWorker && "Notification" in window && Notification.permission === "granted") {
-    navigator.serviceWorker.register("/sw.js").catch(function () {});
+    navigator.serviceWorker.register("/sw.js").then(function () { subscribePush(); }).catch(function () {});
+  }
+  if (navigator.serviceWorker) {
+    navigator.serviceWorker.addEventListener("message", function (e) {
+      if (e.data && e.data.type === "vfs-sound") playKind(e.data.kind);
+    });
   }
 
   function naira(n) {

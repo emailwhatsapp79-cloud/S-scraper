@@ -2,7 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["cpt1"],
   "functions": { "api/*.js": { "maxDuration": 30 } },
-  "crons": [{ "path": "/api/poll", "schedule": "15 23 * * *" }],
+  "crons": [
+    { "path": "/api/poll", "schedule": "15 23 * * *" },
+    { "path": "/api/nudge", "schedule": "*/5 * * * *" }
+  ],
   "rewrites": [
     { "source": "/card", "destination": "/card.html" },
     { "source": "/book", "destination": "/book.html" },

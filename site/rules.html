@@ -44,7 +44,7 @@
   <button class="reset" id="reset" type="button">Reset to defaults</button>
 
   <h2 style="font-size:16px;margin:28px 0 8px">Pings</h2>
-  <p class="lede" style="margin-bottom:8px">A tap on the phone when a booked match kicks in five minutes, or a slip finishes Yes/No. Allow it below. Add the site to your home screen so it still works after you leave the tab.</p>
+  <p class="lede" style="margin-bottom:8px">A tap when a booked leg hits Yes or No — different sound for each — and another when the whole bet settles. Works with the phone locked if you Allow pings and add this site to your home screen.</p>
   <button class="ghost" id="pings" type="button">Allow pings</button>
   <p class="note" id="ping-note"></p>
 
@@ -87,7 +87,7 @@
     V.enablePings().then(function () {
       pingBtn.textContent = "Pings on";
       pingBtn.classList.add("on");
-      document.getElementById("ping-note").textContent = "You should have just got a test tap. Next ones: booked match in five minutes, or a slip settling.";
+      document.getElementById("ping-note").textContent = "You should have just got a Yes chime. Next: each booked leg Yes/No, then the full bet.";
     }).catch(function (e) {
       document.getElementById("ping-note").textContent = e.message;
     });

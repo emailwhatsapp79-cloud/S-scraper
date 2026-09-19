@@ -2,6 +2,7 @@
 import { sql, rowToGame } from "./_db.js";
 import { fetchEvent, scoreOf } from "./_card.js";
 import { shareSelections } from "./_share.js";
+import { notifyBooked } from "./_push.js";
 
 let schemaReady = false;
 
@@ -300,5 +301,8 @@ export async function refreshSlips() {
         WHERE id = ${slip.id}`;
     }
   }
-  return { updated };
+  const slips = await listSlips();
+  let pushed = 0;
+  try { pushed = (await notifyBooked(slips)).sent; } catch { /* keep scores */ }
+  return { updated, pushed };
 }
