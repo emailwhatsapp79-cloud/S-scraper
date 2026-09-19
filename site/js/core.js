@@ -463,6 +463,9 @@
         '<div class="mark" aria-hidden="true">VF</div>' +
         '<div class="brand"><b>vFootball</b><span>SportyBet screener</span></div>' +
         extra +
+        '<a class="gear-btn" href="/rules" data-nav="rules" aria-label="Rules" title="Rules">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' +
+        '</a>' +
         '<button class="ghost lock-btn" type="button" id="vfs-lock" aria-label="Lock">Lock</button>';
       document.body.insertBefore(top, document.body.firstChild);
     }
@@ -486,13 +489,10 @@
           "History</a>" +
         '<a href="/lab" data-nav="lab">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6l-5 8a2 2 0 0 0 1.8 3h12.4a2 2 0 0 0 1.8-3l-5-8V3"/><path d="M8 3h8M8 13h8"/></svg>' +
-          "Lab</a>" +
-        '<a href="/rules" data-nav="rules">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>' +
-          "Rules</a>";
+          "Lab</a>";
       document.body.appendChild(nav);
     }
-    document.querySelectorAll(".nav a").forEach(function (a) {
+    document.querySelectorAll(".nav a, .gear-btn").forEach(function (a) {
       if (a.getAttribute("data-nav") === active) a.classList.add("on");
     });
     paintSlip();
