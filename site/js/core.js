@@ -866,7 +866,11 @@
       card.appendChild(fail);
     }
 
-    sp.legs.forEach(function (l) { card.appendChild(legRow(l)); });
+    // Show the leg that's playing first, then the ones still to come, then finished.
+    var rank = { live: 0, wait: 1, ended: 2 };
+    sp.legs.slice()
+      .sort(function (a, b) { return rank[matchState(a)] - rank[matchState(b)]; })
+      .forEach(function (l) { card.appendChild(legRow(l)); });
     return card;
   }
 
