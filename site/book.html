@@ -106,7 +106,6 @@
         V.saveBook([]);
         renderDraft();
         loadSlips();
-        V.hydrate();
         if (d.slip && d.slip.shareCode) {
           try { navigator.clipboard.writeText(d.slip.shareCode); } catch (e) {}
         }

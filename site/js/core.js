@@ -13,7 +13,6 @@
   };
 
   var cfg = Object.assign({}, DEFAULTS);
-  var bankroll = null;
   try {
     var stored = JSON.parse(localStorage.getItem("vfs") || "null");
     if (stored) Object.keys(DEFAULTS).forEach(function (k) {
@@ -457,7 +456,6 @@
         '<div class="mark" aria-hidden="true">VF</div>' +
         '<div class="brand"><b>vFootball</b><span>SportyBet screener</span></div>' +
         extra +
-        '<span class="wallet" id="vfs-wallet" hidden></span>' +
         '<button class="ghost lock-btn" type="button" id="vfs-lock" aria-label="Lock">Lock</button>';
       document.body.insertBefore(top, document.body.firstChild);
     }
@@ -572,14 +570,6 @@
     }).then(function () { showLock(); });
   }
 
-  function paintWallet() {
-    var n = document.getElementById("vfs-wallet");
-    if (!n) return;
-    if (!bankroll || bankroll.amount == null) { n.hidden = true; return; }
-    n.hidden = false;
-    n.textContent = naira(bankroll.amount);
-  }
-
   function hydrate() {
     return fetch("/api/settings").then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) return d;
@@ -591,22 +581,7 @@
       } else {
         save();
       }
-      bankroll = d.bankroll;
-      paintWallet();
       w.dispatchEvent(new Event("vfs-ready"));
-      return d;
-    });
-  }
-
-  function setBankroll(amount) {
-    return fetch("/api/settings", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ bankroll: amount })
-    }).then(function (r) { return r.json(); }).then(function (d) {
-      if (!d.ok) throw new Error(d.error || "Could not save bankroll");
-      bankroll = d.bankroll;
-      paintWallet();
       return d;
     });
   }
@@ -668,8 +643,12 @@
     return Notification.requestPermission().then(function (p) {
       if (p !== "granted") throw new Error("Notifications are off");
       if (navigator.serviceWorker) {
-        return navigator.serviceWorker.register("/sw.js").then(function () { return p; });
+        return navigator.serviceWorker.register("/sw.js").then(function () {
+          ping("Pings on", "Booked match in five minutes, or a slip settling.", "ping-test");
+          return p;
+        });
       }
+      ping("Pings on", "Booked match in five minutes, or a slip settling.", "ping-test");
       return p;
     });
   }
@@ -846,8 +825,7 @@
 
   w.VFS = {
     cfg: cfg, defaults: DEFAULTS, labels: LABELS, save: save,
-    hydrate: hydrate, setBankroll: setBankroll, enablePings: enablePings, noticeSlips: noticeSlips,
-    bankroll: function () { return bankroll; },
+    hydrate: hydrate, enablePings: enablePings, noticeSlips: noticeSlips,
     screen: screen, makePick: makePick, acca: acca,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
     card: card, compactRow: compactRow,

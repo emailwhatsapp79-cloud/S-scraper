@@ -2,7 +2,6 @@
 import { sql, rowToGame } from "./_db.js";
 import { fetchEvent, scoreOf } from "./_card.js";
 import { shareSelections } from "./_share.js";
-import { debitBankroll } from "./_vault.js";
 
 let schemaReady = false;
 
@@ -201,7 +200,6 @@ export async function createSlip(stake, incoming) {
   }
 
   await refreshSlips();
-  try { await debitBankroll(n); } catch { /* paper book still stands */ }
   const all = await listSlips();
   return all.find((s) => s.id === id);
 }
