@@ -50,6 +50,31 @@ by the host and never by the visitor's device.
 The site stays on `cpt1` anyway: it is the closest region to Nigeria, so
 pages load faster there even though the database is still in Ohio.
 
+## Why no server can get the full card: AWS WAF
+
+The POST endpoints are protected by AWS WAF's JavaScript token challenge.
+SportyBet's own bundle calls `window.AwsWafIntegration.getToken()` and
+attaches the resulting `aws-waf-token` to protected requests. A GET is not
+challenged, which is why reads work from any server; a POST without a valid
+token is answered `bizCode 19003 Forbidden`.
+
+That token can only be produced by running AWS's obfuscated challenge script
+in a real browser. It is not an IP or a header a server can copy. Tested to
+exhaustion:
+
+| From | Network | POST wapEvents |
+|---|---|---|
+| Virginia (AWS) | datacenter | Forbidden |
+| Cape Town (AWS) | datacenter | Forbidden |
+| Washington (Cloudflare edge) | Cloudflare | Forbidden |
+| Amsterdam (Cloudflare edge, NG visitor) | Cloudflare | Forbidden |
+| Amsterdam + cookies + full browser headers | Cloudflare | Forbidden |
+
+The visitor's own browser on sportybet.com succeeds because it already holds
+a valid aws-waf-token. So the full multi-day card is reachable only from code
+running in that page context, never from a server in any location. The site
+uses the GET feeds a server can reach and records what it sees.
+
 ## Unverified
 
 Whether the GET feeds return the full day's card at the start of a day
