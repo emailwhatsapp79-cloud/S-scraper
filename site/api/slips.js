@@ -1,10 +1,10 @@
 // Paper book. GET lists slips (and refreshes scores). POST saves a new slip.
 import { cors } from "./_db.js";
 import { listSlips, createSlip, refreshSlips, reshareSlip } from "./_slips.js";
+import { guard } from "./_gate.js";
 
 export default async function handler(req, res) {
-  cors(res);
-  if (req.method === "OPTIONS") return res.status(204).end();
+  if (guard(req, res)) return;
 
   const started = Date.now();
   try {

@@ -1,10 +1,10 @@
 // Auto-ledger: every game the screen matched, settled after it played.
 import { cors } from "./_db.js";
 import { listPicks, settlePicks, recordStoredPicks } from "./_screen.js";
+import { guard } from "./_gate.js";
 
 export default async function handler(req, res) {
-  cors(res);
-  if (req.method === "OPTIONS") return res.status(204).end();
+  if (guard(req, res)) return;
   const started = Date.now();
   const url = new URL(req.url, "http://x");
   const scope = url.searchParams.get("scope") || "settled";

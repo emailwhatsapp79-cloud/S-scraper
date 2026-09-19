@@ -445,7 +445,8 @@
       top.innerHTML =
         '<div class="mark" aria-hidden="true">VF</div>' +
         '<div class="brand"><b>vFootball</b><span>SportyBet screener</span></div>' +
-        extra;
+        extra +
+        '<button class="ghost lock-btn" type="button" id="vfs-lock" aria-label="Lock">Lock</button>';
       document.body.insertBefore(top, document.body.firstChild);
     }
     if (!document.querySelector(".nav")) {
@@ -475,6 +476,87 @@
       if (a.getAttribute("data-nav") === active) a.classList.add("on");
     });
     paintSlip();
+    var lb = document.getElementById("vfs-lock");
+    if (lb && !lb.getAttribute("data-bound")) {
+      lb.setAttribute("data-bound", "1");
+      lb.addEventListener("click", lockNow);
+    }
+    gateCheck();
+  }
+
+  function showLock() {
+    if (document.getElementById("gate")) return;
+    document.body.classList.add("locked");
+    var gate = el("div", "gate");
+    gate.id = "gate";
+    gate.innerHTML =
+      '<div class="gate-box">' +
+        '<div class="mark" aria-hidden="true">VF</div>' +
+        '<b>vFootball</b>' +
+        '<p>Enter your code</p>' +
+        '<div class="dots" id="gate-dots"></div>' +
+        '<p class="err" id="gate-err" hidden></p>' +
+        '<div class="pad" id="gate-pad"></div>' +
+      "</div>";
+    document.body.appendChild(gate);
+    var pin = "";
+    function paintDots() {
+      var d = document.getElementById("gate-dots");
+      d.textContent = "";
+      for (var i = 0; i < 6; i++) d.appendChild(el("i", i < pin.length ? "on" : ""));
+    }
+    function press(ch) {
+      document.getElementById("gate-err").hidden = true;
+      if (ch === "⌫") pin = pin.slice(0, -1);
+      else if (pin.length < 6) pin += ch;
+      paintDots();
+      if (pin.length === 6) submit();
+    }
+    function submit() {
+      fetch("/api/gate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ pin: pin })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.open) {
+          pin = "";
+          paintDots();
+          var e = document.getElementById("gate-err");
+          e.hidden = false;
+          e.textContent = "Wrong code";
+          return;
+        }
+        document.body.classList.remove("locked");
+        gate.remove();
+        location.reload();
+      }).catch(function () {
+        pin = "";
+        paintDots();
+      });
+    }
+    var pad = document.getElementById("gate-pad");
+    ["1","2","3","4","5","6","7","8","9","","0","⌫"].forEach(function (ch) {
+      var b = el("button", "key" + (ch === "" ? " ghost" : ""), ch === "⌫" ? "⌫" : ch);
+      b.type = "button";
+      if (!ch) { b.disabled = true; b.textContent = ""; }
+      else b.addEventListener("click", function () { press(ch); });
+      pad.appendChild(b);
+    });
+    paintDots();
+  }
+
+  function gateCheck() {
+    fetch("/api/gate").then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.open) showLock();
+    }).catch(function () { showLock(); });
+  }
+
+  function lockNow() {
+    fetch("/api/gate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ lock: true })
+    }).then(function () { showLock(); });
   }
 
   function naira(n) {

@@ -1,9 +1,9 @@
 // Stored card, no SportyBet round-trip. The clock still decides upcoming vs past.
 import { sql, rowToGame, cors } from "./_db.js";
+import { guard } from "./_gate.js";
 
 export default async function handler(req, res) {
-  cors(res);
-  if (req.method === "OPTIONS") return res.status(204).end();
+  if (guard(req, res)) return;
 
   const url = new URL(req.url, "http://x");
   const scope = url.searchParams.get("scope") || "past";

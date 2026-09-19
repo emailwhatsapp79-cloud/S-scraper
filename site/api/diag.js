@@ -3,6 +3,7 @@
 // not yours, which is the whole point of the page.
 
 import { cors } from "./_db.js";
+import { guard } from "./_gate.js";
 
 const BASE = "https://www.sportybet.com/api/ng/factsCenter";
 const SPORT = "sr:sport:202120001";
@@ -27,7 +28,7 @@ async function attempt(label, url, init) {
 }
 
 export default async function handler(req, res) {
-  cors(res);
+  if (guard(req, res)) return;
 
   const headers = { "User-Agent": UA, Accept: "application/json" };
   const body = JSON.stringify({

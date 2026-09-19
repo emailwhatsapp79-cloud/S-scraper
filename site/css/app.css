@@ -495,3 +495,42 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
 }
 .codebox .gid { font-size: 26px; letter-spacing: 0.12em; }
 .codebox a { display: inline-block; margin-top: 8px; font-size: 13.5px; font-weight: 650; }
+
+.lock-btn { flex: 0 0 auto; font-size: 13px; padding: 0 12px }
+body.locked .wrap,
+body.locked .nav,
+body.locked .top { visibility: hidden }
+.gate {
+  position: fixed; inset: 0; z-index: 80;
+  background: var(--bg);
+  display: grid; place-items: center;
+  padding: 24px 16px;
+}
+.gate-box { width: min(360px, 100%); text-align: center }
+.gate-box .mark { margin: 0 auto 14px }
+.gate-box b { display: block; font-size: 22px; letter-spacing: -0.03em }
+.gate-box p { color: var(--dim); margin: 8px 0 18px }
+.dots { display: flex; justify-content: center; gap: 10px; margin-bottom: 22px }
+.dots i {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--card); box-shadow: var(--shadow);
+}
+.dots i.on { background: var(--go) }
+.pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.pad .key {
+  min-height: 56px;
+  border-radius: 16px;
+  background: var(--card);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+  font-size: 22px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.pad .key:active { background: var(--go); color: var(--go-ink) }
+.pad .key:disabled { opacity: 0; pointer-events: none }
+.gate .err { color: var(--bad); min-height: 1.2em; margin: 0 0 12px }
