@@ -66,7 +66,9 @@
     });
     document.getElementById("s-scan").textContent = String(games.length);
     document.getElementById("s-hit").textContent = String(hits.length);
-    var next = games[0] && games[0].kickoff ? V.until(games[0].kickoff).text.replace("in ", "") : "—";
+    var rows = hits.concat(holds).sort(function (a, b) { return V.byKick(a[0], b[0]); });
+    var nextG = rows[0] ? rows[0][0] : games.slice().sort(V.byKick)[0];
+    var next = nextG && nextG.kickoff ? V.until(nextG.kickoff).text.replace("in ", "") : "—";
     document.getElementById("s-next").textContent = next || "—";
     document.getElementById("stats").hidden = false;
     chips(games);
@@ -78,7 +80,7 @@
       empty.innerHTML = "<b>None of the upcoming games match this shape.</b><br>Open Card to browse the full list, or loosen the bands on Rules.";
       out.appendChild(empty);
     } else {
-      hits.concat(holds).forEach(function (p) {
+      rows.forEach(function (p) {
         out.appendChild(V.card(p[0], p[1], {
           checks: true,
           pickable: true,

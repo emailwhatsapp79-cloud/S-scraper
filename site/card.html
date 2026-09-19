@@ -59,7 +59,7 @@
       box.appendChild(b);
     });
 
-    var games = visible();
+    var games = visible().slice().sort(V.byKick);
     var out = document.getElementById("out");
     out.textContent = "";
     var day = "";
@@ -69,7 +69,9 @@
         day = label;
         out.appendChild(V.el("div", "day", day));
       }
-      out.appendChild(V.compactRow(g, V.screen(g)));
+      var r;
+      try { r = V.screen(g); } catch (e) { return; }
+      out.appendChild(V.compactRow(g, r));
     });
     if (!games.length) {
       out.appendChild(V.el("div", "empty", "Nothing in this slice of the card."));

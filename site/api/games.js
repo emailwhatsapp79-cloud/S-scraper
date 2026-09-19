@@ -3,7 +3,6 @@
 import { sql, rowToGame } from "./_db.js";
 import { store } from "./_store.js";
 import { recordPicks } from "./_screen.js";
-import { settleGames } from "./_results.js";
 import { fetchCard, normalise } from "./_card.js";
 import { guard } from "./_gate.js";
 import { isUpcoming } from "./_shape.js";
@@ -75,7 +74,7 @@ export default async function handler(req, res) {
 
   let games = [...byId.values()];
   if (!includeLive) games = games.filter((g) => g.upcoming);
-  games.sort((a, b) => (a.kickoff || 0) - (b.kickoff || 0));
+  games.sort((a, b) => (Number(a.kickoff) || Infinity) - (Number(b.kickoff) || Infinity));
 
   let saved = 0, saveError = null;
   if (fresh.length) {

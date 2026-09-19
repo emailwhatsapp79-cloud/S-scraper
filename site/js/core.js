@@ -164,6 +164,12 @@
     return saveBook(kept);
   }
 
+  function byKick(a, b) {
+    var ka = Number(a && a.kickoff) || Infinity;
+    var kb = Number(b && b.kickoff) || Infinity;
+    return ka - kb;
+  }
+
   function until(ms) {
     if (!ms) return { text: "", cls: "" };
     var d = Number(ms) - Date.now();
@@ -327,7 +333,11 @@
     tm.setAttribute("data-kick", g.kickoff || "");
     meta.appendChild(tm);
     if (g.league) meta.appendChild(el("span", null, g.league));
-    if (r.verdict === "hold") meta.appendChild(el("span", null, "no half-time"));
+    if (r.verdict === "hold") {
+      var htHold = (r.checks || []).filter(function (c) { return c.name.indexOf("ht_") === 0; });
+      var htFailed = htHold.some(function (c) { return !c.ok && !c.skip; });
+      meta.appendChild(el("span", null, htFailed ? "half-time missed" : "no half-time"));
+    }
     who.appendChild(meta);
     row.appendChild(who);
     row.appendChild(copyBtn(g.id));
@@ -348,9 +358,9 @@
         ["Away", g.ft.away, "away", "2"]
       ], r.fav, tap));
       box.appendChild(market("Two chances" + (g.dc ? "" : " · worked out"), [
-        ["Home or Draw", r.dc.home_draw, "home", "1X"],
-        ["Home or Away", r.dc.home_away, "", "12"],
-        ["Draw or Away", r.dc.draw_away, "away", "X2"]
+        ["Home or Draw", r.dc && r.dc.home_draw, "home", "1X"],
+        ["Home or Away", r.dc && r.dc.home_away, "", "12"],
+        ["Draw or Away", r.dc && r.dc.draw_away, "away", "X2"]
       ], r.fav, tap));
       box.appendChild(market("Half time", [
         ["Home", g.ht ? g.ht.home : null, "home"],
@@ -370,7 +380,7 @@
     tm.setAttribute("data-kick", g.kickoff || "");
     row.appendChild(tm);
     row.appendChild(teamsBlock(g.home, g.away));
-    row.appendChild(el("div", "pr", g.ft[r.fav].toFixed(2)));
+    row.appendChild(el("div", "pr", g.ft && g.ft[r.fav] != null ? Number(g.ft[r.fav]).toFixed(2) : "—"));
     box.appendChild(row);
 
     var extra = el("div");
@@ -385,9 +395,9 @@
       ["Home", g.ft.home, "home"], ["Draw", g.ft.draw, "draw"], ["Away", g.ft.away, "away"]
     ], r.fav, null));
     extra.appendChild(market("Two chances" + (g.dc ? "" : " · worked out"), [
-      ["Home or Draw", r.dc.home_draw, "home"],
-      ["Home or Away", r.dc.home_away, ""],
-      ["Draw or Away", r.dc.draw_away, "away"]
+      ["Home or Draw", r.dc && r.dc.home_draw, "home"],
+      ["Home or Away", r.dc && r.dc.home_away, ""],
+      ["Draw or Away", r.dc && r.dc.draw_away, "away"]
     ], r.fav, null));
     extra.appendChild(market("Half time", [
       ["Home", g.ht ? g.ht.home : null, "home"],
@@ -963,7 +973,7 @@
     screen: screen, makePick: makePick, acca: acca,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
     card: card, compactRow: compactRow,
-    until: until, clock: clock, dayLabel: dayLabel,
+    until: until, clock: clock, dayLabel: dayLabel, byKick: byKick,
     leagueKey: leagueKey, teamsBlock: teamsBlock, crest: crest,
     fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips, fetchPicks: fetchPicks,
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
