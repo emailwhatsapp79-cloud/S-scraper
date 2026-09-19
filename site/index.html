@@ -108,6 +108,7 @@
   }
 
   document.getElementById("refresh").addEventListener("click", function () { load(false, true); });
+  window.addEventListener("vfs-ready", function () { if (last) render(); });
   load(false, false);
   setInterval(function () { load(true, false); }, 180000);
 })();

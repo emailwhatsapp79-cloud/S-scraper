@@ -39,20 +39,82 @@
   </article>
 
   <h2 style="font-size:16px;margin:22px 0 8px">Your bands</h2>
-  <p class="lede" style="margin-bottom:8px">Stored on this phone. Change a number and Matches re-screens instantly next time you open it.</p>
+  <p class="lede" style="margin-bottom:8px">Saved behind your code, on every phone. Change a number and Matches uses it next time.</p>
   <div class="knobs" id="knobs"></div>
   <button class="reset" id="reset" type="button">Reset to defaults</button>
+
+  <h2 style="font-size:16px;margin:28px 0 8px">Bankroll</h2>
+  <p class="lede" style="margin-bottom:8px">A notepad of what you have to play with. When you book a slip here, that stake comes off. This is not your SportyBet wallet.</p>
+  <div class="money" style="grid-template-columns:1fr">
+    <div>
+      <label for="bank">Amount (₦)</label>
+      <input id="bank" type="number" min="0" step="100" inputmode="numeric" placeholder="20000">
+    </div>
+  </div>
+  <button class="primary" id="save-bank" type="button">Save bankroll</button>
+  <p class="note" id="bank-note"></p>
+
+  <h2 style="font-size:16px;margin:28px 0 8px">Pings</h2>
+  <p class="lede" style="margin-bottom:8px">The phone taps you when a booked match kicks in five minutes, or a slip finishes Yes/No. Works best if you add this site to your home screen and leave notifications on.</p>
+  <button class="ghost" id="pings" type="button">Allow pings</button>
+  <p class="note" id="ping-note"></p>
+
+  <article class="rule">
+    <div class="n">SportyBet wallet</div>
+    <h2>We cannot pull your real balance</h2>
+    <p>Their login is a locked door from this site — same wall as the old full card. Name-match on withdrawal does not stop someone with the password from placing bets with your naira. Type the bankroll above instead. Bands and bankroll are encrypted at rest.</p>
+  </article>
 </main>
 <script src="/js/core.js"></script>
 <script>
 (function () {
   var V = window.VFS;
   V.injectChrome("rules");
+
+  function paintBank() {
+    var b = V.bankroll();
+    var inp = document.getElementById("bank");
+    if (b && b.amount != null) inp.value = String(b.amount);
+  }
+
+  window.addEventListener("vfs-ready", function () {
+    V.paintKnobs(document.getElementById("knobs"));
+    paintBank();
+  });
   V.paintKnobs(document.getElementById("knobs"));
+
   document.getElementById("reset").addEventListener("click", function () {
     Object.keys(V.defaults).forEach(function (k) { V.cfg[k] = V.defaults[k]; });
     V.save();
     V.paintKnobs(document.getElementById("knobs"));
+  });
+
+  document.getElementById("save-bank").addEventListener("click", function () {
+    var btn = document.getElementById("save-bank");
+    var n = parseFloat(document.getElementById("bank").value);
+    var note = document.getElementById("bank-note");
+    if (!isFinite(n) || n < 0) { note.textContent = "Put a number, 0 or more."; return; }
+    btn.disabled = true;
+    V.setBankroll(n).then(function () {
+      note.textContent = "Saved. Header shows " + V.naira(n) + ".";
+    }).catch(function (e) {
+      note.textContent = e.message;
+    }).then(function () { btn.disabled = false; });
+  });
+
+  var pingBtn = document.getElementById("pings");
+  if ("Notification" in window && Notification.permission === "granted") {
+    pingBtn.textContent = "Pings on";
+    pingBtn.classList.add("on");
+  }
+  pingBtn.addEventListener("click", function () {
+    V.enablePings().then(function () {
+      pingBtn.textContent = "Pings on";
+      pingBtn.classList.add("on");
+      document.getElementById("ping-note").textContent = "You will get a tap when a booked match is about to kick, and when a slip settles.";
+    }).catch(function (e) {
+      document.getElementById("ping-note").textContent = e.message;
+    });
   });
 })();
 </script>

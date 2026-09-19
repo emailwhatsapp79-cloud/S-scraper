@@ -94,6 +94,7 @@
         group(out, slips, function (s) { return s.settledAt ? Date.parse(s.settledAt) : (s.createdAt ? Date.parse(s.createdAt) : null); }, V.slipCard);
       }
       document.getElementById("note").textContent = slips.length + " settled slip(s).";
+      V.noticeSlips(d.slips || []);
     }).catch(function (e) { document.getElementById("out").innerHTML = '<p class="err">' + e.message + "</p>"; });
   }
 

@@ -497,6 +497,15 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
 .codebox a { display: inline-block; margin-top: 8px; font-size: 13.5px; font-weight: 650; }
 
 .lock-btn { flex: 0 0 auto; font-size: 13px; padding: 0 12px }
+.wallet {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  color: var(--go);
+}
+.ghost.on { background: var(--go); color: var(--go-ink); box-shadow: none }
 body.locked .wrap,
 body.locked .nav,
 body.locked .top { visibility: hidden }

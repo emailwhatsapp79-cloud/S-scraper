@@ -106,6 +106,7 @@
         V.saveBook([]);
         renderDraft();
         loadSlips();
+        V.hydrate();
         if (d.slip && d.slip.shareCode) {
           try { navigator.clipboard.writeText(d.slip.shareCode); } catch (e) {}
         }
@@ -138,7 +139,10 @@
   }
 
   function loadSlips(live) {
-    V.fetchSlips(live).then(function (d) { renderSlips(d.slips || []); })
+    V.fetchSlips(live).then(function (d) {
+      renderSlips(d.slips || []);
+      V.noticeSlips(d.slips || []);
+    })
       .catch(function (e) {
         document.getElementById("slips").innerHTML = '<p class="err">' + e.message + "</p>";
       });

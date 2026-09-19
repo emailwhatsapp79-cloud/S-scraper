@@ -13,6 +13,7 @@
   };
 
   var cfg = Object.assign({}, DEFAULTS);
+  var bankroll = null;
   try {
     var stored = JSON.parse(localStorage.getItem("vfs") || "null");
     if (stored) Object.keys(DEFAULTS).forEach(function (k) {
@@ -20,8 +21,17 @@
     });
   } catch (e) {}
 
-  function save() {
+  function saveLocal() {
     try { localStorage.setItem("vfs", JSON.stringify(cfg)); } catch (e) {}
+  }
+
+  function save() {
+    saveLocal();
+    fetch("/api/settings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ shape: cfg })
+    }).catch(function () {});
   }
 
   function el(t, c, x) {
@@ -373,6 +383,7 @@
       n.classList.remove("soon", "now");
       if (t.cls) n.classList.add(t.cls);
     });
+    watchPings();
   }
 
   function fetchGames(force) {
@@ -446,6 +457,7 @@
         '<div class="mark" aria-hidden="true">VF</div>' +
         '<div class="brand"><b>vFootball</b><span>SportyBet screener</span></div>' +
         extra +
+        '<span class="wallet" id="vfs-wallet" hidden></span>' +
         '<button class="ghost lock-btn" type="button" id="vfs-lock" aria-label="Lock">Lock</button>';
       document.body.insertBefore(top, document.body.firstChild);
     }
@@ -548,6 +560,7 @@
   function gateCheck() {
     fetch("/api/gate").then(function (r) { return r.json(); }).then(function (d) {
       if (!d.open) showLock();
+      else hydrate();
     }).catch(function () { showLock(); });
   }
 
@@ -557,6 +570,112 @@
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ lock: true })
     }).then(function () { showLock(); });
+  }
+
+  function paintWallet() {
+    var n = document.getElementById("vfs-wallet");
+    if (!n) return;
+    if (!bankroll || bankroll.amount == null) { n.hidden = true; return; }
+    n.hidden = false;
+    n.textContent = naira(bankroll.amount);
+  }
+
+  function hydrate() {
+    return fetch("/api/settings").then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) return d;
+      if (d.shape) {
+        Object.keys(DEFAULTS).forEach(function (k) {
+          if (typeof d.shape[k] === "number") cfg[k] = d.shape[k];
+        });
+        saveLocal();
+      } else {
+        save();
+      }
+      bankroll = d.bankroll;
+      paintWallet();
+      w.dispatchEvent(new Event("vfs-ready"));
+      return d;
+    });
+  }
+
+  function setBankroll(amount) {
+    return fetch("/api/settings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bankroll: amount })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "Could not save bankroll");
+      bankroll = d.bankroll;
+      paintWallet();
+      return d;
+    });
+  }
+
+  function pingSeen() {
+    try { return JSON.parse(localStorage.getItem("vfs_pinged") || "{}") || {}; }
+    catch (e) { return {}; }
+  }
+  function pingMark(k) {
+    var s = pingSeen();
+    s[k] = Date.now();
+    var keys = Object.keys(s);
+    if (keys.length > 80) keys.sort(function (a, b) { return s[a] - s[b]; }).slice(0, keys.length - 80).forEach(function (x) { delete s[x]; });
+    try { localStorage.setItem("vfs_pinged", JSON.stringify(s)); } catch (e) {}
+  }
+
+  function ping(title, body, tag) {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    var opts = { body: body || "", tag: tag || title, icon: "/favicon.svg" };
+    if (navigator.serviceWorker && navigator.serviceWorker.ready) {
+      navigator.serviceWorker.ready.then(function (reg) {
+        try { reg.showNotification(title, opts); } catch (e) { try { new Notification(title, opts); } catch (e2) {} }
+      });
+    } else {
+      try { new Notification(title, opts); } catch (e) {}
+    }
+  }
+
+  function watchPings() {
+    if (!("Notification" in window) || Notification.permission !== "granted") return;
+    var seen = pingSeen();
+    var now = Date.now();
+    loadBook().forEach(function (l) {
+      if (!l.kickoff) return;
+      var d = Number(l.kickoff) - now;
+      var k = "kick-" + l.id;
+      if (d > 0 && d <= 5 * 60 * 1000 && !seen[k]) {
+        pingMark(k);
+        ping("Kicks soon", l.home + " v " + l.away, k);
+      }
+    });
+  }
+
+  function noticeSlips(slips) {
+    if (!slips || !slips.length) return;
+    var seen = pingSeen();
+    slips.forEach(function (sp) {
+      if (sp.status !== "won" && sp.status !== "lost") return;
+      var k = "slip-" + sp.id + "-" + sp.status;
+      if (seen[k]) return;
+      pingMark(k);
+      ping(sp.status === "won" ? "Slip landed" : "Slip missed",
+        (sp.shareCode ? sp.shareCode + " · " : "") + sp.legs.length + " legs", k);
+    });
+  }
+
+  function enablePings() {
+    if (!("Notification" in window)) return Promise.reject(new Error("This browser will not ping"));
+    return Notification.requestPermission().then(function (p) {
+      if (p !== "granted") throw new Error("Notifications are off");
+      if (navigator.serviceWorker) {
+        return navigator.serviceWorker.register("/sw.js").then(function () { return p; });
+      }
+      return p;
+    });
+  }
+
+  if (navigator.serviceWorker && "Notification" in window && Notification.permission === "granted") {
+    navigator.serviceWorker.register("/sw.js").catch(function () {});
   }
 
   function naira(n) {
@@ -727,6 +846,8 @@
 
   w.VFS = {
     cfg: cfg, defaults: DEFAULTS, labels: LABELS, save: save,
+    hydrate: hydrate, setBankroll: setBankroll, enablePings: enablePings, noticeSlips: noticeSlips,
+    bankroll: function () { return bankroll; },
     screen: screen, makePick: makePick, acca: acca,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
     card: card, compactRow: compactRow,
