@@ -62,3 +62,19 @@ export function publicPrefs(p) {
     bankroll: p.bankroll ? { amount: p.bankroll.amount, starting: p.bankroll.starting || p.bankroll.amount } : null,
   };
 }
+
+export async function loadPinHash() {
+  await ensure();
+  const rows = await sql`SELECT v FROM vault WHERE k = 'pin'`;
+  const h = rows[0] && String(rows[0].v || "");
+  return /^[a-f0-9]{64}$/i.test(h) ? h.toLowerCase() : null;
+}
+
+export async function savePinHash(hash) {
+  await ensure();
+  const h = String(hash || "").toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(h)) throw new Error("Bad pin hash");
+  await sql`
+    INSERT INTO vault (k, v, updated) VALUES ('pin', ${h}, now())
+    ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v, updated = now()`;
+}

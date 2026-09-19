@@ -283,6 +283,11 @@ p { text-wrap: pretty }
   padding: 0 10px;
 }
 .reset { background: transparent }
+.pin-form input {
+  width: 120px;
+  text-align: center;
+  letter-spacing: 0.28em;
+}
 
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;

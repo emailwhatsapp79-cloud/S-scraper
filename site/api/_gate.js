@@ -1,9 +1,10 @@
 // Personal PIN gate. Cookie lasts two hours. Override PIN with env GATE_PIN.
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { cors } from "./_db.js";
+import { loadPinHash } from "./_vault.js";
 
 const SALT = "vfs-gate-v1";
-const PIN_HASH = "2fcab7630a7b3dedf2714093c852e586b323a9e10764ba0084d0bfecc76d5a0b";
+const PIN_HASH = "a1130bfe4270bc67bed0b71f0ae687df544ee38a5b342a468b15549612e9629f";
 const SECRET = process.env.GATE_SECRET || "3ed841c2806431522acc2d288f64f1fc275800b5c9ad19fc";
 const TTL_MS = 2 * 60 * 60 * 1000;
 const COOKIE = "vfs_gate";
@@ -12,9 +13,8 @@ function sha(s) {
   return createHash("sha256").update(s).digest("hex");
 }
 
-function wantHash() {
-  const env = process.env.GATE_PIN;
-  return env ? sha(SALT + String(env).trim()) : PIN_HASH;
+export function hashPin(pin) {
+  return sha(SALT + String(pin || "").trim());
 }
 
 function eqHex(a, b) {
@@ -27,9 +27,13 @@ function eqHex(a, b) {
   }
 }
 
-export function pinOk(pin) {
-  const got = sha(SALT + String(pin || "").trim());
-  return eqHex(got, wantHash());
+export async function pinOk(pin) {
+  const got = hashPin(pin);
+  let stored = null;
+  try { stored = await loadPinHash(); } catch { stored = null; }
+  if (stored) return eqHex(got, stored);
+  const env = process.env.GATE_PIN;
+  return eqHex(got, env ? hashPin(env) : PIN_HASH);
 }
 
 function sign(exp) {

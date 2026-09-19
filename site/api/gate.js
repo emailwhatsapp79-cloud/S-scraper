@@ -1,5 +1,10 @@
 import { cors } from "./_db.js";
-import { pinOk, readGate, setGateCookie } from "./_gate.js";
+import { pinOk, hashPin, readGate, setGateCookie } from "./_gate.js";
+import { savePinHash } from "./_vault.js";
+
+function six(s) {
+  return /^\d{6}$/.test(String(s || "").trim());
+}
 
 export default async function handler(req, res) {
   cors(res);
@@ -19,7 +24,21 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, open: false });
   }
 
-  if (!pinOk(body.pin)) {
+  if (body.newPin != null) {
+    if (!readGate(req).open) {
+      return res.status(401).json({ ok: false, locked: true, error: "Locked" });
+    }
+    if (!(await pinOk(body.oldPin))) {
+      return res.status(401).json({ ok: false, error: "Wrong current code" });
+    }
+    if (!six(body.newPin) || !six(body.oldPin)) {
+      return res.status(400).json({ ok: false, error: "Code has to be six digits" });
+    }
+    await savePinHash(hashPin(body.newPin));
+    return res.status(200).json({ ok: true, changed: true });
+  }
+
+  if (!(await pinOk(body.pin))) {
     return res.status(401).json({ ok: false, open: false, error: "Wrong code" });
   }
   setGateCookie(res, true);

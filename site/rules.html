@@ -47,6 +47,19 @@
   <p class="lede" style="margin-bottom:8px">A tap on the phone when a booked match kicks in five minutes, or a slip finishes Yes/No. Allow it below. Add the site to your home screen so it still works after you leave the tab.</p>
   <button class="ghost" id="pings" type="button">Allow pings</button>
   <p class="note" id="ping-note"></p>
+
+  <h2 style="font-size:16px;margin:28px 0 8px">Profile</h2>
+  <p class="lede" style="margin-bottom:8px">Change the lock code. Six digits. Current one first, then the new one twice.</p>
+  <div class="knobs pin-form">
+    <label for="pin-old">Current code</label>
+    <input id="pin-old" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">
+    <label for="pin-new">New code</label>
+    <input id="pin-new" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
+    <label for="pin-again">New code again</label>
+    <input id="pin-again" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password">
+  </div>
+  <button class="primary" id="pin-save" type="button">Save new code</button>
+  <p class="note" id="pin-note"></p>
 </main>
 <script src="/js/core.js"></script>
 <script>
@@ -78,6 +91,36 @@
     }).catch(function (e) {
       document.getElementById("ping-note").textContent = e.message;
     });
+  });
+
+  document.getElementById("pin-save").addEventListener("click", function () {
+    var oldPin = document.getElementById("pin-old").value.trim();
+    var neu = document.getElementById("pin-new").value.trim();
+    var again = document.getElementById("pin-again").value.trim();
+    var note = document.getElementById("pin-note");
+    var btn = document.getElementById("pin-save");
+    if (!/^\d{6}$/.test(oldPin) || !/^\d{6}$/.test(neu)) {
+      note.textContent = "Each code has to be six digits.";
+      return;
+    }
+    if (neu !== again) {
+      note.textContent = "The two new codes do not match.";
+      return;
+    }
+    btn.disabled = true;
+    fetch("/api/gate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ oldPin: oldPin, newPin: neu })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "Could not change code");
+      document.getElementById("pin-old").value = "";
+      document.getElementById("pin-new").value = "";
+      document.getElementById("pin-again").value = "";
+      note.textContent = "Code changed. Next lock uses the new one.";
+    }).catch(function (e) {
+      note.textContent = e.message;
+    }).then(function () { btn.disabled = false; });
   });
 })();
 </script>
