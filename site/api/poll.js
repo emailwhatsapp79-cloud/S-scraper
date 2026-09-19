@@ -3,7 +3,7 @@ import { cors } from "./_db.js";
 import { store } from "./_store.js";
 import { fetchCard, normalise } from "./_card.js";
 import { refreshSlips } from "./_slips.js";
-import { recordPicks, settlePicks } from "./_screen.js";
+import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
 
 export default async function handler(req, res) {
   cors(res);
@@ -25,8 +25,10 @@ export default async function handler(req, res) {
   catch (e) { slips = { error: String(e?.message || e) }; }
 
   let picked = 0, settled = 0, pickError = null;
-  try { picked = await recordPicks(games); settled = await settlePicks(); }
-  catch (e) { pickError = String(e?.message || e); }
+  try {
+    picked = (await recordPicks(games)) + (await recordStoredPicks());
+    settled = await settlePicks();
+  } catch (e) { pickError = String(e?.message || e); }
 
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({

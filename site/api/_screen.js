@@ -1,7 +1,7 @@
 // Server-side screen — the six checks at their default thresholds, used to
 // auto-record every game the screen matches (independent of the browser knobs).
 import { fetchEvent, scoreOf } from "./_card.js";
-import { sql } from "./_db.js";
+import { sql, rowToGame } from "./_db.js";
 
 export const CFG = {
   ft_fav_min: 1.50, ft_fav_max: 2.50, ft_dog_min: 3.70,
@@ -60,21 +60,28 @@ async function ensure() {
 }
 
 /** Record every matching game as an auto-pick. First sighting wins (odds kept). */
-export async function recordPicks(games) {
+export async function recordPicks(games, opts = {}) {
   await ensure();
   let recorded = 0;
   for (const g of games || []) {
-    if (!g.upcoming) continue;                     // only pick before kick-off
+    if (!opts.past && !g.upcoming) continue;
     const p = match(g);
     if (!p) continue;
-    await sql`
+    const rows = await sql`
       INSERT INTO picks (game_id, event_id, home, away, league, kickoff, selection, selection_label, price)
       VALUES (${g.id}, ${g.eventId || null}, ${g.home}, ${g.away}, ${g.league || ""},
               ${g.kickoff || null}, ${p.selection}, ${p.label}, ${p.price})
-      ON CONFLICT (game_id) DO NOTHING`;
-    recorded += 1;                                 // count of matched games this pass
+      ON CONFLICT (game_id) DO NOTHING
+      RETURNING game_id`;
+    if (rows.length) recorded += 1;
   }
   return recorded;
+}
+
+/** Catch games the screen matched that were already off the upcoming card. */
+export async function recordStoredPicks() {
+  const rows = await sql`SELECT * FROM games ORDER BY kickoff DESC NULLS LAST LIMIT 800`;
+  return recordPicks(rows.map(rowToGame), { past: true });
 }
 
 const dcHit = (sel, h, a) =>
@@ -127,5 +134,10 @@ export async function listPicks(scope = "settled", limit = 300) {
   const rows = scope === "settled"
     ? await sql`SELECT * FROM picks WHERE won IS NOT NULL ORDER BY settled_at DESC LIMIT ${limit}`
     : await sql`SELECT * FROM picks ORDER BY kickoff DESC LIMIT ${limit}`;
-  return rows.map(shapePick);
+  let booked = new Set();
+  try {
+    const legs = await sql`SELECT DISTINCT game_id FROM slip_legs`;
+    booked = new Set(legs.map((r) => r.game_id));
+  } catch { /* slips table may not exist yet */ }
+  return rows.filter((p) => !booked.has(p.game_id)).map(shapePick);
 }

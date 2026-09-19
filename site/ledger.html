@@ -75,7 +75,7 @@
       stats(V.pickStats(picks));
       var out = document.getElementById("out"); out.textContent = "";
       if (!picks.length) {
-        out.appendChild(V.el("div", "empty", "No finished picks yet. The screen records every match it makes; they show here once they've played."));
+        out.appendChild(V.el("div", "empty", "No finished picks yet. Opening this page records every screen match from the stored card and settles the ones that have ended."));
       } else {
         group(out, picks, function (p) { return p.settledAt ? Date.parse(p.settledAt) : p.kickoff; }, V.pickCard);
       }
@@ -98,7 +98,7 @@
   }
 
   var CAPTIONS = {
-    screen: "Every game the screen matched on its own — recorded automatically, whether or not you booked it.",
+    screen: "Every game the screen matched on its own, once it has finished. Games you booked are only on I booked.",
     slips: "Only the slips you saved yourself on Betslip."
   };
   function render() {

@@ -80,7 +80,7 @@ export default async function handler(req, res) {
     catch (e) { saveError = String(e?.message || e); }
   }
 
-  try { await recordPicks(fresh); } catch (e) { /* never fail a read over a pick */ }
+  try { await recordPicks(games); } catch (e) { /* never fail a read over a pick */ }
 
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
