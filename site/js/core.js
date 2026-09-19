@@ -169,6 +169,57 @@
     return s.split("·")[0].trim() || "Other";
   }
 
+  // football-data.org crest ids — the same club badges SportyBet sits next to the codes.
+  var CRESTS = {
+    ACM:98, ALA:263, AMO:530, ANG:532, ARS:57, AST:58, ATA:102, ATM:78, AUX:519,
+    AVL:58, BET:90, BFC:103, BHA:397, BIL:77, BMG:18, BMU:5, BOC:36, BOU:389,
+    BRE:402, BUR:328, BVB:4, CAG:104, CEL:558, CHE:61, COM:1107, COV:1076,
+    CRY:354, ELC:285, EMP:445, ESP:80, EVE:62, FCA:16, FCB:81, FIO:99, FRO:470,
+    FUL:63, GEN:107, GET:82, GIR:298, HDH:44, HSV:7, HUL:322, INT:108, IPS:349,
+    JUV:109, KOE:1, LAZ:110, LEC:455, LEE:341, LEH:533, LEI:338, LEN:546, LEV:3,
+    LIL:521, LIV:64, LOR:525, LYO:523, MAI:15, MAL:89, MAN:66, MCF:65, MCI:65,
+    MON:584, MUN:66, NAP:113, NCE:522, NEW:67, NFO:351, OLM:516, OSA:79, OVI:267,
+    PAD:29, PAR:112, PFC:543, PSG:524, RAC:461, RAY:87, RBB:90, RBL:721, RCD:80,
+    REN:529, RMA:86, ROM:100, RSO:92, SAS:471, SCF:17, SCH:6, SEV:559, SGE:19,
+    SOU:340, STP:20, STR:576, SUN:71, SVE:1920, SVW:12, TOR:586, TOT:73, TOU:511,
+    TRO:531, TSG:2, UDI:115, UNI:28, VAL:95, VCF:95, VEN:454, VER:450, VFB:10,
+    VIL:94, WHU:563, WOB:11, WOL:76
+  };
+
+  function crest(code) {
+    var name = String(code || "").toUpperCase();
+    var wrap = el("span", "crest");
+    wrap.title = name;
+    var id = CRESTS[name];
+    if (!id) {
+      wrap.className += " fb";
+      wrap.textContent = name.slice(0, 3) || "?";
+      return wrap;
+    }
+    var img = document.createElement("img");
+    img.src = "https://crests.football-data.org/" + id + ".png";
+    img.alt = name;
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.addEventListener("error", function () {
+      wrap.classList.add("fb");
+      wrap.textContent = name.slice(0, 3);
+    });
+    wrap.appendChild(img);
+    return wrap;
+  }
+
+  function teamsBlock(home, away) {
+    var box = el("div", "teams");
+    [home, away].forEach(function (code) {
+      var row = el("div", "tm");
+      row.appendChild(crest(code));
+      row.appendChild(el("b", null, code));
+      box.appendChild(row);
+    });
+    return box;
+  }
+
   function copyBtn(id) {
     var b = el("button", "copy", "Copy ID");
     b.addEventListener("click", function (e) {
@@ -232,7 +283,7 @@
     var row = el("div", "row1");
     row.appendChild(el("span", "gid", g.id));
     var who = el("div", "who");
-    who.appendChild(el("b", null, g.home + " v " + g.away));
+    who.appendChild(teamsBlock(g.home, g.away));
     var meta = el("div", "meta");
     var t = until(g.kickoff);
     var tm = el("time", t.cls, (clock(g.kickoff) + (t.text ? " · " + t.text : "")).trim());
@@ -281,7 +332,7 @@
     var tm = el("div", "when " + t.cls, t.text || clock(g.kickoff));
     tm.setAttribute("data-kick", g.kickoff || "");
     row.appendChild(tm);
-    row.appendChild(el("div", "t", g.home + " v " + g.away));
+    row.appendChild(teamsBlock(g.home, g.away));
     row.appendChild(el("div", "pr", g.ft[r.fav].toFixed(2)));
     box.appendChild(row);
 
@@ -511,7 +562,7 @@
     sp.legs.forEach(function (l) {
       var row = el("div", "leg");
       var left = el("div");
-      left.appendChild(el("b", null, l.home + " v " + l.away));
+      left.appendChild(teamsBlock(l.home, l.away));
       var sel = el("div", "sel");
       sel.appendChild(el("span", "pick", l.label));            // the favourable side picked
       sel.appendChild(document.createTextNode(" @ " + Number(l.price).toFixed(2)));
@@ -547,7 +598,7 @@
     var card = el("div", "slip " + (pk.won === true ? "won" : pk.won === false ? "lost" : ""));
     var row = el("div", "leg");
     var left = el("div");
-    left.appendChild(el("b", null, pk.home + " v " + pk.away));
+    left.appendChild(teamsBlock(pk.home, pk.away));
     var sel = el("div", "sel");
     sel.appendChild(el("span", "pick", pk.label));
     sel.appendChild(document.createTextNode(" @ " + Number(pk.price).toFixed(2)));
@@ -586,7 +637,7 @@
     screen: screen, makePick: makePick, acca: acca,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
     card: card, compactRow: compactRow,
-    until: until, clock: clock, dayLabel: dayLabel, leagueKey: leagueKey,
+    leagueKey: leagueKey, teamsBlock: teamsBlock, crest: crest,
     fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips, fetchPicks: fetchPicks,
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
     injectChrome: injectChrome, paintSlip: paintSlip,

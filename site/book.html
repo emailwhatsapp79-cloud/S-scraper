@@ -54,7 +54,7 @@
     legs.forEach(function (l, i) {
       var row = V.el("div", "leg");
       var left = V.el("div");
-      left.appendChild(V.el("b", null, l.home + " v " + l.away));
+      left.appendChild(V.teamsBlock(l.home, l.away));
       left.appendChild(V.el("div", "sel", l.label + " · " + Number(l.price).toFixed(2) +
         (l.kickoff ? " · " + V.clock(l.kickoff) : "")));
       row.appendChild(left);

@@ -156,7 +156,7 @@ p { text-wrap: pretty }
 }
 .who { flex: 1; min-width: 0 }
 .who b { display: block; font-size: 16px; font-weight: 650; letter-spacing: -0.02em }
-.who .meta { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 4px; font-size: 12.5px; color: var(--dim) }
+.who .meta { display: flex; flex-wrap: wrap; gap: 6px 10px; margin-top: 6px; font-size: 12.5px; color: var(--dim) }
 .who .meta time { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink) }
 .who .meta time.soon { color: var(--hold) }
 .who .meta time.now { color: var(--bad) }
@@ -171,6 +171,23 @@ p { text-wrap: pretty }
   white-space: nowrap;
 }
 .copy.done { background: var(--card); color: var(--go); box-shadow: var(--shadow) }
+
+.teams { display: grid; gap: 6px }
+.tm { display: flex; align-items: center; gap: 8px; min-height: 28px }
+.tm b { font-size: 16px; font-weight: 650; letter-spacing: -0.02em }
+.crest {
+  width: 28px; height: 28px; flex: 0 0 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.08);
+}
+.crest img { width: 20px; height: 20px; object-fit: contain; display: block }
+.crest.fb {
+  font-size: 8px; font-weight: 700; letter-spacing: 0;
+  color: var(--go-ink); background: var(--go);
+}
 
 .mkt { margin-top: 12px }
 .mkt-t { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); margin-bottom: 6px; font-weight: 600 }
@@ -200,8 +217,17 @@ p { text-wrap: pretty }
 
 .compact { display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: pointer }
 .compact .when { width: 64px; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; color: var(--dim) }
-.compact .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600 }
+.compact .teams { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px }
+.compact .tm { min-height: 22px; gap: 6px }
+.compact .tm b { font-size: 14px }
+.compact .crest { width: 22px; height: 22px; flex-basis: 22px }
+.compact .crest img { width: 16px; height: 16px }
 .compact .pr { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--go); font-weight: 600 }
+.leg .teams { gap: 4px }
+.leg .tm { min-height: 22px; gap: 6px }
+.leg .tm b { font-size: 14px }
+.leg .crest { width: 22px; height: 22px; flex-basis: 22px }
+.leg .crest img { width: 16px; height: 16px }
 
 .empty {
   background: var(--card);
