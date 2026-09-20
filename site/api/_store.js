@@ -1,6 +1,7 @@
 // Saving what a read saw. Keeps a running record with no collector anywhere:
 // every visit to the site records the games the feeds were showing at the time.
 import { sql } from "./_db.js";
+import { leagueBucket } from "./_shape.js";
 
 const FIELDS = 16;
 
@@ -45,5 +46,28 @@ export async function store(games) {
     ));
   }
   await Promise.all(jobs);
+  await pruneUnseen(games);
   return rows.length;
+}
+
+/** Drop leftover upcoming rows the live card no longer has, per league we just read. */
+export async function pruneUnseen(fresh) {
+  const eventIds = [...new Set((fresh || []).map((g) => g.eventId).filter(Boolean))];
+  const buckets = [...new Set((fresh || []).map(leagueBucket))];
+  if (!eventIds.length || !buckets.length) return 0;
+  const now = Date.now();
+  let n = 0;
+  for (const b of buckets) {
+    const like = "%" + b + "%";
+    try {
+      const r = await sql`
+        DELETE FROM games
+        WHERE kickoff > ${now}
+          AND league ILIKE ${like}
+          AND (event_id IS NULL OR NOT (event_id = ANY(${eventIds})))
+        RETURNING game_id`;
+      n += r.length;
+    } catch { /* don't fail a read over a prune */ }
+  }
+  return n;
 }

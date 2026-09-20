@@ -99,7 +99,7 @@
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           stake: stake,
-          legs: legs.map(function (l) { return { gameId: l.id, selection: l.selection }; })
+          legs: legs.map(function (l) { return { gameId: l.id, eventId: l.eventId, selection: l.selection }; })
         })
       }).then(function (r) { return r.json(); }).then(function (d) {
         if (!d.ok) throw new Error(d.error || "Could not book");

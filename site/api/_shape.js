@@ -23,19 +23,20 @@ export function leagueBucket(g) {
 }
 
 /**
- * One club cannot play two opponents at the same kick-off.
- * When a leftover row still looks upcoming, drop it in favour of the fresher one.
+ * One club cannot play two opponents in the same minute.
+ * Leftover rows lose to the fresher event.
  */
 export function dropClashes(games) {
   const list = Array.isArray(games) ? games : [];
   const seen = (g) => {
-    const t = g.lastSeen ? new Date(g.lastSeen).getTime() : 0;
+    const t = g.lastSeen ? new Date(g.lastSeen).getTime() : (g.last_seen ? new Date(g.last_seen).getTime() : 0);
     return isFinite(t) ? t : 0;
   };
+  const minute = (g) => Math.floor(Number(g.kickoff) / 60000);
   const slot = new Map();
   const take = (team, g) => {
     if (!team || !g.kickoff) return;
-    const k = leagueBucket(g) + "|" + Number(g.kickoff) + "|" + String(team).toUpperCase();
+    const k = leagueBucket(g) + "|" + minute(g) + "|" + String(team).toUpperCase();
     const prev = slot.get(k);
     if (!prev) { slot.set(k, g); return; }
     if (seen(g) > seen(prev)) { slot.set(k, g); return; }
@@ -47,8 +48,8 @@ export function dropClashes(games) {
   }
   return list.filter((g) => {
     if (!g.kickoff) return true;
-    const h = slot.get(leagueBucket(g) + "|" + Number(g.kickoff) + "|" + String(g.home || "").toUpperCase());
-    const a = slot.get(leagueBucket(g) + "|" + Number(g.kickoff) + "|" + String(g.away || "").toUpperCase());
+    const h = slot.get(leagueBucket(g) + "|" + minute(g) + "|" + String(g.home || "").toUpperCase());
+    const a = slot.get(leagueBucket(g) + "|" + minute(g) + "|" + String(g.away || "").toUpperCase());
     return h === g && a === g;
   });
 }

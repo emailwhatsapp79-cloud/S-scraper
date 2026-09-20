@@ -5,7 +5,7 @@ import { store } from "./_store.js";
 import { recordPicks } from "./_screen.js";
 import { fetchCard, normalise } from "./_card.js";
 import { guard } from "./_gate.js";
-import { isUpcoming, leagueBucket, dropClashes } from "./_shape.js";
+import { isUpcoming, dropClashes } from "./_shape.js";
 
 const CACHE_MS = 120000;
 
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
   const includeLive = url.searchParams.get("live") === "1";
   const force = url.searchParams.get("force") === "1";
   const cutoff = Date.now() - 2 * 60 * 1000;
-  const seenSince = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  const seenSince = new Date(Date.now() - 8 * 60 * 1000).toISOString();
 
   let storedRows = [];
   let dbError = null;
@@ -65,15 +65,7 @@ export default async function handler(req, res) {
       LIMIT 800`;
   } catch (e) {
     dbError = String(e?.message || e);
-    try {
-      storedRows = await sql`
-        SELECT * FROM games
-        WHERE kickoff IS NULL OR kickoff > ${cutoff}
-        ORDER BY kickoff ASC NULLS LAST
-        LIMIT 800`;
-    } catch (e2) {
-      dbError = String(e2?.message || e2);
-    }
+    storedRows = [];
   }
 
   const newest = storedRows.reduce((t, r) => Math.max(t, seenMs(r)), 0);
@@ -99,12 +91,6 @@ export default async function handler(req, res) {
     }
     if (!fresh.length) {
       for (const row of storedRows) merge(byId, rowToGame(row), false);
-    } else {
-      const have = new Set(fresh.map(leagueBucket));
-      for (const row of storedRows) {
-        const g = rowToGame(row);
-        if (!have.has(leagueBucket(g))) merge(byId, g, false);
-      }
     }
   }
 

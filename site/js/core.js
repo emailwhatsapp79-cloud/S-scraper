@@ -419,9 +419,34 @@
     watchPings();
   }
 
+  function dropClashes(games) {
+    var list = games || [];
+    var slot = {};
+    function recency(g) {
+      var t = Date.parse(g.lastSeen || g.last_seen || 0);
+      return isFinite(t) ? t : 0;
+    }
+    function minute(g) { return Math.floor(Number(g.kickoff) / 60000); }
+    function k(team, g) { return leagueKey(g) + "|" + minute(g) + "|" + String(team || "").toUpperCase(); }
+    function take(team, g) {
+      if (!team || !g.kickoff) return;
+      var key = k(team, g);
+      var prev = slot[key];
+      if (!prev) { slot[key] = g; return; }
+      if (recency(g) > recency(prev)) { slot[key] = g; return; }
+      if (recency(g) === recency(prev) && g.eventId && !prev.eventId) slot[key] = g;
+    }
+    list.forEach(function (g) { take(g.home, g); take(g.away, g); });
+    return list.filter(function (g) {
+      if (!g.kickoff) return true;
+      return slot[k(g.home, g)] === g && slot[k(g.away, g)] === g;
+    });
+  }
+
   function fetchGames(force) {
     return fetch("/api/games" + (force ? "?force=1" : "")).then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) throw new Error(d.error || "SportyBet did not answer");
+      d.games = dropClashes(d.games || []);
       return d;
     });
   }

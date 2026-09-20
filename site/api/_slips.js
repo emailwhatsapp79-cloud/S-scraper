@@ -161,13 +161,24 @@ export async function createSlip(stake, incoming) {
   if (!isFinite(n) || n <= 0) throw new Error("Stake has to be a number above 0");
 
   const ids = [...new Set(raw.map((l) => String(l.gameId || l.id || "")).filter(Boolean))].slice(0, 12);
-  const rows = await sql`SELECT * FROM games WHERE game_id = ANY(${ids})`;
-  const byId = new Map(rows.map((r) => [r.game_id, rowToGame(r)]));
+  const eventIds = [...new Set(raw.map((l) => String(l.eventId || "")).filter(Boolean))];
+  const rows = eventIds.length
+    ? await sql`SELECT * FROM games WHERE event_id = ANY(${eventIds}) OR game_id = ANY(${ids})`
+    : await sql`SELECT * FROM games WHERE game_id = ANY(${ids})`;
+  const byEvent = new Map(rows.map((r) => [String(r.event_id || ""), rowToGame(r)]));
+  const byId = new Map(rows.map((r) => [String(r.game_id), rowToGame(r)]));
   const legs = [];
   for (const row of raw.slice(0, 12)) {
     const id = String(row.gameId || row.id || "");
-    const g = byId.get(id);
+    const eid = String(row.eventId || "");
+    let g = (eid && byEvent.get(eid)) || byId.get(id);
     if (!g) throw new Error(`Game ${id} is not on the stored card`);
+    if (g.eventId) {
+      const ev = await fetchEvent(g.eventId);
+      if (ev && ev.homeTeamName) {
+        g = { ...g, home: ev.homeTeamName, away: ev.awayTeamName || g.away };
+      }
+    }
     const pick = resolvePick(g, row.selection);
     if (!pick) throw new Error(`${g.home} v ${g.away} has no price for that pick`);
     legs.push({
