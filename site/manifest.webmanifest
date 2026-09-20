@@ -1,6 +1,6 @@
 {
-  "name": "vFootball Screener",
-  "short_name": "vFootball",
+  "name": "Vantage — SportyBet screener",
+  "short_name": "Vantage",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0B0E12",

@@ -6,7 +6,7 @@ self.addEventListener("push", function (e) {
   try { data = e.data ? e.data.json() : {}; } catch (err) {}
   var kind = data.kind || "kick";
   var sound = data.sound || (kind === "yes" ? "/sounds/yes.wav" : kind === "no" ? "/sounds/no.wav" : "/sounds/kick.wav");
-  var title = data.title || "vFootball";
+  var title = data.title || "Vantage";
   var opts = {
     body: data.body || "",
     icon: "/favicon.svg",

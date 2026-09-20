@@ -519,8 +519,8 @@
       var top = document.createElement("header");
       top.className = "top";
       top.innerHTML =
-        '<div class="mark" aria-hidden="true">VF</div>' +
-        '<div class="brand"><b>vFootball</b><span>SportyBet screener</span></div>' +
+        '<div class="mark" aria-hidden="true"><svg viewBox="0 0 100 100" width="20" height="20" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M27 43 L45 67 L75 23"/></svg></div>' +
+        '<div class="brand"><b>Vantage</b><span>SportyBet screener</span></div>' +
         extra +
         '<a class="gear-btn" href="/rules" data-nav="rules" aria-label="Rules" title="Rules">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' +
@@ -570,8 +570,8 @@
     gate.id = "gate";
     gate.innerHTML =
       '<div class="gate-box">' +
-        '<div class="mark" aria-hidden="true">VF</div>' +
-        '<b>vFootball</b>' +
+        '<div class="mark" aria-hidden="true"><svg viewBox="0 0 100 100" width="26" height="26" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M27 43 L45 67 L75 23"/></svg></div>' +
+        '<b>Vantage</b>' +
         '<p>Enter your code</p>' +
         '<div class="dots" id="gate-dots"></div>' +
         '<p class="err" id="gate-err" hidden></p>' +
