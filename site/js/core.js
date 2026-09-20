@@ -467,6 +467,15 @@
     });
   }
 
+  function fetchFinder() {
+    return fetch("/api/finder")
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (!d.ok) throw new Error(d.error || "Finder did not answer");
+        return d;
+      });
+  }
+
   function fetchHistory(scope) {
     return fetch("/api/history?scope=" + encodeURIComponent(scope || "past"))
       .then(function (r) { return r.json(); })
@@ -564,7 +573,10 @@
           "History</a>" +
         '<a href="/lab" data-nav="lab">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6l-5 8a2 2 0 0 0 1.8 3h12.4a2 2 0 0 0 1.8-3l-5-8V3"/><path d="M8 3h8M8 13h8"/></svg>' +
-          "Lab</a>";
+          "Lab</a>" +
+        '<a href="/finder" data-nav="finder">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3-3"/></svg>' +
+          "Finder</a>";
       document.body.appendChild(nav);
     }
     document.querySelectorAll(".nav a, .gear-btn").forEach(function (a) {
@@ -1209,6 +1221,7 @@
     until: until, clock: clock, dayLabel: dayLabel, byKick: byKick,
     leagueKey: leagueKey, teamsBlock: teamsBlock, crest: crest,
     fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips, fetchPicks: fetchPicks,
+    fetchFinder: fetchFinder,
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
     injectChrome: injectChrome, paintSlip: paintSlip, enrollBio: enrollBio,
     naira: naira, wilson: wilson, legStats: legStats, slipCard: slipCard,

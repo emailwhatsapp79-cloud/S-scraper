@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Finder · Vantage</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<main class="wrap">
+  <p class="lede">Its own brain. It reads every settled game and derives the pick — not your bands, not morning or night. Quiet until the newest slice beats the prices.</p>
+  <div class="stats" id="stats" hidden>
+    <div class="stat"><b id="s-n">—</b><span>Hold-out picks</span></div>
+    <div class="stat" id="s-hit-tile"><b id="s-hit">—</b><span>Hit-rate</span></div>
+    <div class="stat" id="s-roi-tile"><b id="s-roi">—</b><span>Flat ROI</span></div>
+  </div>
+  <p class="note" id="verdict">Reading the pile…</p>
+  <p class="note" id="readout"></p>
+  <p class="note" id="keys"></p>
+  <h2 class="lab-h">Live picks</h2>
+  <div id="out"><div class="skel"></div><div class="skel"></div></div>
+  <p class="note" id="note"></p>
+</main>
+<script src="/js/core.js"></script>
+<script>
+(function () {
+  var V = window.VFS;
+  V.injectChrome("finder");
+
+  function pct(x) { return (x * 100).toFixed(1) + "%"; }
+
+  function row(g) {
+    var box = V.el("article", "game" + (V.inBook(g.id) ? " picked" : ""));
+    var head = V.el("div", "who");
+    head.appendChild(V.teamsBlock(g.home, g.away));
+    var t = V.until(g.kickoff);
+    var when = V.el("time", t.cls, (V.clock(g.kickoff) + (t.text ? " · " + t.text : "")).trim());
+    when.setAttribute("data-kick", String(g.kickoff || ""));
+    head.appendChild(when);
+    box.appendChild(head);
+    var pick = V.el("div", "sel");
+    pick.appendChild(V.el("span", "pick", g.label || g.selection));
+    pick.appendChild(document.createTextNode(" @ " + Number(g.price).toFixed(2)));
+    if (g.p != null) pick.appendChild(V.el("span", "lab-n", "  ·  p " + pct(g.p)));
+    box.appendChild(pick);
+    var add = V.el("button", "add" + (V.inBook(g.id) ? " on" : ""), V.inBook(g.id) ? "On the slip" : "Add to slip");
+    add.type = "button";
+    add.addEventListener("click", function (e) {
+      e.stopPropagation();
+      V.toggleBook(V.makePick(g, g.selection, g.price, g.label));
+      add.textContent = V.inBook(g.id) ? "On the slip" : "Add to slip";
+      add.classList.toggle("on", V.inBook(g.id));
+      box.classList.toggle("picked", V.inBook(g.id));
+      V.paintSlip();
+    });
+    box.appendChild(add);
+    return box;
+  }
+
+  V.fetchFinder().then(function (d) {
+    var h = d.holdout || {};
+    document.getElementById("stats").hidden = !h.n;
+    if (h.n) {
+      document.getElementById("s-n").textContent = String(h.n);
+      document.getElementById("s-hit").textContent = pct(h.hit);
+      document.getElementById("s-roi").textContent = (h.roi >= 0 ? "+" : "") + pct(h.roi);
+      document.getElementById("s-hit-tile").className = "stat" + (h.edge ? " go" : "");
+      document.getElementById("s-roi-tile").className = "stat" + (h.roi >= 0 ? " go" : " bad");
+    }
+    document.getElementById("verdict").textContent = d.reason || "";
+    document.getElementById("readout").textContent = d.readout || "";
+    var keys = (d.keys || []).map(function (k) { return k.name; }).join(" · ");
+    document.getElementById("keys").textContent = keys ? ("Learned splits: " + keys) : "";
+
+    var out = document.getElementById("out");
+    out.textContent = "";
+    var picks = d.picks || [];
+    if (d.silent) {
+      out.appendChild(V.el("div", "empty", "No live picks. The hold-out has to beat the prices first."));
+    } else if (!picks.length) {
+      out.appendChild(V.el("div", "empty", "Nothing on the remaining card fits what it learned."));
+    } else {
+      picks.forEach(function (g) { out.appendChild(row(g)); });
+    }
+    document.getElementById("note").textContent =
+      (d.nGames || 0) + " settled games in memory · " + picks.length + " live · no retrain button, it refreshes itself.";
+    V.tick();
+  }).catch(function (e) {
+    document.getElementById("verdict").innerHTML = '<span class="err">' + e.message + "</span>";
+    document.getElementById("out").textContent = "";
+  });
+})();
+</script>
+</body>
+</html>
