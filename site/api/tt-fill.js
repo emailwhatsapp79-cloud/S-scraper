@@ -10,8 +10,8 @@ export default async function handler(req, res) {
   let s24 = null;
   try {
     s24 = await pullScores24([], {
-      skipHtml: true, more: true, pages: 3, first: 50, days: 60,
-      players: 4, playerPages: 3,
+      skipHtml: true, more: true, pages: 5, first: 50, days: 60,
+      players: 3, playerPages: 2,
     });
   }
   catch (e) { s24 = { error: String(e?.message || e) }; }

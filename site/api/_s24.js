@@ -193,60 +193,75 @@ async function rapi(path, query) {
   return r.json();
 }
 
+async function pullLeague(slug, byLast, pages, first, from, to) {
+  const rows = [];
+  const errors = [];
+  let hasMore = false;
+  let after = "";
+  try {
+    const st = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${slug}`;
+    after = (st[0] && st[0].cursor) || "";
+    if (after === "DONE") return { rows, errors, hasMore: false };
+    for (let p = 0; p < pages; p++) {
+      const data = await rapi("/leagues/table-tennis/" + slug + "/matches", {
+        lang: "en", first: String(first), status: "ended",
+        "date_between[]": [from, to],
+        with_statistics: "false", audience: "en",
+        ...(after ? { after } : {}),
+      });
+      const edges = data?.data?.edges || [];
+      if (!edges.length) {
+        await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
+          ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
+        break;
+      }
+      for (const e of edges) {
+        const row = rowFromNode(e.node, slug, byLast);
+        if (row) rows.push(row);
+      }
+      const info = data?.data?.pageInfo || {};
+      if (!info.hasNextPage || !info.endCursor) {
+        await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
+          ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
+        after = "DONE";
+        break;
+      }
+      after = info.endCursor;
+      await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${after})
+        ON CONFLICT (k) DO UPDATE SET cursor = ${after}, updated = now()`;
+      hasMore = true;
+    }
+    if (after && after !== "DONE") hasMore = true;
+  } catch (e) {
+    errors.push(slug + ": " + (e?.message || e));
+    hasMore = true;
+  }
+  return { rows, errors, hasMore };
+}
+
 async function fromRapi(byLast, pages, first, days) {
   const now = Date.now();
   const from = stamp(now - days * 24 * 3600 * 1000);
   const to = stamp(now + 2 * 3600 * 1000);
-  const rows = [];
-  const seen = new Set();
-  const errors = [];
-  let hasMore = false;
   await sql`CREATE TABLE IF NOT EXISTS tt_s24_state (
     k TEXT PRIMARY KEY,
     cursor TEXT,
     updated TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
-  for (const slug of LEAGUES) {
-    let after = "";
-    try {
-      const st = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${slug}`;
-      after = (st[0] && st[0].cursor) || "";
-      if (after === "DONE") continue;
-      for (let p = 0; p < pages; p++) {
-        const data = await rapi("/leagues/table-tennis/" + slug + "/matches", {
-          lang: "en", first: String(first), status: "ended",
-          "date_between[]": [from, to],
-          with_statistics: "false", audience: "en",
-          ...(after ? { after } : {}),
-        });
-        const edges = data?.data?.edges || [];
-        if (!edges.length) {
-          await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
-            ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
-          break;
-        }
-        for (const e of edges) {
-          const row = rowFromNode(e.node, slug, byLast);
-          if (!row || seen.has(row.id)) continue;
-          seen.add(row.id);
-          rows.push(row);
-        }
-        const info = data?.data?.pageInfo || {};
-        if (!info.hasNextPage || !info.endCursor) {
-          await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
-            ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
-          after = "DONE";
-          break;
-        }
-        after = info.endCursor;
-        await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${after})
-          ON CONFLICT (k) DO UPDATE SET cursor = ${after}, updated = now()`;
-        hasMore = true;
-      }
-      if (after && after !== "DONE") hasMore = true;
-    } catch (e) {
-      errors.push(slug + ": " + (e?.message || e));
-      hasMore = true;
+  const parts = await Promise.all(
+    LEAGUES.map((slug) => pullLeague(slug, byLast, pages, first, from, to)),
+  );
+  const rows = [];
+  const seen = new Set();
+  const errors = [];
+  let hasMore = false;
+  for (const p of parts) {
+    if (p.hasMore) hasMore = true;
+    errors.push(...p.errors);
+    for (const r of p.rows) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      rows.push(r);
     }
   }
   return { rows, errors, hasMore };

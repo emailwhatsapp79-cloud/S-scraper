@@ -14,9 +14,13 @@
       "schedule": "15 23 * * *"
     },
     {
+      "path": "/api/tt-cron",
+      "schedule": "0 * * * *"
+    },
+    {
       "path": "/api/nudge",
       "schedule": "20 23 * * *"
-    }
+    },
   ],
   "rewrites": [
     {
