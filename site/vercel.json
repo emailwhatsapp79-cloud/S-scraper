@@ -43,5 +43,15 @@
       "source": "/tt",
       "destination": "/tt.html"
     }
+  ],
+  "headers": [
+    {
+      "source": "/tt",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
+      "source": "/tt.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    }
   ]
 }
