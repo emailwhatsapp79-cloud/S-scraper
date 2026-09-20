@@ -18,6 +18,7 @@
     <div class="stat" id="roi-tile"><b id="h-roi">—</b><span>Flat ROI</span></div>
   </div>
   <p class="note" id="verdict"></p>
+  <p class="note" id="form"></p>
 
   <details id="bands"><summary>Bands</summary><div class="knobs" id="knobs"></div>
     <button class="ghost" id="reset" type="button" style="margin-top:8px">Reset to defaults</button>
@@ -86,6 +87,27 @@
     else if (st.lo > st.be) v.textContent = "Beating the prices overall: band " + pct(st.lo) + "–" + pct(st.hi) + " clears break-even " + pct(st.be) + ".";
     else if (st.hi < st.be) v.textContent = "Losing to the prices overall: " + pct(st.lo) + "–" + pct(st.hi) + " is below break-even " + pct(st.be) + ".";
     else v.textContent = "Overall, indistinguishable from the prices: " + pct(st.lo) + "–" + pct(st.hi) + " straddles break-even " + pct(st.be) + ".";
+
+    // Rolling form — is the edge holding on the most recent bets, or quietly decaying?
+    var W = 30;
+    var timed = picks.filter(function (p) { return p.kickoff; })
+      .sort(function (a, b) { return Number(a.kickoff) - Number(b.kickoff); });
+    var recent = timed.slice(-W);
+    var f = document.getElementById("form");
+    if (recent.length < 12) {
+      f.textContent = "Rolling form needs ~12 settled to read — " + recent.length + " so far.";
+    } else {
+      var rw = 0, rimp = 0;
+      recent.forEach(function (p) { if (p.won) rw++; if (p.price > 1) rimp += 1 / p.price; });
+      var rn = recent.length, rhit = rw / rn, rbe = rimp / rn, delta = rhit - st.hit;
+      var tone = rhit < rbe ? "cooling — under its own break-even " + pct(rbe)
+        : delta >= 0.02 ? "running hot"
+        : delta <= -0.05 ? "cooling"
+        : "holding steady";
+      var good = rhit >= rbe && delta > -0.05;
+      f.innerHTML = "Last " + rn + " settled: <b>" + rw + "/" + rn + "</b> · <b>" + pct(rhit) +
+        "</b> (overall " + pct(st.hit) + ") — <b class=\"" + (good ? "ok" : "warn") + "\">" + tone + "</b>.";
+    }
 
     var byL = {}; picks.forEach(function (p) { (byL[p.league] = byL[p.league] || []).push(p); });
     bucketRows("by-league", byL, ["England", "Spain", "Italy", "Germany", "France"]);
