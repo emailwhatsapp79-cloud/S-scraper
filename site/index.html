@@ -83,10 +83,11 @@
       empty.innerHTML = "<b>None of the upcoming games match this shape.</b><br>Open Card to browse the full list, or loosen the bands on Rules.";
       out.appendChild(empty);
     } else {
-      hits.forEach(function (p) {
+      hits.forEach(function (p, i) {
         out.appendChild(V.card(p[0], p[1], {
           checks: true,
           pickable: true,
+          n: i + 1,
           picked: V.inBook(p[0].id),
           onPick: function () { render(); V.paintSlip(); }
         }));

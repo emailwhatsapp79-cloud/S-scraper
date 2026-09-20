@@ -319,6 +319,7 @@
     var picked = opts.picked || inBook(g.id);
     var box = el("div", "game" + (r.verdict === "show" ? " match" : r.verdict === "hold" ? " hold" : "") + (picked ? " picked" : ""));
     var row = el("div", "row1");
+    if (opts.n) row.appendChild(el("span", "idx", String(opts.n)));
     row.appendChild(el("span", "gid", g.id));
     var who = el("div", "who");
     who.appendChild(teamsBlock(g.home, g.away));
