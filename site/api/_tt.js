@@ -426,6 +426,8 @@ function attachForecast(games, pack) {
       pHome = wModel * f.pHome + (1 - wModel) * book.home;
     }
     pHome = Math.min(0.97, Math.max(0.03, pHome));
+    g.ours = { home: Math.round(f.pHome * 100), away: Math.round((1 - f.pHome) * 100) };
+    g.book = book ? { home: Math.round(book.home * 100), away: Math.round(book.away * 100) } : null;
     g.pct = { home: Math.round(pHome * 100), away: Math.round((1 - pHome) * 100) };
     g.nH = f.nH; g.nA = f.nA;
     g.h2hRec = f.h2hRec || { n: 0, home: 0, away: 0 };

@@ -42,7 +42,13 @@
   .tt-cell.fav { box-shadow: inset 0 0 0 1px var(--line, rgba(255,255,255,.14)), var(--shadow) }
   .tt-cell.on { background: var(--good, #37c76a); color: #04140a }
   .tt-cell em { display: block; font-style: normal; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--go); margin-top: 1px }
-  .tt-cell.on em { color: #04140a }
+  .tt-cell .book { display: block; font-size: 10.5px; color: var(--faint); margin-top: 2px }
+  .tt-cell.on em, .tt-cell.on .book { color: #04140a }
+  .tt-cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 10px; font-size: 12px }
+  .tt-cmp div { background: var(--bg); box-shadow: var(--shadow); border-radius: var(--r3); padding: 8px 10px }
+  .tt-cmp span { display: block; font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; color: var(--faint); font-weight: 600; margin-bottom: 3px }
+  .tt-cmp b { font-family: var(--mono); font-size: 16px; font-weight: 650 }
+  .tt-cmp .gap { color: var(--go) }
   .tt-pl .n { font-size: 11px; color: var(--faint); font-weight: 600; margin-left: 6px }
   .tt-facts { display: grid; gap: 3px; margin: -2px 0 10px; font-size: 12px; color: var(--dim) }
   .tt-facts b { color: var(--ink); font-weight: 650 }
@@ -115,13 +121,14 @@
     for (var i = 0; i < legs.length; i++) if (legs[i].id === id) return legs[i].selection;
     return null;
   }
-  function tapCell(g, sel, price, label, cls, pct) {
+  function tapCell(g, sel, price, label, cls, pct, book) {
     var can = price != null && isFinite(Number(price));
     var on = can && currentSel(g.id) === sel;
     var c = V.el("div", "tt-cell " + (cls || "") + (can ? " tap" : "") + (on ? " on" : ""));
     c.appendChild(V.el("b", null, odds(price)));
     c.appendChild(V.el("span", null, label));
-    if (pct != null && isFinite(pct)) c.appendChild(V.el("em", null, pct + "%"));
+    if (pct != null && isFinite(pct)) c.appendChild(V.el("em", null, "Ours " + pct + "%"));
+    if (book != null && isFinite(book)) c.appendChild(V.el("span", "book", "Book " + book + "%"));
     if (can) {
       c.setAttribute("role", "button");
       c.tabIndex = 0;
@@ -139,7 +146,7 @@
   }
 
   function playersBlock(g) {
-    var pct = g.pct || null;
+    var pct = g.ours || g.pct || null;
     var favHome = pct ? pct.home >= pct.away : (g.win && g.win.home != null && g.win.away != null && g.win.home <= g.win.away);
     var box = V.el("div", "tt-players");
     [[g.home, pct && pct.home, favHome, g.nH], [g.away, pct && pct.away, !favHome, g.nA]].forEach(function (p) {
@@ -159,6 +166,21 @@
       }
       box.appendChild(row);
     });
+    return box;
+  }
+
+  function compareBlock(g) {
+    if (!g.ours && !g.book) return null;
+    var box = V.el("div", "tt-cmp");
+    var ours = V.el("div");
+    ours.appendChild(V.el("span", null, "Ours"));
+    ours.appendChild(V.el("b", null, g.ours ? g.ours.home + "%  /  " + g.ours.away + "%" : "—"));
+    box.appendChild(ours);
+    var bk = V.el("div");
+    bk.appendChild(V.el("span", null, "SportyBet"));
+    bk.appendChild(V.el("b", null, g.book ? g.book.home + "%  /  " + g.book.away + "%" : "—"));
+    if (g.ours && g.book && g.ours.home !== g.book.home) bk.querySelector("b").className = "gap";
+    box.appendChild(bk);
     return box;
   }
 
@@ -188,14 +210,17 @@
     box.appendChild(top);
 
     box.appendChild(playersBlock(g));
+    var cmp = compareBlock(g);
+    if (cmp) box.appendChild(cmp);
     box.appendChild(factsBlock(g));
 
     box.appendChild(V.el("div", "tt-mkt-lab", "Winner"));
     var grid = V.el("div", "tt-g");
-    var pct = g.pct || null;
+    var pct = g.ours || g.pct || null;
+    var book = g.book || null;
     var favHome = pct ? pct.home >= pct.away : false;
-    grid.appendChild(tapCell(g, "1", g.win && g.win.home, "Home", favHome ? "fav" : "", pct && pct.home));
-    grid.appendChild(tapCell(g, "2", g.win && g.win.away, "Away", (pct && !favHome) ? "fav" : "", pct && pct.away));
+    grid.appendChild(tapCell(g, "1", g.win && g.win.home, "Home", favHome ? "fav" : "", pct && pct.home, book && book.home));
+    grid.appendChild(tapCell(g, "2", g.win && g.win.away, "Away", (pct && !favHome) ? "fav" : "", pct && pct.away, book && book.away));
     box.appendChild(grid);
     return box;
   }
