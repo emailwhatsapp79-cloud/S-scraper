@@ -3,7 +3,7 @@ import { seal, open } from "./_crypto.js";
 
 let ready = false;
 
-async function ensure() {
+export async function ensure() {
   if (ready) return;
   await sql`CREATE TABLE IF NOT EXISTS vault (
     k TEXT PRIMARY KEY,

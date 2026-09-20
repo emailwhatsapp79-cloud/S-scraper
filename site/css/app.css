@@ -597,9 +597,26 @@ body.locked .top { visibility: hidden }
   padding: 24px 16px;
 }
 .gate-box { width: min(360px, 100%); text-align: center }
-.gate-box .mark { margin: 0 auto 14px }
+.gate-logo {
+  width: 96px; height: 96px;
+  border-radius: 24px;
+  object-fit: cover;
+  display: block;
+  margin: 0 auto 16px;
+  box-shadow: var(--shadow);
+}
 .gate-box b { display: block; font-size: 22px; letter-spacing: -0.03em }
 .gate-box p { color: var(--dim); margin: 8px 0 18px }
+.gate .bio {
+  width: 100%;
+  min-height: 48px;
+  margin: 0 0 18px;
+  background: var(--go);
+  color: var(--go-ink);
+  font-weight: 700;
+  font-size: 16px;
+}
+.gate .bio[hidden] { display: none; }
 .dots { display: flex; justify-content: center; gap: 10px; margin-bottom: 22px }
 .dots i {
   width: 10px; height: 10px; border-radius: 50%;

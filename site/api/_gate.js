@@ -1,4 +1,4 @@
-// Personal PIN gate. Cookie lasts two hours. Override PIN with env GATE_PIN.
+// Personal PIN + fingerprint gate. Cookie lasts 30 minutes. Override PIN with env GATE_PIN.
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { cors } from "./_db.js";
 import { loadPinHash } from "./_vault.js";
@@ -6,7 +6,7 @@ import { loadPinHash } from "./_vault.js";
 const SALT = "vfs-gate-v1";
 const PIN_HASH = "a1130bfe4270bc67bed0b71f0ae687df544ee38a5b342a468b15549612e9629f";
 const SECRET = process.env.GATE_SECRET || "3ed841c2806431522acc2d288f64f1fc275800b5c9ad19fc";
-const TTL_MS = 2 * 60 * 60 * 1000;
+export const TTL_MS = 30 * 60 * 1000;
 const COOKIE = "vfs_gate";
 
 function sha(s) {

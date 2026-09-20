@@ -560,7 +560,138 @@
       lb.setAttribute("data-bound", "1");
       lb.addEventListener("click", lockNow);
     }
+    if (!document.documentElement.getAttribute("data-gate")) {
+      document.documentElement.setAttribute("data-gate", "1");
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") gateCheck();
+      });
+    }
     gateCheck();
+  }
+
+  function b64urlToBuf(s) {
+    s = String(s || "").replace(/-/g, "+").replace(/_/g, "/");
+    while (s.length % 4) s += "=";
+    var raw = atob(s);
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out.buffer;
+  }
+  function bufToB64url(buf) {
+    var u = new Uint8Array(buf);
+    var s = "";
+    for (var i = 0; i < u.length; i++) s += String.fromCharCode(u[i]);
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+  }
+  function credJSON(cred) {
+    var r = cred.response;
+    var out = {
+      id: cred.id,
+      rawId: bufToB64url(cred.rawId),
+      type: cred.type,
+      response: {
+        clientDataJSON: bufToB64url(r.clientDataJSON)
+      },
+      clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {}
+    };
+    if (r.attestationObject) out.response.attestationObject = bufToB64url(r.attestationObject);
+    if (r.authenticatorData) out.response.authenticatorData = bufToB64url(r.authenticatorData);
+    if (r.signature) out.response.signature = bufToB64url(r.signature);
+    if (r.userHandle) out.response.userHandle = bufToB64url(r.userHandle);
+    if (r.getTransports) out.response.transports = r.getTransports();
+    return out;
+  }
+  function creationOpts(o) {
+    var pk = {
+      rp: o.rp,
+      user: { id: b64urlToBuf(o.user.id), name: o.user.name, displayName: o.user.displayName },
+      challenge: b64urlToBuf(o.challenge),
+      pubKeyCredParams: o.pubKeyCredParams,
+      timeout: o.timeout,
+      attestation: o.attestation,
+      authenticatorSelection: o.authenticatorSelection
+    };
+    if (o.excludeCredentials) {
+      pk.excludeCredentials = o.excludeCredentials.map(function (c) {
+        return { type: c.type || "public-key", id: b64urlToBuf(c.id), transports: c.transports };
+      });
+    }
+    return pk;
+  }
+  function requestOpts(o) {
+    var pk = {
+      challenge: b64urlToBuf(o.challenge),
+      timeout: o.timeout,
+      rpId: o.rpId,
+      userVerification: o.userVerification || "required"
+    };
+    if (o.allowCredentials) {
+      pk.allowCredentials = o.allowCredentials.map(function (c) {
+        return { type: c.type || "public-key", id: b64urlToBuf(c.id), transports: c.transports };
+      });
+    }
+    return pk;
+  }
+
+  var lockTimer = 0;
+  function scheduleLock(ms) {
+    if (lockTimer) clearTimeout(lockTimer);
+    lockTimer = 0;
+    if (!ms || ms <= 0) return;
+    lockTimer = setTimeout(function () { lockNow(); }, ms);
+  }
+
+  function enrollBio() {
+    if (!window.PublicKeyCredential) return Promise.resolve();
+    return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function (ok) {
+      if (!ok) return;
+      return fetch("/api/gate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bio: "register-options" })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.ok || !d.options) return;
+        return navigator.credentials.create({ publicKey: creationOpts(d.options) });
+      }).then(function (cred) {
+        if (!cred) return;
+        return fetch("/api/gate", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ bio: "register", cred: credJSON(cred) })
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d && d.bio) try { localStorage.setItem("vfs-bio", "1"); } catch (e) {}
+        });
+      });
+    }).catch(function () {});
+  }
+
+  function unlockBio() {
+    return fetch("/api/gate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ bio: "options" })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok || !d.options) throw new Error(d.error || "Fingerprint not set");
+      return navigator.credentials.get({ publicKey: requestOpts(d.options) });
+    }).then(function (cred) {
+      if (!cred) throw new Error("Cancelled");
+      return fetch("/api/gate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bio: "assert", cred: credJSON(cred) })
+      }).then(function (r) { return r.json(); });
+    }).then(function (d) {
+      if (!d.open) throw new Error(d.error || "Fingerprint did not match");
+      return d;
+    });
+  }
+
+  function opened(d) {
+    document.body.classList.remove("locked");
+    var g = document.getElementById("gate");
+    if (g) g.remove();
+    scheduleLock(d && d.remainingMs);
+    location.reload();
   }
 
   function showLock() {
@@ -572,13 +703,21 @@
       '<div class="gate-box">' +
         '<div class="mark" aria-hidden="true"><svg viewBox="0 0 100 100" width="26" height="26" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M27 43 L45 67 L75 23"/></svg></div>' +
         '<b>Vantage</b>' +
-        '<p>Enter your code</p>' +
+        '<p>Fingerprint or your six-digit code. Locks again in 30 minutes.</p>' +
+        '<button class="bio" type="button" id="gate-bio" hidden>Use fingerprint</button>' +
         '<div class="dots" id="gate-dots"></div>' +
         '<p class="err" id="gate-err" hidden></p>' +
         '<div class="pad" id="gate-pad"></div>' +
       "</div>";
     document.body.appendChild(gate);
     var pin = "";
+    function fail(msg) {
+      pin = "";
+      paintDots();
+      var e = document.getElementById("gate-err");
+      e.hidden = false;
+      e.textContent = msg || "Wrong code";
+    }
     function paintDots() {
       var d = document.getElementById("gate-dots");
       d.textContent = "";
@@ -597,21 +736,9 @@
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ pin: pin })
       }).then(function (r) { return r.json(); }).then(function (d) {
-        if (!d.open) {
-          pin = "";
-          paintDots();
-          var e = document.getElementById("gate-err");
-          e.hidden = false;
-          e.textContent = "Wrong code";
-          return;
-        }
-        document.body.classList.remove("locked");
-        gate.remove();
-        location.reload();
-      }).catch(function () {
-        pin = "";
-        paintDots();
-      });
+        if (!d.open) return fail("Wrong code");
+        enrollBio().then(function () { opened(d); });
+      }).catch(function () { fail("Could not reach the lock"); });
     }
     var pad = document.getElementById("gate-pad");
     ["1","2","3","4","5","6","7","8","9","","0","⌫"].forEach(function (ch) {
@@ -622,12 +749,31 @@
       pad.appendChild(b);
     });
     paintDots();
+    var bioBtn = document.getElementById("gate-bio");
+    function runBio() {
+      document.getElementById("gate-err").hidden = true;
+      unlockBio().then(opened).catch(function (err) {
+        fail(err && err.message ? err.message : "Use your code");
+      });
+    }
+    var canBio = window.PublicKeyCredential;
+    try { if (localStorage.getItem("vfs-bio") === "1") canBio = canBio && true; } catch (e) {}
+    if (bioBtn && window.PublicKeyCredential) {
+      bioBtn.hidden = false;
+      bioBtn.addEventListener("click", runBio);
+      fetch("/api/gate").then(function (r) { return r.json(); }).then(function (d) {
+        if (d.bio) runBio();
+      }).catch(function () {});
+    }
   }
 
   function gateCheck() {
     fetch("/api/gate").then(function (r) { return r.json(); }).then(function (d) {
       if (!d.open) showLock();
-      else hydrate();
+      else {
+        scheduleLock(d.remainingMs);
+        hydrate();
+      }
     }).catch(function () { showLock(); });
   }
 

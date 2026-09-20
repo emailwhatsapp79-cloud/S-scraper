@@ -1,6 +1,7 @@
 import { cors } from "./_db.js";
-import { pinOk, hashPin, readGate, setGateCookie } from "./_gate.js";
+import { pinOk, hashPin, readGate, setGateCookie, TTL_MS } from "./_gate.js";
 import { savePinHash } from "./_vault.js";
+import { hasBio, beginRegister, finishRegister, beginAuth, finishAuth } from "./_bio.js";
 
 function six(s) {
   return /^\d{6}$/.test(String(s || "").trim());
@@ -13,7 +14,9 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") {
     const g = readGate(req);
-    return res.status(200).json({ ok: true, open: g.open, remainingMs: g.remainingMs });
+    let bio = false;
+    try { bio = await hasBio(); } catch { /* vault may be empty */ }
+    return res.status(200).json({ ok: true, open: g.open, remainingMs: g.remainingMs, bio, ttlMs: TTL_MS });
   }
 
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "GET or POST" });
@@ -38,9 +41,48 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, changed: true });
   }
 
+  if (body.bio === "register-options") {
+    if (!readGate(req).open) return res.status(401).json({ ok: false, locked: true, error: "Locked" });
+    try {
+      const options = await beginRegister(req);
+      return res.status(200).json({ ok: true, options });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: String(e.message || e) });
+    }
+  }
+
+  if (body.bio === "register") {
+    if (!readGate(req).open) return res.status(401).json({ ok: false, locked: true, error: "Locked" });
+    try {
+      await finishRegister(req, body.cred);
+      return res.status(200).json({ ok: true, bio: true });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: String(e.message || e) });
+    }
+  }
+
+  if (body.bio === "options") {
+    try {
+      const options = await beginAuth(req);
+      return res.status(200).json({ ok: true, options });
+    } catch (e) {
+      return res.status(400).json({ ok: false, error: String(e.message || e) });
+    }
+  }
+
+  if (body.bio === "assert") {
+    try {
+      await finishAuth(req, body.cred);
+      setGateCookie(res, true);
+      return res.status(200).json({ ok: true, open: true, remainingMs: TTL_MS, bio: true });
+    } catch (e) {
+      return res.status(401).json({ ok: false, open: false, error: String(e.message || e) });
+    }
+  }
+
   if (!(await pinOk(body.pin))) {
     return res.status(401).json({ ok: false, open: false, error: "Wrong code" });
   }
   setGateCookie(res, true);
-  return res.status(200).json({ ok: true, open: true, remainingMs: 2 * 60 * 60 * 1000 });
+  return res.status(200).json({ ok: true, open: true, remainingMs: TTL_MS });
 }

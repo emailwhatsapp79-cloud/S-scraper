@@ -4,6 +4,7 @@
   "type": "module",
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
+    "@simplewebauthn/server": "^13.3.3",
     "web-push": "^3.6.7"
   }
 }
