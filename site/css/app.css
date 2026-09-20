@@ -663,3 +663,22 @@ html:not(.gate-ok) body .top { visibility: hidden }
 .lab-sub { font-size: 12px; color: var(--dim); }
 .lab-sub .ok { color: var(--go, #1f9d57); }
 .stat.bad b { color: var(--bad, #c8434e); }
+
+.finder-card .mkt-t { margin-top: 12px }
+.fline {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 0;
+  box-shadow: 0 1px 0 var(--line);
+}
+.fline-l { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap }
+.fline-l b { font-size: 14px }
+.fline .conf {
+  font-family: var(--mono); font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--go);
+}
+.fline.top .conf { font-size: 16px }
+.fline.top b { font-weight: 700 }
+button.add.tiny {
+  width: auto; min-height: 36px; margin: 0; padding: 0 12px;
+  font-size: 13px;
+}
