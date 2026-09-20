@@ -1,11 +1,10 @@
 // Cron target: pull the card and save it without shipping 400 games back.
-import { cors } from "./_db.js";
+import { cors, sql } from "./_db.js";
 import { store } from "./_store.js";
 import { fetchCard, normalise } from "./_card.js";
 import { refreshSlips } from "./_slips.js";
 import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
 import { settleGames } from "./_results.js";
-import { trainFinder, settleFinderPreds } from "./_finder.js";
 import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT } from "./_tt.js";
 
 export default async function handler(req, res) {
@@ -27,17 +26,17 @@ export default async function handler(req, res) {
   try { slips = await refreshSlips(); }
   catch (e) { slips = { error: String(e?.message || e) }; }
 
-  let picked = 0, settled = 0, gamesSettled = 0, pickError = null, finder = null;
+  let picked = 0, settled = 0, gamesSettled = 0, pickError = null;
   try {
     picked = await recordPicks(games);
     settled = await settlePicks(25);
     gamesSettled = (await settleGames(25)).settled;
-    try { await settleFinderPreds(); } catch { /* keep going */ }
   } catch (e) { pickError = String(e?.message || e); }
-  try { finder = await trainFinder(); }
-  catch (e) { finder = { error: String(e?.message || e) }; }
+  try {
+    await sql`DROP TABLE IF EXISTS finder_preds`;
+    await sql`DELETE FROM vault WHERE k = 'finder'`;
+  } catch { /* leftover Finder rows */ }
 
-  // Table tennis — its own pile, fully isolated. Never fails the football poll.
   let tt = null;
   try {
     const { events } = await fetchTTCard();
@@ -58,12 +57,6 @@ export default async function handler(req, res) {
     settled,
     gamesSettled,
     pickError,
-    finder: finder && {
-      silent: finder.silent,
-      nGames: finder.nGames,
-      holdout: finder.holdout || null,
-      error: finder.error || null,
-    },
     tt,
     saveError,
     feedErrors: errors.length ? errors : null,
