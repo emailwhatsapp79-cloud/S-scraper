@@ -137,7 +137,9 @@ function parseSet(s) {
 // Fetch the event to capture odds (pre-match) and the final set score (once ended).
 async function fetchEvent(eventId) {
   if (!eventId) return null;
-  try { return await getJson("event", { eventId, productId: "3", marketId: MARKET_IDS }); }
+  // The event endpoint returns no markets for TT when marketId is set — ask for
+  // the whole event and pick Winner / Correct Score out of it.
+  try { return await getJson("event", { eventId, productId: "3" }); }
   catch { return null; }
 }
 
