@@ -3,10 +3,18 @@
 import { sql } from "./_db.js";
 import { leagueBucket } from "./_shape.js";
 
-const FIELDS = 16;
+const FIELDS = 17;
+
+let colsReady = false;
+async function ensureCols() {
+  if (colsReady) return;
+  try { await sql`ALTER TABLE games ADD COLUMN IF NOT EXISTS cs_json TEXT`; } catch { /* already there */ }
+  colsReady = true;
+}
 
 export async function store(games) {
   if (!Array.isArray(games) || !games.length) return 0;
+  await ensureCols();
 
   const rows = games.map((g) => [
     g.id, g.eventId || null, g.home, g.away, g.league || "",
@@ -14,6 +22,7 @@ export async function store(games) {
     g.ft.home, g.ft.draw, g.ft.away,
     g.dc?.home_draw ?? null, g.dc?.home_away ?? null, g.dc?.draw_away ?? null,
     g.ht?.home ?? null, g.ht?.draw ?? null, g.ht?.away ?? null,
+    g.cs ? JSON.stringify(g.cs) : null,
   ]);
 
   const jobs = [];
@@ -25,7 +34,7 @@ export async function store(games) {
     }).join(",");
     jobs.push(sql(
       `INSERT INTO games (game_id, event_id, home, away, league, kickoff, status,
-         ft_home, ft_draw, ft_away, dc_1x, dc_12, dc_x2, ht_home, ht_draw, ht_away)
+         ft_home, ft_draw, ft_away, dc_1x, dc_12, dc_x2, ht_home, ht_draw, ht_away, cs_json)
        VALUES ${values}
        ON CONFLICT (game_id) DO UPDATE SET
          event_id = COALESCE(EXCLUDED.event_id, games.event_id),
@@ -41,6 +50,7 @@ export async function store(games) {
          ht_home = COALESCE(EXCLUDED.ht_home, games.ht_home),
          ht_draw = COALESCE(EXCLUDED.ht_draw, games.ht_draw),
          ht_away = COALESCE(EXCLUDED.ht_away, games.ht_away),
+         cs_json = COALESCE(EXCLUDED.cs_json, games.cs_json),
          last_seen = now()`,
       chunk.flat(),
     ));

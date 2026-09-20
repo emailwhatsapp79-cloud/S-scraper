@@ -2,6 +2,7 @@ export const WANTED = {
   "1X2": "ft",
   "Double Chance": "dc",
   "1st Half - 1X2": "ht",
+  "Correct Score": "cs",
 };
 
 /** Kick-off in the future, and SportyBet has not already called it live or ended. */

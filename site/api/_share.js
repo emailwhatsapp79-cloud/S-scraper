@@ -15,7 +15,17 @@ export const OUTCOMES = {
 };
 
 export function toSelection(leg) {
-  const map = OUTCOMES[leg.selection];
+  const sel = String(leg.selection || "");
+  let map = OUTCOMES[sel];
+  if (!map) {
+    const m = sel.match(/^(\d+):(\d+)$/);
+    if (m) {
+      const h = Number(m[1]), a = Number(m[2]);
+      if (h >= 0 && h <= 4 && a >= 0 && a <= 4) {
+        map = { marketId: "45", outcomeId: String(274 + 2 * (a * 5 + h)) };
+      }
+    }
+  }
   if (!map) throw new Error(`SportyBet has no slot for ${leg.selection}`);
   if (!leg.eventId) {
     throw new Error(`${leg.home} v ${leg.away} is missing an event id — refresh Matches first`);

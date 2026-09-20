@@ -5,7 +5,7 @@ import { fetchCard, normalise } from "./_card.js";
 import { refreshSlips } from "./_slips.js";
 import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
 import { settleGames } from "./_results.js";
-import { trainFinder } from "./_finder.js";
+import { trainFinder, settleFinderPreds } from "./_finder.js";
 
 export default async function handler(req, res) {
   cors(res);
@@ -31,6 +31,7 @@ export default async function handler(req, res) {
     picked = await recordPicks(games);
     settled = await settlePicks(25);
     gamesSettled = (await settleGames(25)).settled;
+    try { await settleFinderPreds(); } catch { /* keep going */ }
   } catch (e) { pickError = String(e?.message || e); }
   try { finder = await trainFinder(); }
   catch (e) { finder = { error: String(e?.message || e) }; }

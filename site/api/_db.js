@@ -4,10 +4,16 @@ import { isUpcoming } from "./_shape.js";
 
 export const sql = neon(process.env.DATABASE_URL);
 
+function parseCs(raw) {
+  if (!raw) return null;
+  if (typeof raw === "object") return raw;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
 export const COLUMNS = [
   "game_id", "event_id", "home", "away", "league", "kickoff", "status",
   "ft_home", "ft_draw", "ft_away", "dc_1x", "dc_12", "dc_x2",
-  "ht_home", "ht_draw", "ht_away",
+  "ht_home", "ht_draw", "ht_away", "cs_json",
 ];
 
 export function rowToGame(r) {
@@ -27,6 +33,7 @@ export function rowToGame(r) {
     ft: { home: r.ft_home, draw: r.ft_draw, away: r.ft_away },
     dc: r.dc_1x == null ? null : { home_draw: r.dc_1x, home_away: r.dc_12, draw_away: r.dc_x2 },
     ht: r.ht_home == null ? null : { home: r.ht_home, draw: r.ht_draw, away: r.ht_away },
+    cs: parseCs(r.cs_json),
     firstSeen: r.first_seen,
     lastSeen: r.last_seen,
   };

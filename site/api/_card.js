@@ -7,7 +7,7 @@ export const BASE = "https://www.sportybet.com/api/ng/factsCenter";
 export const SPORT = "sr:sport:202120001";
 const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36";
-const MARKET_IDS = "1,10,60";
+const MARKET_IDS = "1,10,45,60";
 
 export const LEAGUES = [
   ["sv:league:1", "England"],
@@ -196,5 +196,6 @@ export function normalise(ev) {
       ? { home_draw: dc["Home or Draw"], home_away: dc["Home or Away"], draw_away: dc["Draw or Away"] }
       : null,
     ht: ht && ht.Home != null ? { home: ht.Home, draw: ht.Draw, away: ht.Away } : null,
+    cs: got.cs ? got.cs : null,
   };
 }
