@@ -403,7 +403,20 @@ async function loadSettledForFit() {
 function attachForecast(games, pack) {
   for (const g of games) {
     const f = forecastTT(pack, g);
-    g.pct = { home: Math.round(f.pHome * 100), away: Math.round(f.pAway * 100) };
+    // The model seeds every player at 1500 Elo, so on a thin pile it says 50/50
+    // for everyone — which is nonsense when the book price already knows who is
+    // stronger (1.29 vs 3.30 is not a coin flip). Anchor on the de-vigged book
+    // and only let the model pull away from it as we actually see these two play.
+    const book = g.win ? winPctBook(g.win.home, g.win.away) : null;
+    let pHome = f.pHome;
+    if (book) {
+      const h2hN = f.h2hRec ? f.h2hRec.n : 0;
+      const evidence = Math.min(f.nH, f.nA) + 2 * h2hN; // h2h meetings count double
+      const wModel = evidence / (evidence + 12);        // 0 → all book; ½ at ~12 games
+      pHome = wModel * f.pHome + (1 - wModel) * book.home;
+    }
+    pHome = Math.min(0.97, Math.max(0.03, pHome));
+    g.pct = { home: Math.round(pHome * 100), away: Math.round((1 - pHome) * 100) };
     g.nH = f.nH; g.nA = f.nA;
     g.h2hRec = f.h2hRec || { n: 0, home: 0, away: 0 };
     g.formH = f.formH; g.formA = f.formA;
