@@ -80,7 +80,7 @@
   function cell(g, item, featured) {
     var price = item.price != null ? Number(item.price) : null;
     if (!(price > 1)) price = null;
-    var el = V.el("button", "fx-cell" + (featured ? " top" : "") + (onSlip(g.id, item.selection) ? " on" : "") + (price ? " tap" : ""));
+    var el = V.el("button", "fx-cell" + (featured ? " pick" : "") + (onSlip(g.id, item.selection) ? " on" : "") + (price ? " tap" : ""));
     el.type = "button";
     el.setAttribute("data-sel", item.selection);
     el.appendChild(V.el("b", null, odds(price)));

@@ -733,6 +733,6 @@ html:not(.gate-ok) body .top { visibility: hidden }
   font-variant-numeric: tabular-nums;
   color: var(--go);
 }
-.fx-cell.top { box-shadow: var(--shadow), 0 0 0 1.5px var(--go) }
+.fx-cell.pick { box-shadow: var(--shadow), 0 0 0 1.5px var(--go) }
 .fx-cell.on { background: var(--go); color: var(--go-ink); box-shadow: none }
 .fx-cell.on b, .fx-cell.on span, .fx-cell.on em { color: var(--go-ink) }
