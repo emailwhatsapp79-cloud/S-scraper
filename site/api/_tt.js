@@ -8,7 +8,7 @@ const BASE = "https://www.sportybet.com/api/ng/factsCenter";
 const SPORT = "sr:sport:20";
 const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36";
-const MARKET_IDS = "1,238";
+const MARKET_IDS = "1";
 
 let ready = false;
 async function ensureTT() {
@@ -273,10 +273,57 @@ function detectBO(cs) {
   return 3;
 }
 
-function recentRate(rec) {
-  if (!rec || rec.length < 3) return null;
-  const w = rec.filter((x) => x.won).length;
-  return (w + 2) / (rec.length + 4);
+function formVsField(rec, excludeKey) {
+  const list = (rec || []).filter((x) => x.vs !== excludeKey).slice(-20);
+  if (list.length < 3) return null;
+  const w = list.filter((x) => x.won).length;
+  return { n: list.length, w, l: list.length - w, p: (w + 2) / (list.length + 4) };
+}
+
+function combinedH2H(h2h, home, away) {
+  const a = nameKey(home), b = nameKey(away);
+  const ab = h2h[a + ">" + b] || { n: 0, hw: 0 };
+  const ba = h2h[b + ">" + a] || { n: 0, hw: 0 };
+  const n = ab.n + ba.n;
+  const homeWins = ab.hw + (ba.n - ba.hw);
+  return { n, home: homeWins, away: n - homeWins };
+}
+
+export function forecastTT(pack, g) {
+  const blank = { n: 0, elo: 1500, rec: [], last: 0, tourn: {} };
+  const H = pack.players[nameKey(g.home)] || blank;
+  const A = pack.players[nameKey(g.away)] || blank;
+  const parts = [];
+  parts.push(1 / (1 + 10 ** ((A.elo - H.elo) / 400)));
+
+  const h2hRec = combinedH2H(pack.h2h || {}, g.home, g.away);
+  if (h2hRec.n >= 2) parts.push((h2hRec.home + 1) / (h2hRec.n + 2));
+
+  const formH = formVsField(H.rec, nameKey(g.away));
+  const formA = formVsField(A.rec, nameKey(g.home));
+  if (formH && formA && formH.p + formA.p > 0) parts.push(formH.p / (formH.p + formA.p));
+
+  const T = String(g.tourn || "").trim();
+  if (T) {
+    const ht = H.tourn[T], at = A.tourn[T];
+    if (ht && at && ht.n >= 3 && at.n >= 3) {
+      const ph = (ht.w + 1) / (ht.n + 2);
+      const pa = (at.w + 1) / (at.n + 2);
+      if (ph + pa > 0) parts.push(ph / (ph + pa));
+    }
+  }
+
+  let p = parts.reduce((s, x) => s + x, 0) / parts.length;
+  p += pack.ha || 0;
+  if (g.start && H.last && g.start - H.last < 2 * 3600 * 1000) p -= 0.03;
+  if (g.start && A.last && g.start - A.last < 2 * 3600 * 1000) p += 0.03;
+  p = Math.min(0.92, Math.max(0.08, p));
+
+  return {
+    pHome: p, pAway: 1 - p,
+    nH: H.n, nA: A.n,
+    h2hRec, formH, formA,
+  };
 }
 
 export function fitTT(games) {
@@ -303,10 +350,10 @@ export function fitTT(games) {
     if (hw) H.w++; else A.w++;
     homeN++; if (hw) homeW++;
     H.last = g.start || 0; A.last = g.start || 0;
-    H.rec.push({ t: g.start || 0, won: hw });
-    A.rec.push({ t: g.start || 0, won: !hw });
-    if (H.rec.length > 12) H.rec.shift();
-    if (A.rec.length > 12) A.rec.shift();
+    H.rec.push({ t: g.start || 0, won: hw, vs: nameKey(g.away) });
+    A.rec.push({ t: g.start || 0, won: !hw, vs: nameKey(g.home) });
+    if (H.rec.length > 20) H.rec.shift();
+    if (A.rec.length > 20) A.rec.shift();
     const T = String(g.tourn || "").trim();
     if (T) {
       const ht = H.tourn[T] || (H.tourn[T] = { n: 0, w: 0 });
@@ -321,48 +368,6 @@ export function fitTT(games) {
   }
   const ha = homeN >= 30 ? Math.min(0.08, Math.max(-0.08, homeW / homeN - 0.5)) : 0;
   return { players, h2h, ha, homeN };
-}
-
-export function forecastTT(pack, g) {
-  const blank = { n: 0, elo: 1500, rec: [], last: 0, tourn: {} };
-  const H = pack.players[nameKey(g.home)] || blank;
-  const A = pack.players[nameKey(g.away)] || blank;
-  let p = 1 / (1 + 10 ** ((A.elo - H.elo) / 400));
-  const parts = [p];
-  const pair = pack.h2h[nameKey(g.home) + ">" + nameKey(g.away)];
-  if (pair && pair.n >= 2) parts.push((pair.hw + 1) / (pair.n + 2));
-  const rH = recentRate(H.rec), rA = recentRate(A.rec);
-  if (rH != null && rA != null && (rH + rA) > 0) parts.push(rH / (rH + rA));
-  const T = String(g.tourn || "").trim();
-  if (T) {
-    const ht = H.tourn[T], at = A.tourn[T];
-    if (ht && at && ht.n >= 3 && at.n >= 3) {
-      const ph = (ht.w + 1) / (ht.n + 2);
-      const pa = (at.w + 1) / (at.n + 2);
-      if (ph + pa > 0) parts.push(ph / (ph + pa));
-    }
-  }
-  p = parts.reduce((s, x) => s + x, 0) / parts.length;
-  p += pack.ha || 0;
-
-  if (g.start && H.last && g.start - H.last < 2 * 3600 * 1000) p -= 0.03;
-  if (g.start && A.last && g.start - A.last < 2 * 3600 * 1000) p += 0.03;
-
-  const n = H.n + A.n;
-  const book = g.win ? winPctBook(g.win.home, g.win.away) : null;
-  const w = n / (n + 12);
-  if (book) p = w * p + (1 - w) * book.home;
-  p = Math.min(0.92, Math.max(0.08, p));
-
-  const bo = detectBO(g.cs);
-  const pSet = matchToSet(p, bo);
-  const cs = setScores(pSet, bo);
-  return {
-    pHome: p, pAway: 1 - p,
-    nH: H.n, nA: A.n, h2h: pair ? pair.n : 0,
-    ha: pack.ha || 0,
-    bo, cs,
-  };
 }
 
 function shape(r) {
@@ -399,11 +404,9 @@ function attachForecast(games, pack) {
   for (const g of games) {
     const f = forecastTT(pack, g);
     g.pct = { home: Math.round(f.pHome * 100), away: Math.round(f.pAway * 100) };
-    g.nH = f.nH; g.nA = f.nA; g.h2h = f.h2h;
-    const csPct = {};
-    for (const [k, p] of Object.entries(f.cs || {})) csPct[k] = Math.round(p * 100);
-    g.csPct = csPct;
-    g.bo = f.bo;
+    g.nH = f.nH; g.nA = f.nA;
+    g.h2hRec = f.h2hRec || { n: 0, home: 0, away: 0 };
+    g.formH = f.formH; g.formA = f.formA;
   }
   return games;
 }

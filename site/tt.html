@@ -44,6 +44,8 @@
   .tt-cell em { display: block; font-style: normal; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--go); margin-top: 1px }
   .tt-cell.on em { color: #04140a }
   .tt-pl .n { font-size: 11px; color: var(--faint); font-weight: 600; margin-left: 6px }
+  .tt-facts { display: grid; gap: 3px; margin: -2px 0 10px; font-size: 12px; color: var(--dim) }
+  .tt-facts b { color: var(--ink); font-weight: 650 }
 
   .tt-cs { margin-top: 10px }
   .tt-cs-side { margin-top: 8px }
@@ -159,43 +161,22 @@
     return box;
   }
 
-  function csSides(g) {
-    var bo = g.bo === 4 ? 4 : 3;
-    var keys = Object.keys(g.cs || {}).concat(Object.keys(g.csPct || {}));
-    if (keys.some(function (k) { return k.charAt(0) === "4" || k.slice(-1) === "4"; })) bo = 4;
-    var home = [], away = [];
-    for (var k = 0; k < bo; k++) {
-      home.push(bo + ":" + k);
-      away.push(k + ":" + bo);
-    }
-    return [[g.home, home], [g.away, away]];
+  function recLine(w, l, n) {
+    return w + "–" + l + " in " + n;
   }
 
-  function csBlock(g) {
-    var wrap = V.el("div", "tt-cs");
-    wrap.appendChild(V.el("div", "tt-mkt-lab", "Correct score"));
-    var anyRow = false;
-    csSides(g).forEach(function (side) {
-      var s = V.el("div", "tt-cs-side");
-      var lab = V.el("span", "tt-cs-lab");
-      lab.appendChild(V.el("b", null, side[0]));
-      lab.appendChild(document.createTextNode(" wins"));
-      s.appendChild(lab);
-      var rowEl = V.el("div", "tt-cs-row" + (side[1].length === 4 ? " four" : ""));
-      var any = false;
-      side[1].forEach(function (k) {
-        var v = g.cs && g.cs[k];
-        var p = g.csPct && g.csPct[k];
-        if (v == null && p == null) return;
-        any = true;
-        rowEl.appendChild(tapCell(g, k, v, k.replace(":", "-"), "tt-cs-cell", p));
-      });
-      if (!any) return;
-      anyRow = true;
-      s.appendChild(rowEl);
-      wrap.appendChild(s);
-    });
-    return anyRow ? wrap : null;
+  function factsBlock(g) {
+    var box = V.el("div", "tt-facts");
+    var h = g.h2hRec;
+    if (h && h.n) {
+      box.appendChild(V.el("div", null, "H2H  " + h.home + "–" + h.away + "  (" + h.n + ")"));
+    } else {
+      box.appendChild(V.el("div", null, "H2H  no meetings in the pile yet"));
+    }
+    var fh = g.formH, fa = g.formA;
+    if (fh) box.appendChild(V.el("div", null, g.home + " last " + fh.n + " vs field  " + recLine(fh.w, fh.l, fh.n)));
+    if (fa) box.appendChild(V.el("div", null, g.away + " last " + fa.n + " vs field  " + recLine(fa.w, fa.l, fa.n)));
+    return box;
   }
 
   function card(g) {
@@ -206,6 +187,7 @@
     box.appendChild(top);
 
     box.appendChild(playersBlock(g));
+    box.appendChild(factsBlock(g));
 
     box.appendChild(V.el("div", "tt-mkt-lab", "Winner"));
     var grid = V.el("div", "tt-g");
@@ -214,9 +196,6 @@
     grid.appendChild(tapCell(g, "1", g.win && g.win.home, "Home", favHome ? "fav" : "", pct && pct.home));
     grid.appendChild(tapCell(g, "2", g.win && g.win.away, "Away", (pct && !favHome) ? "fav" : "", pct && pct.away));
     box.appendChild(grid);
-
-    var cs = csBlock(g);
-    if (cs) box.appendChild(cs);
     return box;
   }
 
