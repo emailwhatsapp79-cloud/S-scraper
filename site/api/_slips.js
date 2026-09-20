@@ -255,6 +255,8 @@ export async function refreshSlips() {
     const wonText = won == null ? null : (won ? "yes" : "no");
     await sql`
       UPDATE slip_legs SET
+        home = COALESCE(NULLIF(${snap.home || ""}, ''), slip_legs.home),
+        away = COALESCE(NULLIF(${snap.away || ""}, ''), slip_legs.away),
         match_status = ${snap.status},
         played = ${snap.played},
         set_score = ${snap.setScore},

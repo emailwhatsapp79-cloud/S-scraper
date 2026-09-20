@@ -116,6 +116,8 @@ export function scoreOf(ev) {
   return {
     gameId: String(ev.gameId),
     eventId: ev.eventId || null,
+    home: ev.homeTeamName || "",
+    away: ev.awayTeamName || "",
     status,
     played: ev.playedSeconds || "",
     setScore: ev.setScore || "",
