@@ -308,8 +308,9 @@
   }).then(function (f) {
     if (!f) return;
     var sn = document.getElementById("sofa-note");
-    if (f.s24 && f.s24.saved) sn.textContent = "Banked " + f.s24.saved + " finished games" + (f.s24.note ? " · " + f.s24.note : "");
-    else if (f.s24 && (f.s24.error || f.s24.note)) sn.textContent = f.s24.error || f.s24.note;
+    if (f.s24 && f.s24.saved) sn.textContent = "Banked " + f.s24.saved + " finished games";
+    else if (f.s24 && f.s24.note && /403/.test(f.s24.note)) sn.textContent = "Outside sites blocked this server. Training on SportyBet results only (" + (f.settled || 0) + ").";
+    else if (f.s24 && (f.s24.error || f.s24.note)) sn.textContent = "Could not bank extra history this load.";
     else sn.textContent = "No new finished games this load.";
     if (f.s24 && f.s24.saved) {
       return fetch("/api/tt").then(function (r) { return r.json(); }).then(function (d) {

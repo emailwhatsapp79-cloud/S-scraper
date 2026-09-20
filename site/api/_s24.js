@@ -127,9 +127,38 @@ async function bulkInsert(rows) {
   return saved;
 }
 
+function fillKey() {
+  return process.env.GATE_SECRET || "3ed841c2806431522acc2d288f64f1fc275800b5c9ad19fc";
+}
+function proxyOrigin() {
+  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  return host ? "https://" + host : "";
+}
+
+async function fetchS24(target, accept) {
+  const origin = proxyOrigin();
+  const errors = [];
+  if (origin) {
+    try {
+      const u = target.includes("/rapi/")
+        ? origin + "/api/s24-proxy?kind=rapi&u=" + encodeURIComponent(target)
+        : origin + "/api/s24-proxy";
+      const r = await fetch(u, { headers: { "x-fill-key": fillKey(), Accept: accept || "*/*" } });
+      if (r.ok) return r;
+      errors.push("edge " + r.status);
+    } catch (e) {
+      errors.push("edge " + (e?.message || e));
+    }
+  }
+  const r = await fetch(target, {
+    headers: { ...HDR, Accept: accept || HDR.Accept },
+  });
+  if (!r.ok) throw new Error((errors[0] ? errors[0] + " · " : "") + "direct HTTP " + r.status);
+  return r;
+}
+
 async function fromHtml(byLast) {
-  const r = await fetch("https://scores24.live/en/table-tennis", { headers: HDR });
-  if (!r.ok) throw new Error("s24 html HTTP " + r.status);
+  const r = await fetchS24("https://scores24.live/en/table-tennis", "text/html");
   const html = await r.text();
   const m = html.match(/window\.__REACT_QUERY_STATE__=JSON\.parse\("([\s\S]*?)"\);/);
   if (!m) throw new Error("s24 html: no state");
@@ -158,9 +187,8 @@ async function rapi(path, query) {
     if (Array.isArray(v)) v.forEach((x) => q.append(k, x));
     else if (v != null && v !== "") q.set(k, String(v));
   }
-  const r = await fetch("https://scores24.live/rapi" + path + "?" + q, {
-    headers: { ...HDR, Accept: "application/json" },
-  });
+  const target = "https://scores24.live/rapi" + path + "?" + q;
+  const r = await fetchS24(target, "application/json");
   if (!r.ok) throw new Error("s24 rapi HTTP " + r.status);
   return r.json();
 }
