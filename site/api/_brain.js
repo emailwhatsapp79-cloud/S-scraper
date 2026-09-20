@@ -236,7 +236,7 @@ function n(v) {
   return isFinite(x) && x > 1 ? x : null;
 }
 
-/** Best line where our % beats 1/odd by edgeMin. Fat 5.00 Home can win this. */
+/** Best line where our % beats 1/odd. Never 12 — that's 50/50 someone-wins. */
 export function bestEdge(f, g, edgeMin) {
   let best = null;
   const consider = (sel, label, p, price) => {
@@ -247,7 +247,15 @@ export function bestEdge(f, g, edgeMin) {
       best = { selection: sel, label, p, price, edge, ev: p * price };
     }
   };
-  for (const line of LINES) consider(line.sel, line.label, line.pOf(f), n(line.priceOf(g)));
+  const side = (f.p1 || 0) - (f.p2 || 0);
+  for (const line of LINES) {
+    if (line.sel === "12") continue;
+    if (line.sel === "1" && side < 0.06) continue;
+    if (line.sel === "2" && side > -0.06) continue;
+    if (line.sel === "1X" && side < 0.05) continue;
+    if (line.sel === "X2" && side > -0.05) continue;
+    consider(line.sel, line.label, line.pOf(f), n(line.priceOf(g)));
+  }
   for (const c of f.cs || []) {
     if (c.selection === "Other") continue;
     consider(c.selection, c.label, c.p, n(c.price));
