@@ -44,14 +44,14 @@
   .tt-cell em { display: block; font-style: normal; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--go); margin-top: 1px }
   .tt-cell .book { display: block; font-size: 10.5px; color: var(--faint); margin-top: 2px }
   .tt-cell.on em, .tt-cell.on .book { color: #04140a }
-  .tt-cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 10px; font-size: 12px }
-  .tt-cmp div { background: var(--bg); box-shadow: var(--shadow); border-radius: var(--r3); padding: 8px 10px }
-  .tt-cmp span { display: block; font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; color: var(--faint); font-weight: 600; margin-bottom: 3px }
-  .tt-cmp b { font-family: var(--mono); font-size: 16px; font-weight: 650 }
-  .tt-cmp .gap { color: var(--go) }
   .tt-pl .n { font-size: 11px; color: var(--faint); font-weight: 600; margin-left: 6px }
-  .tt-facts { display: grid; gap: 3px; margin: -2px 0 10px; font-size: 12px; color: var(--dim) }
-  .tt-facts b { color: var(--ink); font-weight: 650 }
+  .tt-stat th, .tt-stat td { padding: 7px 4px; text-align: center }
+  .tt-stat thead th { font-size: 12.5px; font-weight: 650; color: var(--ink); letter-spacing: -.01em }
+  .tt-stat tbody th { text-align: left; font-size: 10.5px; letter-spacing: .03em; text-transform: uppercase; color: var(--faint); font-weight: 600 }
+  .tt-stat td { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--ink) }
+  .tt-stat td.hi { color: var(--go) }
+  .tt-stat tr { border-bottom: 1px solid rgba(255,255,255,.06) }
+  .tt-stat tr:last-child { border: 0 }
 
   .tt-cs { margin-top: 10px }
   .tt-cs-side { margin-top: 8px }
@@ -152,7 +152,7 @@
     [[g.home, pct && pct.home, favHome, g.nH], [g.away, pct && pct.away, !favHome, g.nA]].forEach(function (p) {
       var row = V.el("div", "tt-pl" + (p[2] && p[1] != null ? " fav" : ""));
       var nm = V.el("b", null, p[0]);
-      if (p[3]) nm.appendChild(V.el("span", "n", " · " + p[3]));
+      if (p[3]) nm.appendChild(V.el("span", "n", " · " + comma(p[3])));
       row.appendChild(nm);
       if (p[1] != null) {
         var pc = V.el("div", "tt-pct");
@@ -169,19 +169,9 @@
     return box;
   }
 
-  function compareBlock(g) {
-    if (!g.ours && !g.book) return null;
-    var box = V.el("div", "tt-cmp");
-    var ours = V.el("div");
-    ours.appendChild(V.el("span", null, "Ours"));
-    ours.appendChild(V.el("b", null, g.ours ? g.ours.home + "%  /  " + g.ours.away + "%" : "—"));
-    box.appendChild(ours);
-    var bk = V.el("div");
-    bk.appendChild(V.el("span", null, "SportyBet"));
-    bk.appendChild(V.el("b", null, g.book ? g.book.home + "%  /  " + g.book.away + "%" : "—"));
-    if (g.ours && g.book && g.ours.home !== g.book.home) bk.querySelector("b").className = "gap";
-    box.appendChild(bk);
-    return box;
+  function comma(n) {
+    n = Number(n);
+    return isFinite(n) ? n.toLocaleString("en-US") : "—";
   }
 
   function lastNameOf(s) {
@@ -191,21 +181,47 @@
     return p[p.length - 1] || t;
   }
 
-  function factsBlock(g) {
-    var box = V.el("div", "tt-facts");
-    var h = g.h2hRec;
+  function cell(tag, text, cls) {
+    var e = document.createElement(tag);
+    e.textContent = text;
+    if (cls) e.className = cls;
+    return e;
+  }
+
+  function statsTable(g) {
     var hn = lastNameOf(g.home), an = lastNameOf(g.away);
-    if (h && h.n) {
-      box.appendChild(V.el("div", null,
-        "They've played " + h.n + " time" + (h.n === 1 ? "" : "s") + ". " +
-        hn + " won " + h.home + ", " + an + " won " + h.away + "."));
-    } else {
-      box.appendChild(V.el("div", null, "They haven't played each other in our history yet."));
-    }
+    var h = g.h2hRec || {};
     var fh = g.formH, fa = g.formA;
-    if (fh) box.appendChild(V.el("div", null, hn + " has won " + fh.w + " of his last " + fh.n + " games."));
-    if (fa) box.appendChild(V.el("div", null, an + " has won " + fa.w + " of his last " + fa.n + " games."));
-    return box;
+    var t = document.createElement("table");
+    t.className = "tt-stat";
+    var head = document.createElement("thead");
+    var hr = document.createElement("tr");
+    hr.appendChild(cell("th", ""));
+    hr.appendChild(cell("th", hn));
+    hr.appendChild(cell("th", an));
+    head.appendChild(hr);
+    t.appendChild(head);
+    var body = document.createElement("tbody");
+    function row(lab, a, b, hiA, hiB) {
+      var tr = document.createElement("tr");
+      tr.appendChild(cell("th", lab));
+      tr.appendChild(cell("td", a, hiA ? "hi" : ""));
+      tr.appendChild(cell("td", b, hiB ? "hi" : ""));
+      body.appendChild(tr);
+    }
+    var nH = g.nH || 0, nA = g.nA || 0;
+    row("Played", comma(nH), comma(nA), nH > nA, nA > nH);
+    if (h.n) row("Head to head", String(h.home), String(h.away), h.home > h.away, h.away > h.home);
+    else row("Head to head", "—", "—");
+    row(
+      "Last 20",
+      fh ? fh.w + "W · " + fh.l + "L" : "—",
+      fa ? fa.w + "W · " + fa.l + "L" : "—",
+      fh && fa && fh.w > fa.w,
+      fh && fa && fa.w > fh.w
+    );
+    t.appendChild(body);
+    return t;
   }
 
   function card(g) {
@@ -216,9 +232,7 @@
     box.appendChild(top);
 
     box.appendChild(playersBlock(g));
-    var cmp = compareBlock(g);
-    if (cmp) box.appendChild(cmp);
-    box.appendChild(factsBlock(g));
+    box.appendChild(statsTable(g));
 
     box.appendChild(V.el("div", "tt-mkt-lab", "Winner"));
     var grid = V.el("div", "tt-g");
@@ -308,17 +322,17 @@
   function apply(d) {
     LAST = d;
     document.getElementById("s-up").textContent = String(d.count || 0);
-    document.getElementById("s-settled").textContent = String(d.settled || 0);
+    document.getElementById("s-settled").textContent = comma(d.settled || 0);
     render();
   }
 
   function fillPass(left) {
     var sn = document.getElementById("sofa-note");
-    sn.textContent = "Refreshing history… " + (document.getElementById("s-settled").textContent || "");
+    sn.textContent = "Refreshing history… " + comma(document.getElementById("s-settled").textContent.replace(/,/g, "") || 0);
     return fetch("/api/tt-fill").then(readJson).then(function (f) {
-      if (f && f.settled) document.getElementById("s-settled").textContent = String(f.settled);
+      if (f && f.settled != null) document.getElementById("s-settled").textContent = comma(f.settled);
       if (f && (f.hasMore || f.error === "fill timeout") && left > 1) return fillPass(left - 1);
-      sn.textContent = "History " + (f && f.settled ? f.settled : "") + " finished games";
+      sn.textContent = comma(f && f.settled) + " finished games in the pile";
       return fetch("/api/tt").then(readJson).then(function (d) {
         if (d && d.ok) apply(d);
       });
