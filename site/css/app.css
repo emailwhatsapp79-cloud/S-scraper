@@ -664,21 +664,74 @@ html:not(.gate-ok) body .top { visibility: hidden }
 .lab-sub .ok { color: var(--go, #1f9d57); }
 .stat.bad b { color: var(--bad, #c8434e); }
 
-.finder-card .mkt-t { margin-top: 12px }
-.fline {
+.finder-card { padding: 16px 14px 12px }
+.fx-head { text-align: center; padding: 4px 0 6px }
+.fx-meet {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 10px;
+}
+.fx-side {
   display: flex; align-items: center; gap: 8px;
-  padding: 8px 0;
+  justify-content: flex-end;
+  min-width: 0;
+}
+.fx-side.away { justify-content: flex-start }
+.fx-side b { font-size: 16px; font-weight: 700; letter-spacing: -0.02em }
+.fx-vs {
+  font-size: 11px; font-weight: 800; letter-spacing: .12em;
+  color: var(--faint);
+}
+.fx-when {
+  display: block;
+  text-align: center;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+.fx-when.soon { color: var(--hold) }
+.fx-when.now { color: var(--bad) }
+.fx-block { margin-top: 14px }
+.fx-h {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  padding-bottom: 6px;
   box-shadow: 0 1px 0 var(--line);
 }
-.fline-l { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap }
-.fline-l b { font-size: 14px }
-.fline .conf {
-  font-family: var(--mono); font-weight: 700; font-variant-numeric: tabular-nums;
-  color: var(--go);
+.fx-list { display: grid; gap: 6px }
+.fx-line {
+  display: grid;
+  grid-template-columns: 1fr 52px 56px;
+  align-items: center;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  min-height: 44px;
+  border-radius: var(--r3);
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  text-align: left;
+  font: inherit;
+  color: inherit;
 }
-.fline.top .conf { font-size: 16px }
-.fline.top b { font-weight: 700 }
-button.add.tiny {
-  width: auto; min-height: 36px; margin: 0; padding: 0 12px;
-  font-size: 13px;
+.fx-line.tap { cursor: pointer }
+.fx-line.tap:active { transform: scale(0.98) }
+.fx-out { font-weight: 650; font-size: 14px }
+.fx-p {
+  font-family: var(--mono); font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--go); text-align: right;
 }
+.fx-odds {
+  font-family: var(--mono); font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right; color: var(--ink);
+}
+.fx-line.top { box-shadow: 0 0 0 1px var(--go) }
+.fx-line.on { background: var(--go); color: var(--go-ink); box-shadow: none }
+.fx-line.on .fx-p, .fx-line.on .fx-odds { color: var(--go-ink) }

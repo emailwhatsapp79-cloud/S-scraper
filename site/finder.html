@@ -41,65 +41,99 @@
     if (!t || !t.n) return "—";
     return t.wins + "/" + t.n;
   }
-
-  function addBtn(g, sel, price, label) {
-    if (price == null) return null;
-    var on = V.inBook(g.id) && (V.loadBook().filter(function (l) { return l.id === g.id && l.selection === sel; })[0]);
-    var b = V.el("button", "add tiny" + (on ? " on" : ""), on ? "On slip" : "Add");
-    b.type = "button";
-    b.addEventListener("click", function (e) {
-      e.stopPropagation();
-      V.toggleBook(V.makePick(g, sel, price, label));
-      b.textContent = V.inBook(g.id) ? "On slip" : "Add";
-      b.classList.toggle("on", V.inBook(g.id));
-      V.paintSlip();
-    });
-    return b;
+  function odds(v) {
+    if (v == null || !isFinite(v)) return "—";
+    return Number(v).toFixed(2);
+  }
+  function onSlip(id, sel) {
+    return V.loadBook().some(function (l) { return l.id === id && l.selection === sel; });
   }
 
-  function lineRow(g, item, cls) {
-    var row = V.el("div", "fline " + (cls || ""));
-    var left = V.el("div", "fline-l");
-    left.appendChild(V.el("b", null, item.label));
-    left.appendChild(V.el("span", "conf", pct(item.p)));
-    if (item.price != null) left.appendChild(V.el("span", "lab-n", " @ " + Number(item.price).toFixed(2)));
-    row.appendChild(left);
-    var b = addBtn(g, item.selection, item.price, item.label);
-    if (b) row.appendChild(b);
+  function side(name, away) {
+    var box = V.el("div", "fx-side" + (away ? " away" : ""));
+    box.appendChild(V.crest(name));
+    box.appendChild(V.el("b", null, name || "—"));
+    return box;
+  }
+
+  function meet(g) {
+    var box = V.el("div", "fx-meet");
+    box.appendChild(side(g.home, false));
+    box.appendChild(V.el("span", "fx-vs", "VS"));
+    box.appendChild(side(g.away, true));
+    var wrap = V.el("div", "fx-head");
+    wrap.appendChild(box);
+    var t = V.until(g.kickoff);
+    var when = V.el("time", "fx-when " + t.cls, (t.text || V.clock(g.kickoff) || "").trim() || V.clock(g.kickoff));
+    when.setAttribute("data-kick", String(g.kickoff || ""));
+    wrap.appendChild(when);
+    return wrap;
+  }
+
+  function line(g, item, featured) {
+    var price = item.price != null && isFinite(item.price) ? Number(item.price) : null;
+    var row = V.el("button", "fx-line" + (featured ? " top" : "") + (onSlip(g.id, item.selection) ? " on" : "") + (price ? " tap" : ""));
+    row.type = "button";
+    row.appendChild(V.el("span", "fx-out", item.label));
+    row.appendChild(V.el("span", "fx-p", pct(item.p)));
+    row.appendChild(V.el("span", "fx-odds", odds(price)));
+    if (price) {
+      row.addEventListener("click", function () {
+        V.toggleBook(V.makePick(g, item.selection, price, item.label));
+        V.paintSlip();
+        var card = row.closest(".finder-card");
+        if (card) card.querySelectorAll(".fx-line").forEach(function (el) {
+          var sel = el.getAttribute("data-sel");
+          el.classList.toggle("on", onSlip(g.id, sel));
+        });
+      });
+    }
+    row.setAttribute("data-sel", item.selection);
     return row;
+  }
+
+  function block(title, rows) {
+    var box = V.el("section", "fx-block");
+    box.appendChild(V.el("h3", "fx-h", title));
+    var list = V.el("div", "fx-list");
+    rows.forEach(function (r) { list.appendChild(r); });
+    box.appendChild(list);
+    return box;
   }
 
   function card(g) {
     var box = V.el("article", "game finder-card");
-    var head = V.el("div", "who");
-    head.appendChild(V.teamsBlock(g.home, g.away));
-    var t = V.until(g.kickoff);
-    var when = V.el("time", t.cls, (V.clock(g.kickoff) + (t.text ? " · " + t.text : "")).trim());
-    when.setAttribute("data-kick", String(g.kickoff || ""));
-    head.appendChild(when);
-    box.appendChild(head);
-    if (g.nH || g.nA) {
-      box.appendChild(V.el("p", "lab-sub", (g.home || "") + " " + (g.nH || 0) + " games in memory · " + (g.away || "") + " " + (g.nA || 0)));
-    }
-    box.appendChild(V.el("div", "mkt-t", "Correct score"));
-    box.appendChild(lineRow(g, {
-      selection: g.topCs, label: (g.topCs || "").replace(":", "-"),
-      p: g.pCs, price: g.cs && g.cs[g.topCs]
-    }, "top"));
-    (g.csTop || []).slice(1, 4).forEach(function (c) {
-      box.appendChild(lineRow(g, c, ""));
+    box.appendChild(meet(g));
+
+    var csRows = [];
+    var topPrice = g.cs && g.topCs ? g.cs[g.topCs] : null;
+    csRows.push(line(g, {
+      selection: g.topCs,
+      label: String(g.topCs || "").replace(":", "-"),
+      p: g.pCs,
+      price: topPrice
+    }, true));
+    (g.csTop || []).forEach(function (c) {
+      if (c.selection === g.topCs || c.selection === "Other") return;
+      csRows.push(line(g, {
+        selection: c.selection,
+        label: String(c.selection || c.label || "").replace(/^Correct score /i, "").replace(":", "-"),
+        p: c.p,
+        price: c.price != null ? c.price : (g.cs && g.cs[c.selection])
+      }, false));
     });
-    box.appendChild(V.el("div", "mkt-t", "1X2"));
-    (g.lines || []).filter(function (l) { return l.selection === "1" || l.selection === "X" || l.selection === "2"; }).forEach(function (l) {
-      box.appendChild(lineRow(g, l, l.selection === g.pred1x2 ? "top" : ""));
-    });
-    box.appendChild(V.el("div", "mkt-t", "Double chance"));
-    (g.lines || []).filter(function (l) { return l.selection === "1X" || l.selection === "X2" || l.selection === "12"; }).forEach(function (l) {
-      box.appendChild(lineRow(g, l, ""));
-    });
-    if (g.bet) {
-      box.appendChild(V.el("p", "lab-sub ok", "Edge vs the book: " + g.bet.label + " @ " + Number(g.bet.price).toFixed(2)));
-    }
+    box.appendChild(block("Correct score", csRows.slice(0, 5)));
+
+    var wx = (g.lines || []).filter(function (l) { return l.selection === "1" || l.selection === "X" || l.selection === "2"; });
+    box.appendChild(block("1X2", wx.map(function (l) {
+      return line(g, l, l.selection === g.pred1x2);
+    })));
+
+    var dc = (g.lines || []).filter(function (l) { return l.selection === "1X" || l.selection === "X2" || l.selection === "12"; });
+    box.appendChild(block("Double chance", dc.map(function (l) {
+      return line(g, l, false);
+    })));
+
     return box;
   }
 
@@ -123,7 +157,7 @@
       picks.forEach(function (g) { out.appendChild(card(g)); });
     }
     document.getElementById("note").textContent =
-      (d.nGames || 0) + " settled in memory · " + picks.length + " upcoming · after kick-off it grades itself.";
+      (d.nGames || 0) + " settled in memory · " + picks.length + " upcoming · tap a line to put it on the slip.";
     V.tick();
   }).catch(function (e) {
     document.getElementById("verdict").innerHTML = '<span class="err">' + e.message + "</span>";
