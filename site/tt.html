@@ -293,19 +293,29 @@
     render();
   });
 
-  fetch("/api/tt").then(function (r) { return r.json(); }).then(function (d) {
-    if (!d.ok) throw new Error(d.error || "Could not read the table-tennis card");
+  function apply(d) {
     LAST = d;
     document.getElementById("s-up").textContent = String(d.count || 0);
     document.getElementById("s-settled").textContent = String(d.settled || 0);
-    var sn = document.getElementById("sofa-note");
-    var bits = [];
-    if (d.s24 && d.s24.saved) bits.push("scores24 +" + d.s24.saved);
-    else if (d.s24 && d.s24.error) bits.push("scores24 " + d.s24.error);
-    if (d.sofa && d.sofa.saved) bits.push("SofaScore +" + d.sofa.saved);
-    else if (d.sofa && d.sofa.error) bits.push("SofaScore " + d.sofa.error);
-    sn.textContent = bits.join(" · ");
     render();
+  }
+
+  fetch("/api/tt").then(function (r) { return r.json(); }).then(function (d) {
+    if (!d.ok) throw new Error(d.error || "Could not read the table-tennis card");
+    apply(d);
+    document.getElementById("sofa-note").textContent = "Banking finished games…";
+    return fetch("/api/tt-fill").then(function (r) { return r.json(); });
+  }).then(function (f) {
+    if (!f) return;
+    var sn = document.getElementById("sofa-note");
+    if (f.s24 && f.s24.saved) sn.textContent = "Banked " + f.s24.saved + " finished games" + (f.s24.note ? " · " + f.s24.note : "");
+    else if (f.s24 && (f.s24.error || f.s24.note)) sn.textContent = f.s24.error || f.s24.note;
+    else sn.textContent = "No new finished games this load.";
+    if (f.s24 && f.s24.saved) {
+      return fetch("/api/tt").then(function (r) { return r.json(); }).then(function (d) {
+        if (d && d.ok) apply(d);
+      });
+    }
   }).catch(function (e) {
     document.getElementById("out").textContent = "";
     document.getElementById("out").appendChild(V.el("div", "empty", e.message));

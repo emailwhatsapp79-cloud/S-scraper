@@ -3,8 +3,6 @@
 // rest of the app. Nothing here shares state with the football endpoints.
 import { guard } from "./_gate.js";
 import { fetchTTCard, normalise, storeTT, enrichSettleTT, listUpcomingTT, listRecentResultsTT, countsTT } from "./_tt.js";
-import { pullSofaHistory } from "./_sofa.js";
-import { pullScores24 } from "./_s24.js";
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
@@ -22,13 +20,7 @@ export default async function handler(req, res) {
     feedErrors = [String(e?.message || e)];
   }
 
-  try { enriched = (await enrichSettleTT(40)).touched; } catch { /* still serve */ }
-
-  let s24 = null, sofa = null;
-  try { s24 = await pullScores24(cardNames, { pages: 1, first: 50, days: 7 }); }
-  catch (e) { s24 = { error: String(e?.message || e) }; }
-  try { sofa = await pullSofaHistory(cardNames, { players: 2, pages: 3 }); }
-  catch (e) { sofa = { error: String(e?.message || e) }; }
+  try { enriched = (await enrichSettleTT(25)).touched; } catch { /* still serve */ }
 
   let games = [], results = [], counts = { total: 0, settled: 0 };
   try { games = await listUpcomingTT(400); } catch (e) { saveError = saveError || String(e?.message || e); }
@@ -40,7 +32,6 @@ export default async function handler(req, res) {
     ok: true,
     tookMs: Date.now() - started,
     saved, enriched, saveError, feedErrors,
-    sofa, s24,
     stored: counts.total,
     settled: counts.settled,
     count: games.length,
