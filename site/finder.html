@@ -128,6 +128,7 @@
     }
     addCs(g.topCs, g.pCs, csPrice(g, g.topCs));
     (g.csTop || []).forEach(function (c) { addCs(c.selection, c.p, c.price); });
+    if (csItems.length % 2) csItems.pop();
     box.appendChild(block("Correct score", csItems.slice(0, 6), g, g.topCs, 2));
 
     var wx = (g.lines || []).filter(function (l) { return l.selection === "1" || l.selection === "X" || l.selection === "2"; });

@@ -705,11 +705,13 @@ html:not(.gate-ok) body .top { visibility: hidden }
   text-transform: uppercase;
   color: var(--dim);
 }
-.fx-g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px }
+.fx-g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: stretch }
 .fx-g.three { grid-template-columns: 1fr 1fr 1fr }
 .fx-cell {
   margin: 0; padding: 8px 4px 7px;
   min-height: 52px;
+  width: 100%;
+  box-sizing: border-box;
   border-radius: var(--r3);
   background: var(--bg);
   box-shadow: var(--shadow);
@@ -731,7 +733,6 @@ html:not(.gate-ok) body .top { visibility: hidden }
   font-variant-numeric: tabular-nums;
   color: var(--go);
 }
-.fx-cell.top { box-shadow: 0 0 0 1px var(--go) }
-.fx-cell.top b { color: var(--go) }
+.fx-cell.top { box-shadow: var(--shadow), 0 0 0 1.5px var(--go) }
 .fx-cell.on { background: var(--go); color: var(--go-ink); box-shadow: none }
 .fx-cell.on b, .fx-cell.on span, .fx-cell.on em { color: var(--go-ink) }
