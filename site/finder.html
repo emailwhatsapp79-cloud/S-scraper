@@ -15,17 +15,13 @@
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Club ratings from this sim — names are IDs, not real-world form. One score matrix gives correct score, 1X2 and double chance, each with a confidence. After the game it marks itself right or wrong and the next fit sees it. No retrain button.</p>
   <div class="stats" id="stats" hidden>
     <div class="stat"><b id="s-wx">—</b><span>1X2 form</span></div>
     <div class="stat"><b id="s-cs">—</b><span>Score form</span></div>
     <div class="stat" id="s-roi-tile"><b id="s-roi">—</b><span>Hold-out ROI</span></div>
   </div>
-  <p class="note" id="verdict">Reading the pile…</p>
-  <p class="note" id="readout"></p>
   <h2 class="lab-h">Upcoming</h2>
   <div id="out"><div class="skel"></div><div class="skel"></div></div>
-  <p class="note" id="note"></p>
 </main>
 <script src="/js/core.js"></script>
 <script>
@@ -148,8 +144,6 @@
     document.getElementById("s-cs").textContent = form(f.cs || h.cs);
     document.getElementById("s-roi").textContent = h.n ? ((h.roi >= 0 ? "+" : "") + (h.roi * 100).toFixed(1) + "%") : "—";
     document.getElementById("s-roi-tile").className = "stat" + (h.roi > 0 ? " go" : h.roi < 0 ? " bad" : "");
-    document.getElementById("verdict").textContent = d.reason || "";
-    document.getElementById("readout").textContent = d.readout || "";
 
     var out = document.getElementById("out");
     out.textContent = "";
@@ -159,12 +153,10 @@
     } else {
       picks.forEach(function (g) { out.appendChild(card(g)); });
     }
-    document.getElementById("note").textContent =
-      (d.nGames || 0) + " settled in memory · " + picks.length + " upcoming · tap a line to put it on the slip.";
     V.tick();
   }).catch(function (e) {
-    document.getElementById("verdict").innerHTML = '<span class="err">' + e.message + "</span>";
     document.getElementById("out").textContent = "";
+    document.getElementById("out").appendChild(V.el("div", "empty", e.message));
   });
 })();
 </script>
