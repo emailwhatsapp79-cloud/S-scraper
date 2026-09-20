@@ -16,7 +16,7 @@
     {
       "path": "/api/nudge",
       "schedule": "20 23 * * *"
-    },
+    }
   ],
   "rewrites": [
     {
