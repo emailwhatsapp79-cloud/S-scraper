@@ -42,6 +42,10 @@
     {
       "source": "/rules",
       "destination": "/rules.html"
+    },
+    {
+      "source": "/tt",
+      "destination": "/tt.html"
     }
   ]
 }

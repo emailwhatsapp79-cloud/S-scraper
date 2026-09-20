@@ -6,6 +6,7 @@ import { refreshSlips } from "./_slips.js";
 import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
 import { settleGames } from "./_results.js";
 import { trainFinder, settleFinderPreds } from "./_finder.js";
+import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT } from "./_tt.js";
 
 export default async function handler(req, res) {
   cors(res);
@@ -36,6 +37,15 @@ export default async function handler(req, res) {
   try { finder = await trainFinder(); }
   catch (e) { finder = { error: String(e?.message || e) }; }
 
+  // Table tennis — its own pile, fully isolated. Never fails the football poll.
+  let tt = null;
+  try {
+    const { events } = await fetchTTCard();
+    const ttSaved = await storeTT(events.map(ttNormalise));
+    const ttTouched = (await enrichSettleTT(40)).touched;
+    tt = { saved: ttSaved, touched: ttTouched };
+  } catch (e) { tt = { error: String(e?.message || e) }; }
+
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
     ok: !saveError,
@@ -54,6 +64,7 @@ export default async function handler(req, res) {
       holdout: finder.holdout || null,
       error: finder.error || null,
     },
+    tt,
     saveError,
     feedErrors: errors.length ? errors : null,
   });

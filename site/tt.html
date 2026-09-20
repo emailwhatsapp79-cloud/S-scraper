@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Table Tennis · Vantage</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  .tt-card { background: var(--card); box-shadow: var(--shadow); border-radius: var(--r); margin-bottom: 10px; padding: 13px 14px }
+  .tt-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px }
+  .tt-tourn { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 600 }
+  .tt-when { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--dim) }
+  .tt-when.soon { color: var(--hold) } .tt-when.now { color: var(--bad) }
+  .tt-players { display: grid; gap: 4px; margin-bottom: 10px }
+  .tt-players b { font-size: 15.5px; font-weight: 650; letter-spacing: -.01em }
+  .tt-g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px }
+  .tt-cell { background: var(--bg); box-shadow: var(--shadow); border-radius: var(--r3); padding: 8px 6px; text-align: center }
+  .tt-cell b { display: block; font-family: var(--mono); font-size: 15px; font-weight: 600 }
+  .tt-cell span { display: block; font-size: 10.5px; color: var(--dim); margin-top: 2px }
+  .tt-cs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px }
+  .tt-cs .pill { background: var(--bg); box-shadow: var(--shadow); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-family: var(--mono); color: var(--dim) }
+  .tt-cs .pill b { color: var(--ink); font-weight: 600 }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <p class="lede">Real table tennis off SportyBet — real players, so form actually carries. Right now it's <b>banking the card and results</b> to learn player ratings; once the pile is deep enough it starts forecasting match winner and set score. Odds fill in as matches near.</p>
+  <div class="stats">
+    <div class="stat"><b id="s-up">—</b><span>Upcoming</span></div>
+    <div class="stat"><b id="s-stored">—</b><span>Banked</span></div>
+    <div class="stat go"><b id="s-settled">—</b><span>Results in</span></div>
+  </div>
+  <div class="chips" id="tourns"></div>
+  <h2 class="lab-h" id="head">Upcoming</h2>
+  <div id="out"><div class="skel"></div><div class="skel"></div></div>
+  <p class="note" id="note"></p>
+</main>
+<script src="/js/core.js"></script>
+<script>
+(function () {
+  var V = window.VFS;
+  V.injectChrome("tt");
+  var LAST = null, LEAGUE = "All";
+
+  function odds(v) { return (v == null || !isFinite(Number(v))) ? "—" : Number(v).toFixed(2); }
+
+  function whenEl(g) {
+    var t = V.until(g.start);
+    var e = V.el("time", "tt-when " + (t.cls || ""), (t.text || V.clock(g.start) || "").trim() || V.clock(g.start));
+    e.setAttribute("data-kick", String(g.start || ""));
+    return e;
+  }
+
+  function csPills(g) {
+    if (!g.cs) return null;
+    var order = ["3:0", "3:1", "3:2", "2:3", "1:3", "0:3"];
+    var box = V.el("div", "tt-cs");
+    var any = false;
+    order.forEach(function (k) {
+      var v = g.cs[k];
+      if (v == null || !isFinite(Number(v))) return;
+      any = true;
+      var pill = V.el("span", "pill");
+      pill.appendChild(V.el("b", null, k));
+      pill.appendChild(document.createTextNode(" " + odds(v)));
+      box.appendChild(pill);
+    });
+    return any ? box : null;
+  }
+
+  function card(g) {
+    var box = V.el("article", "tt-card");
+    var top = V.el("div", "tt-top");
+    top.appendChild(V.el("span", "tt-tourn", g.tourn || "Table tennis"));
+    top.appendChild(whenEl(g));
+    box.appendChild(top);
+
+    var pl = V.el("div", "tt-players");
+    pl.appendChild(V.el("b", null, g.home));
+    pl.appendChild(V.el("b", null, g.away));
+    box.appendChild(pl);
+
+    var grid = V.el("div", "tt-g");
+    [["Home", g.win && g.win.home], ["Away", g.win && g.win.away]].forEach(function (p) {
+      var c = V.el("div", "tt-cell");
+      c.appendChild(V.el("b", null, odds(p[1])));
+      c.appendChild(V.el("span", null, p[0]));
+      grid.appendChild(c);
+    });
+    box.appendChild(grid);
+
+    var cs = csPills(g);
+    if (cs) box.appendChild(cs);
+    return box;
+  }
+
+  function tourns(games) {
+    var counts = { All: games.length };
+    games.forEach(function (g) { var k = g.tourn || "Other"; counts[k] = (counts[k] || 0) + 1; });
+    var names = Object.keys(counts).filter(function (k) { return k !== "All"; })
+      .sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 6);
+    var box = document.getElementById("tourns");
+    box.textContent = "";
+    ["All"].concat(names).forEach(function (name) {
+      var b = V.el("button", "chip" + (LEAGUE === name ? " on" : ""), name + " " + (counts[name] || 0));
+      b.type = "button";
+      b.addEventListener("click", function () { LEAGUE = name; render(); });
+      box.appendChild(b);
+    });
+  }
+
+  function render() {
+    var out = document.getElementById("out");
+    out.textContent = "";
+    var all = (LAST && LAST.games) || [];
+    var list = LEAGUE === "All" ? all : all.filter(function (g) { return (g.tourn || "Other") === LEAGUE; });
+    if (!list.length) {
+      out.appendChild(V.el("div", "empty", "No upcoming table tennis on the card right now."));
+    } else {
+      list.forEach(function (g) { out.appendChild(card(g)); });
+    }
+    document.getElementById("head").textContent = "Upcoming — " + list.length;
+    tourns(all);
+    V.tick();
+  }
+
+  fetch("/api/tt").then(function (r) { return r.json(); }).then(function (d) {
+    if (!d.ok) throw new Error(d.error || "Could not read the table-tennis card");
+    LAST = d;
+    document.getElementById("s-up").textContent = String(d.count || 0);
+    document.getElementById("s-stored").textContent = String(d.stored || 0);
+    document.getElementById("s-settled").textContent = String(d.settled || 0);
+    document.getElementById("note").textContent =
+      (d.stored || 0) + " matches banked · " + (d.settled || 0) + " with a result · odds and scores fill in as matches settle. Model starts once the pile is deep.";
+    render();
+  }).catch(function (e) {
+    document.getElementById("out").textContent = "";
+    document.getElementById("out").appendChild(V.el("div", "empty", e.message));
+  });
+})();
+</script>
+</body>
+</html>
