@@ -241,15 +241,12 @@ export async function refreshSlips() {
   const snaps = await Promise.all(eventIds.map((id) => fetchEvent(id)));
   for (const ev of snaps) {
     const snap = scoreOf(ev);
-    if (snap) {
-      liveMap.set(snap.gameId, snap);
-      if (snap.eventId) liveMap.set(snap.eventId, snap);
-    }
+    if (snap && snap.eventId) liveMap.set(snap.eventId, snap);
   }
 
   let updated = 0;
   for (const leg of legs) {
-    const snap = liveMap.get(leg.game_id) || liveMap.get(leg.event_id);
+    const snap = liveMap.get(leg.event_id);
     if (!snap) continue;
     const won = snap.ended ? dcHit(leg.selection, snap.ftHome, snap.ftAway) : null;
     const wonText = won == null ? null : (won ? "yes" : "no");
