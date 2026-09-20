@@ -147,13 +147,23 @@ async function fetchEvent(eventId) {
 export async function enrichSettleTT(limit = 30) {
   await ensureTT();
   const now = Date.now();
+  // Three kinds of row are worth a fetch:
+  //  - ended but not yet settled (get the final set score);
+  //  - upcoming and still missing the winner odds;
+  //  - upcoming, near enough that SportyBet has posted the correct-score market,
+  //    but we grabbed it before that market existed (cs_json still null).
+  // The correct-score market only appears close to start, so a row can have its
+  // winner odds and no scores for a while — those must stay due, not fall out.
+  const soon = now + 12 * 60 * 60 * 1000;
   const due = await sql`
     SELECT match_id, event_id, start_at, r_status, win_home
     FROM tt_games
     WHERE event_id IS NOT NULL
+      AND start_at IS NOT NULL
       AND (
-        (r_status IS NULL AND start_at IS NOT NULL AND start_at < ${now - 90000})
-        OR (win_home IS NULL AND start_at IS NOT NULL AND start_at > ${now - 90000})
+        (r_status IS NULL AND start_at < ${now - 90000})
+        OR (win_home IS NULL AND start_at > ${now - 90000})
+        OR (cs_json IS NULL AND start_at > ${now - 90000} AND start_at < ${soon})
       )
     ORDER BY start_at ASC
     LIMIT ${limit}`;
@@ -183,16 +193,28 @@ export async function enrichSettleTT(limit = 30) {
   return { touched };
 }
 
+// De-vigged win chance from the two-way winner price (no draw in table tennis),
+// so the pair sums to 100%. Returns null when a side's price is missing.
+function winPct(hOdds, aOdds) {
+  const h = Number(hOdds), a = Number(aOdds);
+  if (!isFinite(h) || !isFinite(a) || h <= 0 || a <= 0) return null;
+  const ih = 1 / h, ia = 1 / a, s = ih + ia;
+  if (s <= 0) return null;
+  return { home: Math.round((ih / s) * 100), away: Math.round((ia / s) * 100) };
+}
+
 function shape(r) {
   let cs = null;
   if (r.cs_json) { try { cs = JSON.parse(r.cs_json); } catch { cs = null; } }
   const start = r.start_at ? Number(r.start_at) : null;
+  const win = (r.win_home != null || r.win_away != null) ? { home: r.win_home, away: r.win_away } : null;
   return {
     id: r.match_id, eventId: r.event_id || null,
     home: r.home, away: r.away, tourn: r.tourn || "",
     start, status: r.status || "",
     upcoming: isUpcomingTT(r.status, start),
-    win: (r.win_home != null || r.win_away != null) ? { home: r.win_home, away: r.win_away } : null,
+    win,
+    pct: win ? winPct(win.home, win.away) : null,
     cs,
     res: r.r_home == null ? null : { home: r.r_home, away: r.r_away },
   };
@@ -207,6 +229,19 @@ export async function listUpcomingTT(limit = 400) {
     ORDER BY start_at ASC NULLS LAST
     LIMIT ${limit}`;
   return rows.map(shape).filter((g) => g.upcoming);
+}
+
+// Matches that have already played, newest result first — so the page can show
+// "they have been playing" instead of only what's ahead.
+export async function listRecentResultsTT(limit = 60) {
+  await ensureTT();
+  const rows = await sql`
+    SELECT * FROM tt_games
+    WHERE r_home IS NOT NULL AND r_away IS NOT NULL
+    ORDER BY COALESCE(settled_at, to_timestamp(start_at / 1000)) DESC NULLS LAST,
+             start_at DESC NULLS LAST
+    LIMIT ${limit}`;
+  return rows.map(shape);
 }
 
 export async function countsTT() {

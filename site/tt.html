@@ -14,28 +14,71 @@
 <link rel="stylesheet" href="/css/app.css">
 <style>
   .tt-card { background: var(--card); box-shadow: var(--shadow); border-radius: var(--r); margin-bottom: 10px; padding: 13px 14px }
-  .tt-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px }
+  .tt-top { display: flex; align-items: center; gap: 8px; margin-bottom: 9px }
   .tt-tourn { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 600 }
   .tt-when { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--dim) }
   .tt-when.soon { color: var(--hold) } .tt-when.now { color: var(--bad) }
-  .tt-players { display: grid; gap: 4px; margin-bottom: 10px }
-  .tt-players b { font-size: 15.5px; font-weight: 650; letter-spacing: -.01em }
-  .tt-g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px }
-  .tt-cell { background: var(--bg); box-shadow: var(--shadow); border-radius: var(--r3); padding: 8px 6px; text-align: center }
+
+  /* Players + de-vigged win chance */
+  .tt-players { display: grid; gap: 7px; margin-bottom: 11px }
+  .tt-pl { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 10px }
+  .tt-pl b { font-size: 15.5px; font-weight: 650; letter-spacing: -.01em }
+  .tt-pl.fav b { color: var(--ink) }
+  .tt-pct { display: flex; align-items: center; gap: 8px; min-width: 96px }
+  .tt-bar { flex: 1; height: 6px; border-radius: 999px; background: var(--bg); overflow: hidden; box-shadow: var(--shadow) }
+  .tt-bar > i { display: block; height: 100%; border-radius: 999px; background: var(--dim) }
+  .tt-pl.fav .tt-bar > i { background: var(--good, #37c76a) }
+  .tt-pct b { font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--dim); min-width: 34px; text-align: right }
+  .tt-pl.fav .tt-pct b { color: var(--ink) }
+
+  /* Tappable cells (winner + correct score) */
+  .tt-mkt-lab { font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--faint); font-weight: 600; margin: 2px 0 6px }
+  .tt-g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 4px }
+  .tt-cell { background: var(--bg); box-shadow: var(--shadow); border-radius: var(--r3); padding: 9px 6px; text-align: center; -webkit-user-select: none; user-select: none }
   .tt-cell b { display: block; font-family: var(--mono); font-size: 15px; font-weight: 600 }
   .tt-cell span { display: block; font-size: 10.5px; color: var(--dim); margin-top: 2px }
-  .tt-cs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px }
-  .tt-cs .pill { background: var(--bg); box-shadow: var(--shadow); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-family: var(--mono); color: var(--dim) }
-  .tt-cs .pill b { color: var(--ink); font-weight: 600 }
+  .tt-cell.tap { cursor: pointer; transition: transform .06s ease }
+  .tt-cell.tap:active { transform: scale(.97) }
+  .tt-cell.fav { box-shadow: inset 0 0 0 1px var(--line, rgba(255,255,255,.14)), var(--shadow) }
+  .tt-cell.on { background: var(--good, #37c76a); color: #04140a }
+  .tt-cell.on b, .tt-cell.on span { color: #04140a }
+
+  .tt-cs { margin-top: 10px }
+  .tt-cs-side { margin-top: 8px }
+  .tt-cs-lab { display: block; font-size: 10.5px; color: var(--dim); margin-bottom: 5px }
+  .tt-cs-lab b { color: var(--ink); font-weight: 600 }
+  .tt-cs-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px }
+  .tt-cs-cell b { font-size: 14.5px }
+  .tt-cs-cell span { font-size: 10px }
+
+  /* Results */
+  .tt-res { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; background: var(--card); box-shadow: var(--shadow); border-radius: var(--r); margin-bottom: 8px; padding: 11px 14px }
+  .tt-res .who { display: grid; gap: 3px; min-width: 0 }
+  .tt-res .who .r { display: flex; align-items: center; gap: 8px }
+  .tt-res .who .r b { font-size: 14.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .tt-res .who .r.win b { color: var(--good, #37c76a) }
+  .tt-res .who .r .s { margin-left: auto; font-family: var(--mono); font-size: 15px; font-weight: 600; color: var(--dim) }
+  .tt-res .who .r.win .s { color: var(--ink) }
+  .tt-res .rt { text-align: right }
+  .tt-res .rt .tn { font-size: 10.5px; text-transform: uppercase; letter-spacing: .03em; color: var(--faint); font-weight: 600 }
+  .tt-res .rt time { display: block; font-family: var(--mono); font-size: 11.5px; color: var(--dim); margin-top: 3px }
+
+  .seg { display: inline-flex; background: var(--card); box-shadow: var(--shadow); border-radius: 999px; padding: 3px; gap: 3px; margin-bottom: 12px }
+  .seg button { border: 0; background: transparent; color: var(--dim); font: inherit; font-weight: 600; font-size: 13px; padding: 6px 14px; border-radius: 999px; cursor: pointer }
+  .seg button.on { background: var(--bg); color: var(--ink) }
 </style>
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Real table tennis off SportyBet — real players, so form actually carries. Right now it's <b>banking the card and results</b> to learn player ratings; once the pile is deep enough it starts forecasting match winner and set score. Odds fill in as matches near.</p>
+  <p class="lede">Real table tennis off SportyBet — real players, so form actually carries. Winner odds carry a <b>de-vigged win%</b>; correct-score prices fill in as each match nears the table. Tap any price to drop it on your slip.</p>
   <div class="stats">
     <div class="stat"><b id="s-up">—</b><span>Upcoming</span></div>
     <div class="stat"><b id="s-stored">—</b><span>Banked</span></div>
     <div class="stat go"><b id="s-settled">—</b><span>Results in</span></div>
+  </div>
+  <div class="seg" id="seg">
+    <button type="button" data-mode="up" class="on">Upcoming</button>
+    <button type="button" data-mode="res">Results</button>
   </div>
   <div class="chips" id="tourns"></div>
   <h2 class="lab-h" id="head">Upcoming</h2>
@@ -47,7 +90,7 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("tt");
-  var LAST = null, LEAGUE = "All";
+  var LAST = null, LEAGUE = "All", MODE = "up";
 
   function odds(v) { return (v == null || !isFinite(Number(v))) ? "—" : Number(v).toFixed(2); }
 
@@ -58,21 +101,87 @@
     return e;
   }
 
-  function csPills(g) {
-    if (!g.cs) return null;
-    var order = ["3:0", "3:1", "3:2", "2:3", "1:3", "0:3"];
-    var box = V.el("div", "tt-cs");
-    var any = false;
-    order.forEach(function (k) {
-      var v = g.cs[k];
-      if (v == null || !isFinite(Number(v))) return;
-      any = true;
-      var pill = V.el("span", "pill");
-      pill.appendChild(V.el("b", null, k));
-      pill.appendChild(document.createTextNode(" " + odds(v)));
-      box.appendChild(pill);
+  // Standard book leg — one selection per match, same as the football slip.
+  function pickGame(g) {
+    return { id: g.id, eventId: g.eventId || null, home: g.home, away: g.away,
+             league: g.tourn || "Table tennis", kickoff: g.start || null };
+  }
+  function currentSel(id) {
+    var legs = V.loadBook();
+    for (var i = 0; i < legs.length; i++) if (legs[i].id === id) return legs[i].selection;
+    return null;
+  }
+  function tapCell(g, sel, price, label, cls) {
+    var can = price != null && isFinite(Number(price));
+    var on = can && currentSel(g.id) === sel;
+    var c = V.el("div", "tt-cell " + (cls || "") + (can ? " tap" : "") + (on ? " on" : ""));
+    c.appendChild(V.el("b", null, odds(price)));
+    c.appendChild(V.el("span", null, label));
+    if (can) {
+      c.setAttribute("role", "button");
+      c.tabIndex = 0;
+      var go = function (e) {
+        e.stopPropagation();
+        V.toggleBook(V.makePick(pickGame(g), sel, price, label));
+        render();
+      };
+      c.addEventListener("click", go);
+      c.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); }
+      });
+    }
+    return c;
+  }
+
+  function playersBlock(g) {
+    var pct = g.pct || null;
+    var favHome = pct ? pct.home >= pct.away : (g.win && g.win.home != null && g.win.away != null && g.win.home <= g.win.away);
+    var box = V.el("div", "tt-players");
+    [["home", g.home, pct && pct.home, favHome], ["away", g.away, pct && pct.away, !favHome]].forEach(function (p) {
+      var row = V.el("div", "tt-pl" + (p[3] && p[2] != null ? " fav" : ""));
+      row.appendChild(V.el("b", null, p[1]));
+      if (p[2] != null) {
+        var pc = V.el("div", "tt-pct");
+        var bar = V.el("div", "tt-bar");
+        var fill = V.el("i");
+        fill.style.width = Math.max(4, Math.min(100, p[2])) + "%";
+        bar.appendChild(fill);
+        pc.appendChild(bar);
+        pc.appendChild(V.el("b", null, p[2] + "%"));
+        row.appendChild(pc);
+      }
+      box.appendChild(row);
     });
-    return any ? box : null;
+    return box;
+  }
+
+  function csBlock(g) {
+    if (!g.cs) return null;
+    var has = false;
+    ["3:0","3:1","3:2","0:3","1:3","2:3"].forEach(function (k) {
+      if (g.cs[k] != null && isFinite(Number(g.cs[k]))) has = true;
+    });
+    if (!has) return null;
+    var wrap = V.el("div", "tt-cs");
+    wrap.appendChild(V.el("div", "tt-mkt-lab", "Correct score"));
+    [[g.home, ["3:0","3:1","3:2"]], [g.away, ["0:3","1:3","2:3"]]].forEach(function (side) {
+      var any = side[1].some(function (k) { return g.cs[k] != null && isFinite(Number(g.cs[k])); });
+      if (!any) return;
+      var s = V.el("div", "tt-cs-side");
+      var lab = V.el("span", "tt-cs-lab");
+      lab.appendChild(V.el("b", null, side[0]));
+      lab.appendChild(document.createTextNode(" wins"));
+      s.appendChild(lab);
+      var rowEl = V.el("div", "tt-cs-row");
+      side[1].forEach(function (k) {
+        var v = g.cs[k];
+        var label = k.replace(":", "-");
+        rowEl.appendChild(tapCell(g, "cs:" + k, v, label, "tt-cs-cell"));
+      });
+      s.appendChild(rowEl);
+      wrap.appendChild(s);
+    });
+    return wrap;
   }
 
   function card(g) {
@@ -82,23 +191,42 @@
     top.appendChild(whenEl(g));
     box.appendChild(top);
 
-    var pl = V.el("div", "tt-players");
-    pl.appendChild(V.el("b", null, g.home));
-    pl.appendChild(V.el("b", null, g.away));
-    box.appendChild(pl);
+    box.appendChild(playersBlock(g));
 
+    box.appendChild(V.el("div", "tt-mkt-lab", "Winner"));
     var grid = V.el("div", "tt-g");
-    [["Home", g.win && g.win.home], ["Away", g.win && g.win.away]].forEach(function (p) {
-      var c = V.el("div", "tt-cell");
-      c.appendChild(V.el("b", null, odds(p[1])));
-      c.appendChild(V.el("span", null, p[0]));
-      grid.appendChild(c);
-    });
+    var pct = g.pct || null;
+    var favHome = pct ? pct.home >= pct.away : false;
+    grid.appendChild(tapCell(g, "1", g.win && g.win.home, "Home", favHome ? "fav" : ""));
+    grid.appendChild(tapCell(g, "2", g.win && g.win.away, "Away", (pct && !favHome) ? "fav" : ""));
     box.appendChild(grid);
 
-    var cs = csPills(g);
+    var cs = csBlock(g);
     if (cs) box.appendChild(cs);
     return box;
+  }
+
+  function resultRow(g) {
+    var box = V.el("div", "tt-res");
+    var who = V.el("div", "who");
+    var hs = g.res ? g.res.home : null, as = g.res ? g.res.away : null;
+    [[g.home, hs, hs != null && as != null && hs > as], [g.away, as, hs != null && as != null && as > hs]].forEach(function (p) {
+      var r = V.el("div", "r" + (p[2] ? " win" : ""));
+      r.appendChild(V.el("b", null, p[0]));
+      r.appendChild(V.el("span", "s", p[1] == null ? "–" : String(p[1])));
+      who.appendChild(r);
+    });
+    box.appendChild(who);
+    var rt = V.el("div", "rt");
+    rt.appendChild(V.el("div", "tn", g.tourn || "Table tennis"));
+    var tm = V.el("time", null, V.clock(g.start) || "");
+    rt.appendChild(tm);
+    box.appendChild(rt);
+    return box;
+  }
+
+  function filtered(list) {
+    return LEAGUE === "All" ? list : list.filter(function (g) { return (g.tourn || "Other") === LEAGUE; });
   }
 
   function tourns(games) {
@@ -119,17 +247,32 @@
   function render() {
     var out = document.getElementById("out");
     out.textContent = "";
-    var all = (LAST && LAST.games) || [];
-    var list = LEAGUE === "All" ? all : all.filter(function (g) { return (g.tourn || "Other") === LEAGUE; });
+    var base = (LAST && (MODE === "res" ? LAST.results : LAST.games)) || [];
+    var list = filtered(base);
     if (!list.length) {
-      out.appendChild(V.el("div", "empty", "No upcoming table tennis on the card right now."));
+      out.appendChild(V.el("div", "empty", MODE === "res"
+        ? "No results banked yet — they fill in as matches finish."
+        : "No upcoming table tennis on the card right now."));
+    } else if (MODE === "res") {
+      list.forEach(function (g) { out.appendChild(resultRow(g)); });
     } else {
       list.forEach(function (g) { out.appendChild(card(g)); });
     }
-    document.getElementById("head").textContent = "Upcoming — " + list.length;
-    tourns(all);
+    document.getElementById("head").textContent = (MODE === "res" ? "Results — " : "Upcoming — ") + list.length;
+    tourns(base);
     V.tick();
   }
+
+  document.getElementById("seg").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-mode]");
+    if (!b) return;
+    MODE = b.getAttribute("data-mode");
+    Array.prototype.forEach.call(this.querySelectorAll("button"), function (x) {
+      x.classList.toggle("on", x === b);
+    });
+    LEAGUE = "All";
+    render();
+  });
 
   fetch("/api/tt").then(function (r) { return r.json(); }).then(function (d) {
     if (!d.ok) throw new Error(d.error || "Could not read the table-tennis card");
@@ -138,7 +281,7 @@
     document.getElementById("s-stored").textContent = String(d.stored || 0);
     document.getElementById("s-settled").textContent = String(d.settled || 0);
     document.getElementById("note").textContent =
-      (d.stored || 0) + " matches banked · " + (d.settled || 0) + " with a result · odds and scores fill in as matches settle. Model starts once the pile is deep.";
+      (d.stored || 0) + " matches banked · " + (d.settled || 0) + " with a result · odds and scores fill in as matches near the table.";
     render();
   }).catch(function (e) {
     document.getElementById("out").textContent = "";
