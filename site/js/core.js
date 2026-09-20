@@ -855,6 +855,17 @@
       sel.appendChild(el("span", "pick", l.label));
       sel.appendChild(document.createTextNode(" @ " + Number(l.price).toFixed(2)));
       left.appendChild(sel);
+      if (st !== "ended" && l.livePrice != null && isFinite(l.livePrice)) {
+        var live = el("div", "live-odds");
+        live.appendChild(el("span", "lo-l", "Live odds"));
+        var px = Number(l.livePrice);
+        var booked = Number(l.price);
+        var dir = px < booked - 0.005 ? "dn" : px > booked + 0.005 ? "up" : "";
+        var num = el("span", "lo-n " + dir, px.toFixed(2));
+        live.appendChild(num);
+        if (dir) live.appendChild(el("span", "lo-a " + dir, dir === "dn" ? "\u2193" : "\u2191"));
+        left.appendChild(live);
+      }
     }
     row.appendChild(left);
 

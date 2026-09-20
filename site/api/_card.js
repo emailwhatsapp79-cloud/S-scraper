@@ -101,6 +101,24 @@ export async function fetchEvent(eventId) {
   }
 }
 
+function pricesOf(ev) {
+  const got = {};
+  for (const m of ev.markets || []) {
+    const slot = WANTED[m.desc];
+    if (slot && !got[slot]) got[slot] = legs(m);
+  }
+  const ft = got.ft || {};
+  const dc = got.dc || {};
+  return {
+    "1": ft.Home ?? null,
+    X: ft.Draw ?? null,
+    "2": ft.Away ?? null,
+    "1X": dc["Home or Draw"] ?? null,
+    "12": dc["Home or Away"] ?? null,
+    X2: dc["Draw or Away"] ?? null,
+  };
+}
+
 export function parseScore(s) {
   if (s == null) return null;
   const m = String(s).trim().match(/^(\d+)\s*[:\-]\s*(\d+)$/);
@@ -127,6 +145,7 @@ export function scoreOf(ev) {
     htAway: ht ? ht.away : null,
     ended: /^end/i.test(status),
     live: /^(H1|H2|HT|1H|2H|LIVE)/i.test(status),
+    prices: pricesOf(ev),
   };
 }
 

@@ -478,6 +478,29 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
 }
 .leg.live { background: color-mix(in srgb, var(--hold) 7%, transparent); margin: 0 -8px; padding-left: 8px; padding-right: 8px; border-radius: 8px }
 .leg .sel { color: var(--dim); font-size: 12.5px }
+.live-odds {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.live-odds .lo-l {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--dim);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+.live-odds .lo-n { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.live-odds .lo-n.dn, .live-odds .lo-a.dn { color: var(--bad); }
+.live-odds .lo-n.up, .live-odds .lo-a.up { color: var(--go); }
+.live-odds .lo-a { font-size: 13px; line-height: 1; }
 .leg .yes, .leg .no { justify-self: center; text-align: center; font-weight: 700 }
 .leg .yes { color: var(--go) }
 .leg .no { color: var(--bad) }

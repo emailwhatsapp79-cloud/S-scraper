@@ -45,6 +45,7 @@ export async function ensureSlips() {
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_code TEXT`;
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_url TEXT`;
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_error TEXT`;
+  await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS live_price DOUBLE PRECISION`;
   schemaReady = true;
 }
 
@@ -135,6 +136,7 @@ function shapeLeg(l) {
     selection: l.selection,
     label: l.selection_label,
     price: Number(l.price),
+    livePrice: l.live_price == null ? null : Number(l.live_price),
     status: l.match_status || "",
     played: l.played || "",
     setScore: l.set_score || "",
@@ -261,6 +263,9 @@ export async function refreshSlips() {
     if (!snap) continue;
     const won = snap.ended ? dcHit(leg.selection, snap.ftHome, snap.ftAway) : null;
     const wonText = won == null ? null : (won ? "yes" : "no");
+    const livePrice = snap.prices && isFinite(snap.prices[leg.selection])
+      ? snap.prices[leg.selection]
+      : null;
     await sql`
       UPDATE slip_legs SET
         home = COALESCE(NULLIF(${snap.home || ""}, ''), slip_legs.home),
@@ -272,6 +277,7 @@ export async function refreshSlips() {
         ht_away = ${snap.htAway},
         ft_home = ${snap.ftHome},
         ft_away = ${snap.ftAway},
+        live_price = COALESCE(${livePrice}, slip_legs.live_price),
         won = ${wonText}
       WHERE slip_id = ${leg.slip_id} AND game_id = ${leg.game_id}`;
     updated++;
