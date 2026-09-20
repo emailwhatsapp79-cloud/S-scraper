@@ -691,11 +691,19 @@
   }
 
   function opened(d) {
-    document.body.classList.remove("locked");
-    var g = document.getElementById("gate");
-    if (g) g.remove();
     scheduleLock(d && d.remainingMs);
-    location.reload();
+    var g = document.getElementById("gate");
+    if (g) {
+      g.innerHTML =
+        '<div class="gate-box"><div class="verified" aria-hidden="true">' +
+          '<svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M26 51 L44 69 L76 30"/></svg>' +
+        '</div><b>Verified</b></div>';
+    }
+    setTimeout(function () {
+      document.body.classList.remove("locked");
+      if (g) g.remove();
+      location.reload();
+    }, 700);
   }
 
   function showLock() {
@@ -787,6 +795,11 @@
       if (!d.bio) return;
       var fp = pad.querySelector(".key.fp");
       if (fp) fp.disabled = false;
+      var hint = document.querySelector("#gate .gate-box p");
+      if (hint) hint.textContent = "Fingerprint or code";
+      // Best-effort: raise the fingerprint sheet without a tap. Browsers that
+      // require a user gesture just no-op here, and the fingerprint key still works.
+      runBio();
     }).catch(function () {});
   }
 
