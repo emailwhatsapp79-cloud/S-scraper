@@ -102,7 +102,10 @@ export function forecast(ratings, g) {
     selection: c.score,
     label: "Correct score " + c.score.replace(":", "-"),
     p: c.p,
-    price: Number(csOdds[c.score]) || null,
+    price: (function () {
+      const v = Number(csOdds[c.score] ?? csOdds[c.score.replace(":", "-")]);
+      return isFinite(v) && v > 1 ? v : null;
+    })(),
   }));
   if (pOther > 0.02) {
     cs.push({

@@ -42,11 +42,18 @@
     return t.wins + "/" + t.n;
   }
   function odds(v) {
-    if (v == null || !isFinite(v)) return "—";
+    if (v == null || !isFinite(Number(v))) return "—";
     return Number(v).toFixed(2);
   }
   function onSlip(id, sel) {
     return V.loadBook().some(function (l) { return l.id === id && l.selection === sel; });
+  }
+  function csPrice(g, sel) {
+    if (!sel) return null;
+    var m = g.cs || {};
+    var v = m[sel] != null ? m[sel] : m[String(sel).replace(":", "-")];
+    v = Number(v);
+    return isFinite(v) && v > 1 ? v : null;
   }
 
   function side(name, away) {
@@ -70,34 +77,36 @@
     return wrap;
   }
 
-  function line(g, item, featured) {
-    var price = item.price != null && isFinite(item.price) ? Number(item.price) : null;
-    var row = V.el("button", "fx-line" + (featured ? " top" : "") + (onSlip(g.id, item.selection) ? " on" : "") + (price ? " tap" : ""));
-    row.type = "button";
-    row.appendChild(V.el("span", "fx-out", item.label));
-    row.appendChild(V.el("span", "fx-p", pct(item.p)));
-    row.appendChild(V.el("span", "fx-odds", odds(price)));
+  function cell(g, item, featured) {
+    var price = item.price != null ? Number(item.price) : null;
+    if (!(price > 1)) price = null;
+    var el = V.el("button", "fx-cell" + (featured ? " top" : "") + (onSlip(g.id, item.selection) ? " on" : "") + (price ? " tap" : ""));
+    el.type = "button";
+    el.setAttribute("data-sel", item.selection);
+    el.appendChild(V.el("b", null, odds(price)));
+    el.appendChild(V.el("span", null, item.label));
+    el.appendChild(V.el("em", null, pct(item.p)));
     if (price) {
-      row.addEventListener("click", function () {
+      el.addEventListener("click", function () {
         V.toggleBook(V.makePick(g, item.selection, price, item.label));
         V.paintSlip();
-        var card = row.closest(".finder-card");
-        if (card) card.querySelectorAll(".fx-line").forEach(function (el) {
-          var sel = el.getAttribute("data-sel");
-          el.classList.toggle("on", onSlip(g.id, sel));
+        var card = el.closest(".finder-card");
+        if (card) card.querySelectorAll(".fx-cell").forEach(function (n) {
+          n.classList.toggle("on", onSlip(g.id, n.getAttribute("data-sel")));
         });
       });
     }
-    row.setAttribute("data-sel", item.selection);
-    return row;
+    return el;
   }
 
-  function block(title, rows) {
+  function block(title, items, g, featuredSel, cols) {
     var box = V.el("section", "fx-block");
     box.appendChild(V.el("h3", "fx-h", title));
-    var list = V.el("div", "fx-list");
-    rows.forEach(function (r) { list.appendChild(r); });
-    box.appendChild(list);
+    var grid = V.el("div", "fx-g" + (cols === 3 ? " three" : ""));
+    items.forEach(function (item) {
+      grid.appendChild(cell(g, item, item.selection === featuredSel));
+    });
+    box.appendChild(grid);
     return box;
   }
 
@@ -105,34 +114,27 @@
     var box = V.el("article", "game finder-card");
     box.appendChild(meet(g));
 
-    var csRows = [];
-    var topPrice = g.cs && g.topCs ? g.cs[g.topCs] : null;
-    csRows.push(line(g, {
-      selection: g.topCs,
-      label: String(g.topCs || "").replace(":", "-"),
-      p: g.pCs,
-      price: topPrice
-    }, true));
-    (g.csTop || []).forEach(function (c) {
-      if (c.selection === g.topCs || c.selection === "Other") return;
-      csRows.push(line(g, {
-        selection: c.selection,
-        label: String(c.selection || c.label || "").replace(/^Correct score /i, "").replace(":", "-"),
-        p: c.p,
-        price: c.price != null ? c.price : (g.cs && g.cs[c.selection])
-      }, false));
-    });
-    box.appendChild(block("Correct score", csRows.slice(0, 5)));
+    var csItems = [];
+    var seen = {};
+    function addCs(sel, p, price) {
+      if (!sel || sel === "Other" || seen[sel]) return;
+      seen[sel] = 1;
+      csItems.push({
+        selection: sel,
+        label: String(sel).replace(":", "-"),
+        p: p,
+        price: price != null ? price : csPrice(g, sel)
+      });
+    }
+    addCs(g.topCs, g.pCs, csPrice(g, g.topCs));
+    (g.csTop || []).forEach(function (c) { addCs(c.selection, c.p, c.price); });
+    box.appendChild(block("Correct score", csItems.slice(0, 6), g, g.topCs, 2));
 
     var wx = (g.lines || []).filter(function (l) { return l.selection === "1" || l.selection === "X" || l.selection === "2"; });
-    box.appendChild(block("1X2", wx.map(function (l) {
-      return line(g, l, l.selection === g.pred1x2);
-    })));
+    box.appendChild(block("1X2", wx, g, g.pred1x2, 3));
 
     var dc = (g.lines || []).filter(function (l) { return l.selection === "1X" || l.selection === "X2" || l.selection === "12"; });
-    box.appendChild(block("Double chance", dc.map(function (l) {
-      return line(g, l, false);
-    })));
+    box.appendChild(block("Double chance", dc, g, null, 3));
 
     return box;
   }

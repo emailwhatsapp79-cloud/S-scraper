@@ -277,19 +277,26 @@ async function remember(g, f, bet) {
     WHERE finder_preds.settled_at IS NULL`;
 }
 
-export async function livePicks(pack) {
+export async function livePicks(pack, liveGames) {
   if (!pack || !pack.ratings) return [];
-  const cutoff = Date.now() - 2 * 60 * 1000;
-  const rows = await sql`
-    SELECT * FROM games
-    WHERE kickoff IS NULL OR kickoff > ${cutoff}
-    ORDER BY kickoff ASC NULLS LAST
-    LIMIT 400`;
+  const live = Array.isArray(liveGames) ? liveGames.filter((g) => g && g.id) : [];
+  let src = live.filter((g) => g.upcoming);
+  if (!src.length) {
+    const cutoff = Date.now() - 2 * 60 * 1000;
+    const rows = await sql`
+      SELECT * FROM games
+      WHERE kickoff IS NULL OR kickoff > ${cutoff}
+      ORDER BY kickoff ASC NULLS LAST
+      LIMIT 400`;
+    src = rows.map(rowToGame).filter((g) => g.upcoming || isUpcoming(g.status, g.kickoff));
+  }
+  const csById = {};
+  for (const g of live) if (g.cs) csById[g.id] = g.cs;
+
   const out = [];
   const jobs = [];
-  for (const r of rows) {
-    const g = rowToGame(r);
-    if (!g.upcoming && !isUpcoming(g.status, g.kickoff)) continue;
+  for (const raw of src) {
+    const g = { ...raw, cs: csById[raw.id] || raw.cs || null };
     const f = forecast(pack.ratings, g);
     const bet = pack.silent ? null : bestLine(f, g, pack.floor ?? 0.45, pack.margin ?? 0.04);
     jobs.push(remember(g, f, bet).catch(function () {}));
@@ -301,7 +308,7 @@ export async function livePicks(pack) {
       p1: f.p1, pX: f.pX, p2: f.p2, p1X: f.p1X, pX2: f.pX2,
       topCs: f.topCs, pCs: f.pCs,
       nH: f.nH, nA: f.nA,
-      csTop: (f.cs || []).slice(0, 5),
+      csTop: (f.cs || []).filter((c) => c.selection !== "Other").slice(0, 6),
       lines: linesOf(f, g),
       bet,
     });
