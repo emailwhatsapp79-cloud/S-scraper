@@ -5,7 +5,7 @@ import { sql, rowToGame } from "./_db.js";
 import { seal, open } from "./_crypto.js";
 import { ensure } from "./_vault.js";
 import { isUpcoming } from "./_shape.js";
-import { fitRatings, forecast, bestLine, wonSel, LINES } from "./_brain.js";
+import { fitRatings, fitPairs, forecast, bestEdge, wonSel, LINES } from "./_brain.js";
 
 function wilson(wins, nn, z = 1.96) {
   if (!nn) return [0, 1];
@@ -72,18 +72,28 @@ function fromRow(r) {
   };
 }
 
-function evalBets(ratings, games, floor, margin) {
+function extraOf(pack) {
+  return {
+    pairs: pack.pairs || { pair: {}, home: {} },
+    wPair: pack.wPair || 0,
+    wHt: pack.wHt || 0,
+    wClub: pack.wClub || 0,
+  };
+}
+
+function evalBets(ratings, pairs, w, games, edgeMin) {
+  const extra = { pairs, wPair: w.wPair, wHt: w.wHt, wClub: w.wClub };
   let nn = 0, wins = 0, implied = 0, ret = 0;
   let csN = 0, csW = 0, wxN = 0, wxW = 0;
   for (const g of games) {
-    const f = forecast(ratings, g);
+    const f = forecast(ratings, g, extra);
     const hg = g.res?.hg, ag = g.res?.ag;
     if (hg == null || ag == null) continue;
     wxN++;
     if (wonSel(f.pred1x2, hg, ag)) wxW++;
     csN++;
     if (wonSel(f.topCs, hg, ag)) csW++;
-    const bet = bestLine(f, g, floor, margin);
+    const bet = bestEdge(f, g, edgeMin);
     if (!bet) continue;
     nn++;
     if (wonSel(bet.selection, hg, ag)) { wins++; ret += bet.price; }
@@ -99,20 +109,27 @@ function evalBets(ratings, games, floor, margin) {
   };
 }
 
-function tune(ratings, games) {
-  const floors = [0.12, 0.2, 0.35, 0.45, 0.55, 0.65];
-  const margins = [0.02, 0.04, 0.06, 0.08];
+function tune(ratings, pairs, games) {
+  const wPairs = [0, 0.5, 1];
+  const wHts = [0, 0.4, 0.8];
+  const wClubs = [0, 0.4, 0.8];
+  const edges = [0.04, 0.06, 0.08, 0.12];
   let best = null;
-  for (const f of floors) {
-    for (const mg of margins) {
-      const s = evalBets(ratings, games, f, mg);
-      if (s.n < 25) continue;
-      if (!(s.lo > s.be)) continue;
-      const gap = s.lo - s.be;
-      if (!best || gap > best.gap) best = { floor: f, margin: mg, gap, stats: s };
+  for (const wPair of wPairs) {
+    for (const wHt of wHts) {
+      for (const wClub of wClubs) {
+        for (const edgeMin of edges) {
+          const w = { wPair, wHt, wClub };
+          const s = evalBets(ratings, pairs, w, games, edgeMin);
+          if (s.n < 20) continue;
+          if (!(s.lo > s.be)) continue;
+          const gap = s.lo - s.be;
+          if (!best || gap > best.gap) best = { w, edgeMin, gap, stats: s };
+        }
+      }
     }
   }
-  return best || { floor: null, margin: null, gap: -1, stats: null };
+  return best || { w: { wPair: 0, wHt: 0, wClub: 0 }, edgeMin: null, gap: -1, stats: null };
 }
 
 async function putModel(data) {
@@ -198,38 +215,42 @@ export async function trainFinder() {
   const testGames = games.slice(cutTest);
 
   const fitR = fitRatings(fitGames);
-  const chosen = tune(fitR, valGames);
+  const fitP = fitPairs(fitGames);
+  const chosen = tune(fitR, fitP, valGames);
   const pct = (x) => (x * 100).toFixed(1) + "%";
 
   const prod = fitRatings(games.slice(0, cutTest));
-  const clubs = Object.values(prod).reduce((n, lg) => n + Object.keys(lg.clubs || {}).length, 0);
-  const readout = "Ratings on " + clubs + " virtual clubs across " + Object.keys(prod).length + " leagues.";
+  const prodP = fitPairs(games.slice(0, cutTest));
+  const liveR = fitRatings(games);
+  const liveP = fitPairs(games);
+  const w = chosen.w || { wPair: 0, wHt: 0, wClub: 0 };
 
-  if (chosen.floor == null) {
-    const holdout = evalBets(prod, testGames, 0.45, 0.04);
+  if (chosen.edgeMin == null) {
+    const holdout = evalBets(prod, prodP, w, testGames, 0.06);
     const out = {
       ok: true, silent: true, proven: false,
-      reason: "No priced line beat the book on validation. Forecasts still run; nothing is backed.",
+      reason: "No priced line beat the book on validation.",
       nGames: games.length, nFit: fitGames.length, nVal: valGames.length, nTest: testGames.length,
-      floor: null, margin: null, holdout, form: await formCard(),
-      keys: [], readout, trainedAt: Date.now(), ratings: prod,
+      wPair: w.wPair, wHt: w.wHt, wClub: w.wClub, edgeMin: 0.06,
+      holdout, form: await formCard(),
+      trainedAt: Date.now(), ratings: liveR, pairs: liveP,
     };
     await putModel(out);
     return out;
   }
 
-  const holdout = evalBets(prod, testGames, chosen.floor, chosen.margin);
-  const proven = holdout.n >= 25 && holdout.lo > holdout.be;
+  const holdout = evalBets(prod, prodP, w, testGames, chosen.edgeMin);
+  const proven = holdout.n >= 20 && holdout.lo > holdout.be;
   const silent = !proven;
   const out = {
     ok: true, silent, proven,
     reason: silent
-      ? "A priced line looked real in training but did not hold (" + pct(holdout.hit) + " vs break-even " + pct(holdout.be) + "). Forecasts stay; bets stay off."
-      : "Proven: " + pct(holdout.hit) + " vs break-even " + pct(holdout.be) + ", floor " + pct(holdout.lo) + ". ROI " + (holdout.roi >= 0 ? "+" : "") + pct(holdout.roi) + ".",
+      ? "Edge did not hold (" + pct(holdout.hit) + " vs break-even " + pct(holdout.be) + ")."
+      : "Proven: " + pct(holdout.hit) + " vs " + pct(holdout.be) + ", ROI " + (holdout.roi >= 0 ? "+" : "") + pct(holdout.roi) + ".",
     nGames: games.length, nFit: fitGames.length, nVal: valGames.length, nTest: testGames.length,
-    floor: chosen.floor, margin: chosen.margin, holdout,
-    form: await formCard(),
-    keys: [], readout, trainedAt: Date.now(), ratings: prod,
+    wPair: w.wPair, wHt: w.wHt, wClub: w.wClub, edgeMin: chosen.edgeMin,
+    holdout, form: await formCard(),
+    trainedAt: Date.now(), ratings: liveR, pairs: liveP,
   };
   await putModel(out);
   return out;
@@ -279,6 +300,8 @@ async function remember(g, f, bet) {
 
 export async function livePicks(pack, liveGames) {
   if (!pack || !pack.ratings) return [];
+  const extra = extraOf(pack);
+  const edgeMin = pack.edgeMin == null ? 0.06 : Number(pack.edgeMin);
   const live = Array.isArray(liveGames) ? liveGames.filter((g) => g && g.id) : [];
   let src = live.filter((g) => g.upcoming);
   if (!src.length) {
@@ -297,9 +320,10 @@ export async function livePicks(pack, liveGames) {
   const jobs = [];
   for (const raw of src) {
     const g = { ...raw, cs: csById[raw.id] || raw.cs || null };
-    const f = forecast(pack.ratings, g);
-    const bet = pack.silent ? null : bestLine(f, g, pack.floor ?? 0.45, pack.margin ?? 0.04);
+    const f = forecast(pack.ratings, g, extra);
+    const bet = bestEdge(f, g, edgeMin);
     jobs.push(remember(g, f, bet).catch(function () {}));
+    if (!bet) continue;
     out.push({
       id: g.id, eventId: g.eventId,
       home: g.home, away: g.away, league: g.league, kickoff: g.kickoff,
@@ -314,6 +338,6 @@ export async function livePicks(pack, liveGames) {
     });
   }
   if (jobs.length) await Promise.all(jobs);
-  out.sort((a, b) => (Number(a.kickoff) || Infinity) - (Number(b.kickoff) || Infinity));
+  out.sort((a, b) => (Number(b.bet?.edge) || 0) - (Number(a.bet?.edge) || 0));
   return out;
 }

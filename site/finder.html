@@ -15,7 +15,7 @@
 <style>
   .fx-rank { display: flex; align-items: center; gap: 10px; margin-bottom: 10px }
   .fx-rank .idx { font-size: 13px; min-width: 26px; height: 26px }
-  .fx-lead { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px }
+  .fx-lead { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap }
   .fx-lead b { font: 700 20px/1 var(--mono); color: var(--go); letter-spacing: -.02em }
   .fx-lead span { font-size: 13.5px; color: var(--ink); font-weight: 600 }
   .fx-lead em { font-style: normal; color: var(--dim); font-size: 12.5px; font-family: var(--mono) }
@@ -28,10 +28,8 @@
     <div class="stat"><b id="s-cs">—</b><span>Score form</span></div>
     <div class="stat" id="s-roi-tile"><b id="s-roi">—</b><span>Hold-out ROI</span></div>
   </div>
-  <div class="chips" id="cut"></div>
-  <h2 class="lab-h" id="pickhead">Best leans</h2>
+  <h2 class="lab-h" id="pickhead">Featured</h2>
   <div id="out"><div class="skel"></div><div class="skel"></div></div>
-  <p class="note" id="note"></p>
 </main>
 <script src="/js/core.js"></script>
 <script>
@@ -60,6 +58,14 @@
     var v = m[sel] != null ? m[sel] : m[String(sel).replace(":", "-")];
     v = Number(v);
     return isFinite(v) && v > 1 ? v : null;
+  }
+  function maxSel(items) {
+    var best = null;
+    (items || []).forEach(function (l) {
+      if (l.p == null || !isFinite(l.p)) return;
+      if (!best || l.p > best.p) best = l;
+    });
+    return best ? best.selection : null;
   }
 
   function side(name, away) {
@@ -116,20 +122,11 @@
     return box;
   }
 
-  function headlineOf(g) {
-    var best = null;
-    (g.lines || []).forEach(function (l) {
-      if (l.p == null || !isFinite(l.p)) return;
-      if (!best || l.p > best.p) best = l;
-    });
-    return best;
-  }
-
   function card(g, rank) {
     var box = V.el("article", "game finder-card");
     var head = V.el("div", "fx-rank");
     head.appendChild(V.el("span", "idx", String(rank)));
-    var hl = headlineOf(g);
+    var hl = g.bet;
     if (hl) {
       var lead = V.el("div", "fx-lead");
       lead.appendChild(V.el("b", null, pct(hl.p)));
@@ -155,61 +152,22 @@
     addCs(g.topCs, g.pCs, csPrice(g, g.topCs));
     (g.csTop || []).forEach(function (c) { addCs(c.selection, c.p, c.price); });
     if (csItems.length % 2) csItems.pop();
-    box.appendChild(block("Correct score", csItems.slice(0, 6), g, g.topCs, 2));
+    box.appendChild(block("Correct score", csItems.slice(0, 6), g, maxSel(csItems), 2));
 
-    var wx = (g.lines || []).filter(function (l) { return l.selection === "1" || l.selection === "X" || l.selection === "2"; });
-    box.appendChild(block("1X2", wx, g, g.pred1x2, 3));
+    var wx = (g.lines || []).filter(function (l) {
+      return l.selection === "1" || l.selection === "X" || l.selection === "2";
+    });
+    box.appendChild(block("1X2", wx, g, maxSel(wx), 3));
 
-    var dc = (g.lines || []).filter(function (l) { return l.selection === "1X" || l.selection === "X2" || l.selection === "12"; });
-    box.appendChild(block("Double chance", dc, g, null, 3));
+    var dcOrder = { "1X": 0, "12": 1, "X2": 2 };
+    var dc = (g.lines || []).filter(function (l) { return dcOrder[l.selection] != null; })
+      .sort(function (a, b) { return dcOrder[a.selection] - dcOrder[b.selection]; });
+    box.appendChild(block("Double chance", dc, g, maxSel(dc), 3));
 
     return box;
   }
 
-  var LAST = null;
-  var CUTS = [0.70, 0.80, 0.85, 0.90];
-  var CUT = 0.80;
-  try { var savedCut = Number(localStorage.getItem("vfs_finder_cut")); if (CUTS.indexOf(savedCut) >= 0) CUT = savedCut; } catch (e) {}
-
-  function paintCuts() {
-    var box = document.getElementById("cut");
-    box.textContent = "";
-    CUTS.forEach(function (c) {
-      var b = V.el("button", "chip" + (CUT === c ? " on" : ""), (c * 100).toFixed(0) + "%+");
-      b.type = "button";
-      b.addEventListener("click", function () {
-        CUT = c;
-        try { localStorage.setItem("vfs_finder_cut", String(c)); } catch (e) {}
-        paintCuts(); render();
-      });
-      box.appendChild(b);
-    });
-  }
-
-  function render() {
-    var out = document.getElementById("out");
-    out.textContent = "";
-    var all = (LAST && LAST.picks) || [];
-    var kept = all.map(function (g) { return { g: g, h: headlineOf(g) }; })
-      .filter(function (x) { return x.h && x.h.p >= CUT; })
-      .sort(function (a, b) { return b.h.p - a.h.p; });
-
-    if (!all.length) {
-      out.appendChild(V.el("div", "empty", "No upcoming games to forecast yet."));
-    } else if (!kept.length) {
-      out.appendChild(V.el("div", "empty", "Nothing clears " + pct(CUT) + " on the card right now — lower the cut."));
-    } else {
-      kept.forEach(function (x, i) { out.appendChild(card(x.g, i + 1)); });
-    }
-    document.getElementById("pickhead").textContent = "Best leans — " + kept.length + " of " + all.length;
-    document.getElementById("note").textContent =
-      (LAST && LAST.nGames || 0) + " settled in memory · showing " + kept.length + " at " + pct(CUT) +
-      "+ · the model's read, not a promise. Tap a line to add it.";
-    V.tick();
-  }
-
   V.fetchFinder().then(function (d) {
-    LAST = d;
     var f = d.form || {};
     var h = d.holdout || {};
     document.getElementById("stats").hidden = false;
@@ -217,8 +175,17 @@
     document.getElementById("s-cs").textContent = form(f.cs || h.cs);
     document.getElementById("s-roi").textContent = h.n ? ((h.roi >= 0 ? "+" : "") + (h.roi * 100).toFixed(1) + "%") : "—";
     document.getElementById("s-roi-tile").className = "stat" + (h.roi > 0 ? " go" : h.roi < 0 ? " bad" : "");
-    paintCuts();
-    render();
+
+    var out = document.getElementById("out");
+    out.textContent = "";
+    var picks = d.picks || [];
+    if (!picks.length) {
+      out.appendChild(V.el("div", "empty", "Nothing with an edge on this card."));
+    } else {
+      picks.forEach(function (g, i) { out.appendChild(card(g, i + 1)); });
+    }
+    document.getElementById("pickhead").textContent = "Featured · " + picks.length;
+    V.tick();
   }).catch(function (e) {
     document.getElementById("out").textContent = "";
     document.getElementById("out").appendChild(V.el("div", "empty", e.message));

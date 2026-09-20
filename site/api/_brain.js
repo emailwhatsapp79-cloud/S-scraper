@@ -1,11 +1,10 @@
-// One score matrix per match. Club names are IDs in this sim (England MUN
-// is not Manchester United). Attack/defence come from actual goals in the
-// settled pile. 1X2, DC and correct score are slices of the same grid.
+// Book is the price. We start from its 1X2, then tilt with pair history,
+// this club at home, and HT vs FT. A line is featured only if our % beats 1/odd.
 import { leagueBucket } from "./_shape.js";
 
-const MAX = 6;   // matrix for 1X2
-const CSMAX = 4; // book only prices 0–4 + Other
-const SHRINK = 8; // games of prior; a new club sits on the league average
+const MAX = 6;
+const CSMAX = 4;
+const SHRINK = 8;
 
 export function clubKey(league, name) {
   return String(name || "").trim().toUpperCase();
@@ -22,7 +21,37 @@ function bucket(g) {
   return leagueBucket(g) || "Other";
 }
 
-/** Fit attack/defence per club, per virtual league, from finished scores. */
+export function devig3(a, b, c) {
+  const ia = 1 / Number(a), ib = 1 / Number(b), ic = 1 / Number(c);
+  if (!(ia > 0 && ib > 0 && ic > 0)) return null;
+  const s = ia + ib + ic;
+  return { p1: ia / s, pX: ib / s, p2: ic / s };
+}
+
+function clamp01(x) {
+  return Math.min(0.9, Math.max(0.02, x));
+}
+
+function renorm(p1, pX, p2) {
+  p1 = clamp01(p1); pX = clamp01(pX); p2 = clamp01(p2);
+  const s = p1 + pX + p2;
+  return { p1: p1 / s, pX: pX / s, p2: p2 / s };
+}
+
+function favOf(p1, pX, p2) {
+  if (p1 >= pX && p1 >= p2) return "1";
+  if (p2 >= pX) return "2";
+  return "X";
+}
+
+function bump(p1, pX, p2, which, t) {
+  if (!t) return { p1, pX, p2 };
+  if (which === "1") { p1 += t; pX -= t / 2; p2 -= t / 2; }
+  else if (which === "2") { p2 += t; p1 -= t / 2; pX -= t / 2; }
+  else { pX += t; p1 -= t / 2; p2 -= t / 2; }
+  return renorm(p1, pX, p2);
+}
+
 export function fitRatings(games) {
   const leagues = {};
   for (const g of games || []) {
@@ -37,7 +66,6 @@ export function fitRatings(games) {
     hc.n++; hc.scored += hg; hc.conceded += ag;
     ac.n++; ac.scored += ag; ac.conceded += hg;
   }
-
   const out = {};
   for (const [L, lg] of Object.entries(leagues)) {
     if (lg.n < 12) continue;
@@ -59,6 +87,34 @@ export function fitRatings(games) {
   return out;
 }
 
+export function pairKey(g) {
+  const L = bucket(g);
+  return L + "|" + clubKey(L, g.home) + "|" + clubKey(L, g.away);
+}
+
+export function homeKey(g) {
+  const L = bucket(g);
+  return L + "|" + clubKey(L, g.home);
+}
+
+export function fitPairs(games) {
+  const pair = {}, home = {};
+  for (const g of games || []) {
+    const hg = g.res?.hg, ag = g.res?.ag;
+    if (hg == null || ag == null) continue;
+    const book = g.ft?.home > 1 ? devig3(g.ft.home, g.ft.draw, g.ft.away) : null;
+    const hw = hg > ag ? 1 : 0, dr = hg === ag ? 1 : 0, aw = ag > hg ? 1 : 0;
+    const pk = pairKey(g), hk = homeKey(g);
+    const p = pair[pk] || (pair[pk] = { n: 0, hw: 0, dr: 0, aw: 0, imp1: 0 });
+    p.n++; p.hw += hw; p.dr += dr; p.aw += aw;
+    if (book) p.imp1 += book.p1;
+    const h = home[hk] || (home[hk] = { n: 0, hw: 0, imp1: 0 });
+    h.n++; h.hw += hw;
+    if (book) h.imp1 += book.p1;
+  }
+  return { pair, home };
+}
+
 function lambdas(ratings, g) {
   const L = bucket(g);
   const lg = ratings?.[L];
@@ -72,16 +128,23 @@ function lambdas(ratings, g) {
   };
 }
 
-/** Full grid + every readout we show. Book prices are attached when present. */
-export function forecast(ratings, g) {
+function residual(row, k) {
+  if (!row || row.n < 6) return 0;
+  const emp = row.hw / row.n;
+  const imp = row.n ? row.imp1 / row.n : emp;
+  const w = row.n / (row.n + k);
+  return w * (emp - imp);
+}
+
+/** 1X2 from the book, tilted. CS still from the score matrix (stays ~10–15%). */
+export function forecast(ratings, g, extra = {}) {
   const { lh, la, nH, nA, league } = lambdas(ratings, g);
   const grid = [];
-  let mass = 0, csMass = 0;
+  let csMass = 0;
   for (let h = 0; h <= MAX; h++) {
     const ph = poisson(h, lh);
     for (let a = 0; a <= MAX; a++) {
       const p = ph * poisson(a, la);
-      mass += p;
       grid.push({ h, a, score: h + ":" + a, p });
       if (h <= CSMAX && a <= CSMAX) csMass += p;
     }
@@ -89,34 +152,63 @@ export function forecast(ratings, g) {
   const pOther = Math.max(0, 1 - csMass);
   grid.sort((x, y) => y.p - x.p);
 
-  let p1 = 0, pX = 0, p2 = 0;
+  let pois1 = 0, poisX = 0, pois2 = 0;
   for (const c of grid) {
-    if (c.h > c.a) p1 += c.p;
-    else if (c.h === c.a) pX += c.p;
-    else p2 += c.p;
+    if (c.h > c.a) pois1 += c.p;
+    else if (c.h === c.a) poisX += c.p;
+    else pois2 += c.p;
+  }
+
+  const book = g.ft?.home > 1 ? devig3(g.ft.home, g.ft.draw, g.ft.away) : null;
+  let p1 = book ? book.p1 : pois1;
+  let pX = book ? book.pX : poisX;
+  let p2 = book ? book.p2 : pois2;
+
+  const pairs = extra.pairs || {};
+  const tPair = (extra.wPair || 0) * residual(pairs.pair?.[pairKey(g)], 12);
+  ({ p1, pX, p2 } = bump(p1, pX, p2, "1", tPair));
+  const tClub = (extra.wClub || 0) * residual(pairs.home?.[homeKey(g)], 20);
+  ({ p1, pX, p2 } = bump(p1, pX, p2, "1", tClub));
+
+  if (g.ht?.home > 1 && extra.wHt) {
+    const ht = devig3(g.ht.home, g.ht.draw, g.ht.away);
+    if (ht) {
+      const bf = favOf(p1, pX, p2), hf = favOf(ht.p1, ht.pX, ht.p2);
+      if (bf === hf) {
+        const k = extra.wHt * 0.5;
+        p1 += k * (ht.p1 - p1);
+        pX += k * (ht.pX - pX);
+        p2 += k * (ht.p2 - p2);
+      } else {
+        const k = extra.wHt * 0.3;
+        p1 += k * ((book ? book.p1 : 1 / 3) - p1);
+        pX += k * ((book ? book.pX : 1 / 3) - pX);
+        p2 += k * ((book ? book.p2 : 1 / 3) - p2);
+      }
+      ({ p1, pX, p2 } = renorm(p1, pX, p2));
+    }
   }
 
   const csOdds = g.cs || {};
   const csCells = grid.filter((c) => c.h <= CSMAX && c.a <= CSMAX);
-  const cs = csCells.slice(0, 8).map((c) => ({
-    selection: c.score,
-    label: "Correct score " + c.score.replace(":", "-"),
-    p: c.p,
-    price: (function () {
-      const v = Number(csOdds[c.score] ?? csOdds[c.score.replace(":", "-")]);
-      return isFinite(v) && v > 1 ? v : null;
-    })(),
-  }));
+  const cs = csCells.slice(0, 8).map((c) => {
+    const v = Number(csOdds[c.score] ?? csOdds[c.score.replace(":", "-")]);
+    return {
+      selection: c.score,
+      label: "Correct score " + c.score.replace(":", "-"),
+      p: c.p,
+      price: isFinite(v) && v > 1 ? v : null,
+    };
+  });
   if (pOther > 0.02) {
+    const v = Number(csOdds.Other);
     cs.push({
-      selection: "Other",
-      label: "Correct score Other",
-      p: pOther,
-      price: Number(csOdds.Other) || null,
+      selection: "Other", label: "Correct score Other", p: pOther,
+      price: isFinite(v) && v > 1 ? v : null,
     });
   }
-
   const top = csCells[0] || grid[0];
+
   return {
     league, nH, nA, lh, la,
     p1, pX, p2,
@@ -126,7 +218,7 @@ export function forecast(ratings, g) {
     topCs: top ? top.score : "0:0",
     pCs: top ? top.p : 0,
     cs,
-    pred1x2: p1 >= pX && p1 >= p2 ? "1" : p2 >= pX ? "2" : "X",
+    pred1x2: favOf(p1, pX, p2),
   };
 }
 
@@ -135,8 +227,8 @@ export const LINES = [
   { sel: "X",  label: "Draw",         pOf: (f) => f.pX,  priceOf: (g) => g.ft?.draw },
   { sel: "2",  label: "Away",         pOf: (f) => f.p2,  priceOf: (g) => g.ft?.away },
   { sel: "1X", label: "Home or Draw", pOf: (f) => f.p1X, priceOf: (g) => g.dc?.home_draw },
-  { sel: "X2", label: "Draw or Away", pOf: (f) => f.pX2, priceOf: (g) => g.dc?.draw_away },
   { sel: "12", label: "Home or Away", pOf: (f) => f.p12, priceOf: (g) => g.dc?.home_away },
+  { sel: "X2", label: "Draw or Away", pOf: (f) => f.pX2, priceOf: (g) => g.dc?.draw_away },
 ];
 
 function n(v) {
@@ -144,15 +236,16 @@ function n(v) {
   return isFinite(x) && x > 1 ? x : null;
 }
 
-/** Best line whose confidence both clears a floor and beats the price. */
-export function bestLine(f, g, floor, margin) {
+/** Best line where our % beats 1/odd by edgeMin. Fat 5.00 Home can win this. */
+export function bestEdge(f, g, edgeMin) {
   let best = null;
   const consider = (sel, label, p, price) => {
-    if (price == null || !(p >= floor)) return;
-    const ev = p * price;
-    if (ev < 1 + margin) return;
-    const gap = p - 1 / price;
-    if (!best || gap > best.gap) best = { selection: sel, label, p, price, ev, gap };
+    if (price == null || !(p > 0)) return;
+    const edge = p - 1 / price;
+    if (edge < edgeMin) return;
+    if (!best || edge > best.edge) {
+      best = { selection: sel, label, p, price, edge, ev: p * price };
+    }
   };
   for (const line of LINES) consider(line.sel, line.label, line.pOf(f), n(line.priceOf(g)));
   for (const c of f.cs || []) {
@@ -160,6 +253,10 @@ export function bestLine(f, g, floor, margin) {
     consider(c.selection, c.label, c.p, n(c.price));
   }
   return best;
+}
+
+export function bestLine(f, g, floor, margin) {
+  return bestEdge(f, g, margin || 0.05);
 }
 
 export function wonSel(sel, hg, ag) {
