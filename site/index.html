@@ -37,9 +37,9 @@
   var league = "All";
   var last = null;
 
-  function chips(games) {
-    var counts = { All: games.length };
-    games.forEach(function (g) {
+  function chips(matched) {
+    var counts = { All: matched.length };
+    matched.forEach(function (g) {
       var k = V.leagueKey(g);
       counts[k] = (counts[k] || 0) + 1;
     });
@@ -56,31 +56,34 @@
   function render() {
     if (!last) return;
     var games = last.games || [];
-    var hits = [], holds = [];
+    var hits = [];
     games.forEach(function (g) {
       if (league !== "All" && V.leagueKey(g) !== league) return;
       var r;
       try { r = V.screen(g); } catch (e) { return; }
       if (r.verdict === "show") hits.push([g, r]);
-      else if (r.verdict === "hold") holds.push([g, r]);
     });
+    hits.sort(function (a, b) { return V.byKick(a[0], b[0]); });
     document.getElementById("s-scan").textContent = String(games.length);
     document.getElementById("s-hit").textContent = String(hits.length);
-    var rows = hits.concat(holds).sort(function (a, b) { return V.byKick(a[0], b[0]); });
-    var nextG = rows[0] ? rows[0][0] : games.slice().sort(V.byKick)[0];
+    var nextG = hits[0] ? hits[0][0] : null;
     var next = nextG && nextG.kickoff ? V.until(nextG.kickoff).text.replace("in ", "") : "—";
     document.getElementById("s-next").textContent = next || "—";
     document.getElementById("stats").hidden = false;
-    chips(games);
+    var matchedAll = [];
+    games.forEach(function (g) {
+      try { if (V.screen(g).verdict === "show") matchedAll.push(g); } catch (e) {}
+    });
+    chips(matchedAll);
 
     var out = document.getElementById("out");
     out.textContent = "";
-    if (!hits.length && !holds.length) {
+    if (!hits.length) {
       var empty = V.el("div", "empty");
       empty.innerHTML = "<b>None of the upcoming games match this shape.</b><br>Open Card to browse the full list, or loosen the bands on Rules.";
       out.appendChild(empty);
     } else {
-      rows.forEach(function (p) {
+      hits.forEach(function (p) {
         out.appendChild(V.card(p[0], p[1], {
           checks: true,
           pickable: true,

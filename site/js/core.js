@@ -103,19 +103,14 @@
         text: ratio == null ? "half-time split not loaded" : ("HT " + dog + " is " + ratio.toFixed(2) + "\u00d7 HT " + fav)
       });
     }
-    var failed = null, skipped = false, failedHt = null;
+    var failed = null, skipped = false;
     checks.forEach(function (c) {
       if (c.skip) skipped = true;
-      else if (!c.ok) {
-        if (c.name.indexOf("ht_") === 0) { if (!failedHt) failedHt = c; }
-        else if (!failed) failed = c;
-      }
+      else if (!c.ok && !failed) failed = c;
     });
     return {
-      ev: g, dc: dc, fav: fav, dog: dog, checks: checks,
-      failure: failed || failedHt || null,
-      // Favourite shape (FT + DC) keeps the game on Matches. HT miss/fail is a hold, not a vanishing reject.
-      verdict: failed ? "reject" : (skipped || failedHt ? "hold" : "show")
+      ev: g, dc: dc, fav: fav, dog: dog, checks: checks, failure: failed,
+      verdict: failed ? "reject" : (skipped ? "hold" : "show")
     };
   }
 
