@@ -84,7 +84,7 @@ export async function notifyBooked(slips) {
 
     for (const l of sp.legs || []) {
       if (l.won === true) {
-        if (await sendOnce("leg-" + sp.id + "-" + l.gameId + "-yes", {
+        if (await sendOnce("leg-" + l.gameId + "-yes", {
           kind: "yes",
           sound: "/sounds/yes.wav",
           url: "/book",
@@ -92,7 +92,7 @@ export async function notifyBooked(slips) {
           body: (l.home || "") + " v " + (l.away || "") + " · " + (l.label || "") + " in",
         })) sent++;
       } else if (l.won === false) {
-        if (await sendOnce("leg-" + sp.id + "-" + l.gameId + "-no", {
+        if (await sendOnce("leg-" + l.gameId + "-no", {
           kind: "no",
           sound: "/sounds/no.wav",
           url: "/book",

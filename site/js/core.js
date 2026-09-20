@@ -1,6 +1,22 @@
 (function (w) {
   "use strict";
 
+  // If we were unlocked recently, reveal the app at once so a normal refresh
+  // doesn't blink dark; gateCheck still verifies with the server a moment later.
+  // A locked (or expired) session leaves the app hidden until the gate confirms.
+  try {
+    var _openUntil = Number(localStorage.getItem("vfs_open_until") || 0);
+    if (_openUntil && Date.now() < _openUntil) document.documentElement.classList.add("gate-ok");
+  } catch (e) {}
+  function markOpen(ms) {
+    try { localStorage.setItem("vfs_open_until", String(Date.now() + (Number(ms) || 0))); } catch (e) {}
+    document.documentElement.classList.add("gate-ok");
+  }
+  function markLocked() {
+    try { localStorage.removeItem("vfs_open_until"); } catch (e) {}
+    document.documentElement.classList.remove("gate-ok");
+  }
+
   var DEFAULTS = {
     ft_fav_min: 1.50, ft_fav_max: 2.50, ft_dog_min: 3.70,
     ft_dc_fav_min: 1.17, ft_dc_fav_max: 1.30, ft_dc_dog_min: 1.89,
@@ -691,6 +707,7 @@
   }
 
   function opened(d) {
+    markOpen(d && d.remainingMs);
     scheduleLock(d && d.remainingMs);
     var g = document.getElementById("gate");
     if (g) {
@@ -805,15 +822,17 @@
 
   function gateCheck() {
     fetch("/api/gate").then(function (r) { return r.json(); }).then(function (d) {
-      if (!d.open) showLock();
+      if (!d.open) { markLocked(); showLock(); }
       else {
+        markOpen(d.remainingMs);
         scheduleLock(d.remainingMs);
         hydrate();
       }
-    }).catch(function () { showLock(); });
+    }).catch(function () { markLocked(); showLock(); });
   }
 
   function lockNow() {
+    markLocked();
     fetch("/api/gate", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -900,7 +919,7 @@
     slips.forEach(function (sp) {
       (sp.legs || []).forEach(function (l) {
         if (l.won !== true && l.won !== false) return;
-        var k = "leg-" + sp.id + "-" + l.gameId + "-" + (l.won ? "yes" : "no");
+        var k = "leg-" + l.gameId + "-" + (l.won ? "yes" : "no");
         if (seen[k]) return;
         pingMark(k);
         ping(l.won ? "Yes" : "No",

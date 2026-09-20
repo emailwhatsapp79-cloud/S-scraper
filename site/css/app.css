@@ -590,6 +590,12 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
 body.locked .wrap,
 body.locked .nav,
 body.locked .top { visibility: hidden }
+/* Until the gate is confirmed open, keep the app hidden so a locked refresh
+   never flashes its contents. An optimistic reveal (recent-unlock hint) adds
+   gate-ok before paint, so a genuinely unlocked page shows with no dark blink. */
+html:not(.gate-ok) body .wrap,
+html:not(.gate-ok) body .nav,
+html:not(.gate-ok) body .top { visibility: hidden }
 .gate {
   position: fixed; inset: 0; z-index: 80;
   background: var(--bg);
