@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     feedErrors = [String(e?.message || e)];
   }
 
-  try { enriched = (await enrichSettleTT(35)).touched; } catch { /* still serve */ }
+  try { enriched = (await enrichSettleTT(80)).touched; } catch { /* still serve */ }
 
   let games = [], results = [], counts = { total: 0, settled: 0 };
   try { games = await listUpcomingTT(400); } catch (e) { saveError = saveError || String(e?.message || e); }

@@ -41,7 +41,7 @@ export default async function handler(req, res) {
   try {
     const { events } = await fetchTTCard();
     const ttSaved = await storeTT(events.map(ttNormalise));
-    const ttTouched = (await enrichSettleTT(40)).touched;
+    const ttTouched = (await enrichSettleTT(80)).touched;
     tt = { saved: ttSaved, touched: ttTouched };
   } catch (e) { tt = { error: String(e?.message || e) }; }
 

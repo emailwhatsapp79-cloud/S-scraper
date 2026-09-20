@@ -41,13 +41,16 @@
   .tt-cell.tap:active { transform: scale(.97) }
   .tt-cell.fav { box-shadow: inset 0 0 0 1px var(--line, rgba(255,255,255,.14)), var(--shadow) }
   .tt-cell.on { background: var(--good, #37c76a); color: #04140a }
-  .tt-cell.on b, .tt-cell.on span { color: #04140a }
+  .tt-cell em { display: block; font-style: normal; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--go); margin-top: 1px }
+  .tt-cell.on em { color: #04140a }
+  .tt-pl .n { font-size: 11px; color: var(--faint); font-weight: 600; margin-left: 6px }
 
   .tt-cs { margin-top: 10px }
   .tt-cs-side { margin-top: 8px }
   .tt-cs-lab { display: block; font-size: 10.5px; color: var(--dim); margin-bottom: 5px }
   .tt-cs-lab b { color: var(--ink); font-weight: 600 }
   .tt-cs-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px }
+  .tt-cs-row.four { grid-template-columns: repeat(4, 1fr) }
   .tt-cs-cell b { font-size: 14.5px }
   .tt-cs-cell span { font-size: 10px }
 
@@ -70,7 +73,6 @@
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Real table tennis off SportyBet — real players, so form actually carries. Winner odds carry a <b>de-vigged win%</b>; correct-score prices fill in as each match nears the table. Tap any price to drop it on your slip.</p>
   <div class="stats">
     <div class="stat"><b id="s-up">—</b><span>Upcoming</span></div>
     <div class="stat"><b id="s-stored">—</b><span>Banked</span></div>
@@ -83,7 +85,6 @@
   <div class="chips" id="tourns"></div>
   <h2 class="lab-h" id="head">Upcoming</h2>
   <div id="out"><div class="skel"></div><div class="skel"></div></div>
-  <p class="note" id="note"></p>
 </main>
 <script src="/js/core.js"></script>
 <script>
@@ -111,12 +112,13 @@
     for (var i = 0; i < legs.length; i++) if (legs[i].id === id) return legs[i].selection;
     return null;
   }
-  function tapCell(g, sel, price, label, cls) {
+  function tapCell(g, sel, price, label, cls, pct) {
     var can = price != null && isFinite(Number(price));
     var on = can && currentSel(g.id) === sel;
     var c = V.el("div", "tt-cell " + (cls || "") + (can ? " tap" : "") + (on ? " on" : ""));
     c.appendChild(V.el("b", null, odds(price)));
     c.appendChild(V.el("span", null, label));
+    if (pct != null && isFinite(pct)) c.appendChild(V.el("em", null, pct + "%"));
     if (can) {
       c.setAttribute("role", "button");
       c.tabIndex = 0;
@@ -137,17 +139,19 @@
     var pct = g.pct || null;
     var favHome = pct ? pct.home >= pct.away : (g.win && g.win.home != null && g.win.away != null && g.win.home <= g.win.away);
     var box = V.el("div", "tt-players");
-    [["home", g.home, pct && pct.home, favHome], ["away", g.away, pct && pct.away, !favHome]].forEach(function (p) {
-      var row = V.el("div", "tt-pl" + (p[3] && p[2] != null ? " fav" : ""));
-      row.appendChild(V.el("b", null, p[1]));
-      if (p[2] != null) {
+    [[g.home, pct && pct.home, favHome, g.nH], [g.away, pct && pct.away, !favHome, g.nA]].forEach(function (p) {
+      var row = V.el("div", "tt-pl" + (p[2] && p[1] != null ? " fav" : ""));
+      var nm = V.el("b", null, p[0]);
+      if (p[3]) nm.appendChild(V.el("span", "n", " · " + p[3]));
+      row.appendChild(nm);
+      if (p[1] != null) {
         var pc = V.el("div", "tt-pct");
         var bar = V.el("div", "tt-bar");
         var fill = V.el("i");
-        fill.style.width = Math.max(4, Math.min(100, p[2])) + "%";
+        fill.style.width = Math.max(4, Math.min(100, p[1])) + "%";
         bar.appendChild(fill);
         pc.appendChild(bar);
-        pc.appendChild(V.el("b", null, p[2] + "%"));
+        pc.appendChild(V.el("b", null, p[1] + "%"));
         row.appendChild(pc);
       }
       box.appendChild(row);
@@ -155,33 +159,43 @@
     return box;
   }
 
+  function csSides(g) {
+    var bo = g.bo === 4 ? 4 : 3;
+    var keys = Object.keys(g.cs || {}).concat(Object.keys(g.csPct || {}));
+    if (keys.some(function (k) { return k.charAt(0) === "4" || k.slice(-1) === "4"; })) bo = 4;
+    var home = [], away = [];
+    for (var k = 0; k < bo; k++) {
+      home.push(bo + ":" + k);
+      away.push(k + ":" + bo);
+    }
+    return [[g.home, home], [g.away, away]];
+  }
+
   function csBlock(g) {
-    if (!g.cs) return null;
-    var has = false;
-    ["3:0","3:1","3:2","0:3","1:3","2:3"].forEach(function (k) {
-      if (g.cs[k] != null && isFinite(Number(g.cs[k]))) has = true;
-    });
-    if (!has) return null;
     var wrap = V.el("div", "tt-cs");
     wrap.appendChild(V.el("div", "tt-mkt-lab", "Correct score"));
-    [[g.home, ["3:0","3:1","3:2"]], [g.away, ["0:3","1:3","2:3"]]].forEach(function (side) {
-      var any = side[1].some(function (k) { return g.cs[k] != null && isFinite(Number(g.cs[k])); });
-      if (!any) return;
+    var anyRow = false;
+    csSides(g).forEach(function (side) {
       var s = V.el("div", "tt-cs-side");
       var lab = V.el("span", "tt-cs-lab");
       lab.appendChild(V.el("b", null, side[0]));
       lab.appendChild(document.createTextNode(" wins"));
       s.appendChild(lab);
-      var rowEl = V.el("div", "tt-cs-row");
+      var rowEl = V.el("div", "tt-cs-row" + (side[1].length === 4 ? " four" : ""));
+      var any = false;
       side[1].forEach(function (k) {
-        var v = g.cs[k];
-        var label = k.replace(":", "-");
-        rowEl.appendChild(tapCell(g, "cs:" + k, v, label, "tt-cs-cell"));
+        var v = g.cs && g.cs[k];
+        var p = g.csPct && g.csPct[k];
+        if (v == null && p == null) return;
+        any = true;
+        rowEl.appendChild(tapCell(g, k, v, k.replace(":", "-"), "tt-cs-cell", p));
       });
+      if (!any) return;
+      anyRow = true;
       s.appendChild(rowEl);
       wrap.appendChild(s);
     });
-    return wrap;
+    return anyRow ? wrap : null;
   }
 
   function card(g) {
@@ -197,8 +211,8 @@
     var grid = V.el("div", "tt-g");
     var pct = g.pct || null;
     var favHome = pct ? pct.home >= pct.away : false;
-    grid.appendChild(tapCell(g, "1", g.win && g.win.home, "Home", favHome ? "fav" : ""));
-    grid.appendChild(tapCell(g, "2", g.win && g.win.away, "Away", (pct && !favHome) ? "fav" : ""));
+    grid.appendChild(tapCell(g, "1", g.win && g.win.home, "Home", favHome ? "fav" : "", pct && pct.home));
+    grid.appendChild(tapCell(g, "2", g.win && g.win.away, "Away", (pct && !favHome) ? "fav" : "", pct && pct.away));
     box.appendChild(grid);
 
     var cs = csBlock(g);
@@ -280,8 +294,6 @@
     document.getElementById("s-up").textContent = String(d.count || 0);
     document.getElementById("s-stored").textContent = String(d.stored || 0);
     document.getElementById("s-settled").textContent = String(d.settled || 0);
-    document.getElementById("note").textContent =
-      (d.stored || 0) + " matches banked · " + (d.settled || 0) + " with a result · odds and scores fill in as matches near the table.";
     render();
   }).catch(function (e) {
     document.getElementById("out").textContent = "";

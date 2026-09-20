@@ -1,14 +1,13 @@
-// Real table tennis off SportyBet (sr:sport:20 — TT Cup, TT Elite, Liga Pro…).
-// Its own table, its own pipeline; nothing here touches the football code.
-// Data-first: read the card, bank players + start + result, add odds/score as
-// matches settle. The rating model comes later, once the pile is deep enough.
+// Real table tennis off SportyBet (sr:sport:20). Own table, own pipeline.
+// Win% is Elo + H2H + recent form, shrunk toward the book only when the
+// pile is thin. Correct score % comes from the same match probability
+// (set-win model), not from 1/odd.
 import { sql } from "./_db.js";
 
 const BASE = "https://www.sportybet.com/api/ng/factsCenter";
 const SPORT = "sr:sport:20";
 const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36";
-// 1 = Winner, 238 = Correct Score (set score, best-of-5/7).
 const MARKET_IDS = "1,238";
 
 let ready = false;
@@ -51,7 +50,43 @@ function isUpcomingTT(status, start) {
   return true;
 }
 
-// Upcoming card, all TT tournaments, over GET.
+function nameKey(s) {
+  return String(s || "").trim().toUpperCase().replace(/\s+/g, " ");
+}
+
+function scoreKey(desc) {
+  const m = String(desc || "").match(/(\d+)\s*[:\-]\s*(\d+)/);
+  return m ? m[1] + ":" + m[2] : null;
+}
+
+function parseMarkets(ev, home, away) {
+  const win = {}, cs = {};
+  const markets = ev?.markets || ev?.playList || [];
+  for (const m of markets) {
+    const desc = String(m.desc || m.name || "").toLowerCase();
+    const outs = m.outcomes || m.ops || [];
+    const winner = desc === "winner" || desc === "match winner" || desc === "moneyline";
+    const correct = desc.includes("correct score") || desc.includes("set betting") || desc.includes("correct set");
+    if (winner) {
+      for (const o of outs) {
+        const p = parseFloat(o.odds);
+        if (!isFinite(p)) continue;
+        const d = String(o.desc || o.name || "");
+        const id = String(o.id || o.outcomeId || o.oid || "");
+        if (/^home$/i.test(d) || d === home || id === "1") win.Home = p;
+        else if (/^away$/i.test(d) || d === away || id === "2") win.Away = p;
+      }
+    } else if (correct) {
+      for (const o of outs) {
+        const p = parseFloat(o.odds);
+        const k = scoreKey(o.desc || o.name);
+        if (k && isFinite(p)) cs[k] = p;
+      }
+    }
+  }
+  return { win, cs };
+}
+
 export async function fetchTTCard() {
   const found = [];
   const seen = new Set();
@@ -83,49 +118,51 @@ export async function fetchTTCard() {
 }
 
 export function normalise(ev) {
+  const home = ev.homeTeamName || "?";
+  const away = ev.awayTeamName || "?";
+  const { win, cs } = parseMarkets(ev, home, away);
   return {
     id: String(ev.gameId),
     eventId: ev.eventId || null,
-    home: ev.homeTeamName || "?",
-    away: ev.awayTeamName || "?",
+    home, away,
     tourn: ev._tourn || (ev.sport?.category?.tournament?.name) || "",
     start: ev.estimateStartTime ? Number(ev.estimateStartTime) : null,
     status: ev.matchStatus || "",
+    win: (win.Home != null || win.Away != null) ? { home: win.Home, away: win.Away } : null,
+    cs: Object.keys(cs).length ? cs : null,
   };
 }
 
 export async function storeTT(games) {
   await ensureTT();
   if (!games.length) return 0;
-  const jobs = games.map((g) => sql`
-    INSERT INTO tt_games (match_id, event_id, home, away, tourn, start_at, status)
-    VALUES (${g.id}, ${g.eventId}, ${g.home}, ${g.away}, ${g.tourn}, ${g.start}, ${g.status})
-    ON CONFLICT (match_id) DO UPDATE SET
-      event_id = COALESCE(EXCLUDED.event_id, tt_games.event_id),
-      tourn = COALESCE(NULLIF(EXCLUDED.tourn, ''), tt_games.tourn),
-      start_at = COALESCE(EXCLUDED.start_at, tt_games.start_at),
-      status = EXCLUDED.status,
-      last_seen = now()`);
+  const jobs = games.map((g) => {
+    const cs = g.cs && Object.keys(g.cs).length ? JSON.stringify(g.cs) : null;
+    return sql`
+      INSERT INTO tt_games (
+        match_id, event_id, home, away, tourn, start_at, status,
+        win_home, win_away, cs_json
+      )
+      VALUES (
+        ${g.id}, ${g.eventId}, ${g.home}, ${g.away}, ${g.tourn}, ${g.start}, ${g.status},
+        ${g.win?.home ?? null}, ${g.win?.away ?? null}, ${cs}
+      )
+      ON CONFLICT (match_id) DO UPDATE SET
+        event_id = COALESCE(EXCLUDED.event_id, tt_games.event_id),
+        tourn = COALESCE(NULLIF(EXCLUDED.tourn, ''), tt_games.tourn),
+        start_at = COALESCE(EXCLUDED.start_at, tt_games.start_at),
+        status = EXCLUDED.status,
+        win_home = COALESCE(EXCLUDED.win_home, tt_games.win_home),
+        win_away = COALESCE(EXCLUDED.win_away, tt_games.win_away),
+        cs_json = COALESCE(EXCLUDED.cs_json, tt_games.cs_json),
+        last_seen = now()`;
+  });
   await Promise.all(jobs);
   return games.length;
 }
 
 function csFrom(markets) {
-  const win = {}, cs = {};
-  for (const m of markets || []) {
-    if (m.desc === "Winner") {
-      for (const o of m.outcomes || []) {
-        const p = parseFloat(o.odds);
-        if (isFinite(p)) win[o.desc] = p;
-      }
-    } else if (m.desc === "Correct Score") {
-      for (const o of m.outcomes || []) {
-        const p = parseFloat(o.odds);
-        if (isFinite(p)) cs[o.desc] = p;
-      }
-    }
-  }
-  return { win, cs };
+  return parseMarkets({ markets }, null, null);
 }
 
 function parseSet(s) {
@@ -134,36 +171,24 @@ function parseSet(s) {
   return { home: Number(m[1]), away: Number(m[2]) };
 }
 
-// Fetch the event to capture odds (pre-match) and the final set score (once ended).
 async function fetchEvent(eventId) {
   if (!eventId) return null;
-  // The event endpoint returns no markets for TT when marketId is set — ask for
-  // the whole event and pick Winner / Correct Score out of it.
   try { return await getJson("event", { eventId, productId: "3" }); }
   catch { return null; }
 }
 
-/** Bounded pass: fill missing odds on upcoming rows, and settle ended ones. */
-export async function enrichSettleTT(limit = 30) {
+export async function enrichSettleTT(limit = 80) {
   await ensureTT();
   const now = Date.now();
-  // Three kinds of row are worth a fetch:
-  //  - ended but not yet settled (get the final set score);
-  //  - upcoming and still missing the winner odds;
-  //  - upcoming, near enough that SportyBet has posted the correct-score market,
-  //    but we grabbed it before that market existed (cs_json still null).
-  // The correct-score market only appears close to start, so a row can have its
-  // winner odds and no scores for a while — those must stay due, not fall out.
-  const soon = now + 12 * 60 * 60 * 1000;
   const due = await sql`
-    SELECT match_id, event_id, start_at, r_status, win_home
+    SELECT match_id, event_id, start_at, r_status, win_home, cs_json
     FROM tt_games
     WHERE event_id IS NOT NULL
       AND start_at IS NOT NULL
       AND (
         (r_status IS NULL AND start_at < ${now - 90000})
         OR (win_home IS NULL AND start_at > ${now - 90000})
-        OR (cs_json IS NULL AND start_at > ${now - 90000} AND start_at < ${soon})
+        OR (cs_json IS NULL AND start_at > ${now - 90000})
       )
     ORDER BY start_at ASC
     LIMIT ${limit}`;
@@ -173,7 +198,7 @@ export async function enrichSettleTT(limit = 30) {
   for (let i = 0; i < due.length; i++) {
     const ev = evs[i];
     if (!ev) continue;
-    const { win, cs } = csFrom(ev.markets);
+    const { win, cs } = parseMarkets(ev, null, null);
     const status = ev.matchStatus || "";
     const ended = /^end/i.test(status);
     const score = ended ? parseSet(ev.setScore) : null;
@@ -193,14 +218,127 @@ export async function enrichSettleTT(limit = 30) {
   return { touched };
 }
 
-// De-vigged win chance from the two-way winner price (no draw in table tennis),
-// so the pair sums to 100%. Returns null when a side's price is missing.
-function winPct(hOdds, aOdds) {
+function winPctBook(hOdds, aOdds) {
   const h = Number(hOdds), a = Number(aOdds);
   if (!isFinite(h) || !isFinite(a) || h <= 0 || a <= 0) return null;
   const ih = 1 / h, ia = 1 / a, s = ih + ia;
   if (s <= 0) return null;
-  return { home: Math.round((ih / s) * 100), away: Math.round((ia / s) * 100) };
+  return { home: ih / s, away: ia / s };
+}
+
+function binom(n, k) {
+  if (k < 0 || k > n) return 0;
+  k = Math.min(k, n - k);
+  let r = 1;
+  for (let i = 1; i <= k; i++) r = r * (n - k + i) / i;
+  return r;
+}
+
+function pMatchFromSet(ps, need) {
+  const q = 1 - ps;
+  let s = 0;
+  for (let k = 0; k < need; k++) {
+    s += binom(need - 1 + k, k) * Math.pow(ps, need) * Math.pow(q, k);
+  }
+  return s;
+}
+
+function matchToSet(pMatch, need) {
+  let lo = 0.05, hi = 0.95;
+  for (let i = 0; i < 24; i++) {
+    const mid = (lo + hi) / 2;
+    if (pMatchFromSet(mid, need) < pMatch) lo = mid;
+    else hi = mid;
+  }
+  return (lo + hi) / 2;
+}
+
+function setScores(ps, need) {
+  const q = 1 - ps;
+  const out = {};
+  for (let k = 0; k < need; k++) {
+    out[need + ":" + k] = binom(need - 1 + k, k) * Math.pow(ps, need) * Math.pow(q, k);
+    out[k + ":" + need] = binom(need - 1 + k, k) * Math.pow(q, need) * Math.pow(ps, k);
+  }
+  return out;
+}
+
+function detectBO(cs) {
+  if (cs) {
+    for (const k of Object.keys(cs)) {
+      const [a, b] = k.split(":").map(Number);
+      if (a === 4 || b === 4) return 4;
+    }
+  }
+  return 3;
+}
+
+function recentRate(rec) {
+  if (!rec || rec.length < 3) return null;
+  const w = rec.filter((x) => x.won).length;
+  return (w + 2) / (rec.length + 4);
+}
+
+export function fitTT(games) {
+  const players = {};
+  const h2h = {};
+  const P = (name) => {
+    const k = nameKey(name);
+    return players[k] || (players[k] = { n: 0, w: 0, elo: 1500, last: 0, rec: [] });
+  };
+  const settled = (games || [])
+    .filter((g) => g.res && g.res.home != null && g.res.away != null)
+    .sort((a, b) => (a.start || 0) - (b.start || 0));
+  for (const g of settled) {
+    const hw = g.res.home > g.res.away;
+    const H = P(g.home), A = P(g.away);
+    const exp = 1 / (1 + 10 ** ((A.elo - H.elo) / 400));
+    const k = 20;
+    H.elo += k * ((hw ? 1 : 0) - exp);
+    A.elo += k * ((hw ? 0 : 1) - (1 - exp));
+    H.n++; A.n++;
+    if (hw) H.w++; else A.w++;
+    H.last = g.start || 0; A.last = g.start || 0;
+    H.rec.push({ t: g.start || 0, won: hw });
+    A.rec.push({ t: g.start || 0, won: !hw });
+    if (H.rec.length > 12) H.rec.shift();
+    if (A.rec.length > 12) A.rec.shift();
+    const hk = nameKey(g.home) + ">" + nameKey(g.away);
+    const row = h2h[hk] || (h2h[hk] = { n: 0, hw: 0 });
+    row.n++;
+    if (hw) row.hw++;
+  }
+  return { players, h2h };
+}
+
+export function forecastTT(pack, g) {
+  const H = pack.players[nameKey(g.home)] || { n: 0, elo: 1500, rec: [], last: 0 };
+  const A = pack.players[nameKey(g.away)] || { n: 0, elo: 1500, rec: [], last: 0 };
+  let p = 1 / (1 + 10 ** ((A.elo - H.elo) / 400));
+  const parts = [p];
+  const pair = pack.h2h[nameKey(g.home) + ">" + nameKey(g.away)];
+  if (pair && pair.n >= 2) parts.push((pair.hw + 1) / (pair.n + 2));
+  const rH = recentRate(H.rec), rA = recentRate(A.rec);
+  if (rH != null && rA != null && (rH + rA) > 0) parts.push(rH / (rH + rA));
+  p = parts.reduce((s, x) => s + x, 0) / parts.length;
+
+  if (g.start && H.last && g.start - H.last < 2 * 3600 * 1000) p -= 0.03;
+  if (g.start && A.last && g.start - A.last < 2 * 3600 * 1000) p += 0.03;
+
+  const n = H.n + A.n;
+  const book = g.win ? winPctBook(g.win.home, g.win.away) : null;
+  const w = n / (n + 12);
+  if (book) p = w * p + (1 - w) * book.home;
+  p = Math.min(0.92, Math.max(0.08, p));
+
+  const bo = detectBO(g.cs);
+  const pSet = matchToSet(p, bo);
+  const cs = setScores(pSet, bo);
+  return {
+    pHome: p, pAway: 1 - p,
+    nH: H.n, nA: A.n, h2h: pair ? pair.n : 0,
+    bo, cs,
+  };
 }
 
 function shape(r) {
@@ -213,11 +351,37 @@ function shape(r) {
     home: r.home, away: r.away, tourn: r.tourn || "",
     start, status: r.status || "",
     upcoming: isUpcomingTT(r.status, start),
-    win,
-    pct: win ? winPct(win.home, win.away) : null,
-    cs,
+    win, cs,
     res: r.r_home == null ? null : { home: r.r_home, away: r.r_away },
   };
+}
+
+async function loadSettledForFit() {
+  await ensureTT();
+  const rows = await sql`
+    SELECT home, away, start_at, r_home, r_away
+    FROM tt_games
+    WHERE r_home IS NOT NULL AND r_away IS NOT NULL
+    ORDER BY start_at ASC NULLS LAST
+    LIMIT 4000`;
+  return rows.map((r) => ({
+    home: r.home, away: r.away,
+    start: r.start_at ? Number(r.start_at) : 0,
+    res: { home: r.r_home, away: r.r_away },
+  }));
+}
+
+function attachForecast(games, pack) {
+  for (const g of games) {
+    const f = forecastTT(pack, g);
+    g.pct = { home: Math.round(f.pHome * 100), away: Math.round(f.pAway * 100) };
+    g.nH = f.nH; g.nA = f.nA; g.h2h = f.h2h;
+    const csPct = {};
+    for (const [k, p] of Object.entries(f.cs || {})) csPct[k] = Math.round(p * 100);
+    g.csPct = csPct;
+    g.bo = f.bo;
+  }
+  return games;
 }
 
 export async function listUpcomingTT(limit = 400) {
@@ -228,11 +392,11 @@ export async function listUpcomingTT(limit = 400) {
     WHERE start_at IS NULL OR start_at > ${cutoff}
     ORDER BY start_at ASC NULLS LAST
     LIMIT ${limit}`;
-  return rows.map(shape).filter((g) => g.upcoming);
+  const games = rows.map(shape).filter((g) => g.upcoming);
+  const pack = fitTT(await loadSettledForFit());
+  return attachForecast(games, pack);
 }
 
-// Matches that have already played, newest result first — so the page can show
-// "they have been playing" instead of only what's ahead.
 export async function listRecentResultsTT(limit = 60) {
   await ensureTT();
   const rows = await sql`
@@ -249,8 +413,7 @@ export async function countsTT() {
   const rows = await sql`
     SELECT
       COUNT(*) AS total,
-      COUNT(*) FILTER (WHERE r_status IS NOT NULL) AS settled,
-      COUNT(DISTINCT home) + COUNT(DISTINCT away) AS names
+      COUNT(*) FILTER (WHERE r_status IS NOT NULL) AS settled
     FROM tt_games`;
   const r = rows[0] || {};
   return { total: Number(r.total || 0), settled: Number(r.settled || 0) };
