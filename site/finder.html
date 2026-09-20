@@ -12,6 +12,14 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/css/app.css">
+<style>
+  .fx-rank { display: flex; align-items: center; gap: 10px; margin-bottom: 10px }
+  .fx-rank .idx { font-size: 13px; min-width: 26px; height: 26px }
+  .fx-lead { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px }
+  .fx-lead b { font: 700 20px/1 var(--mono); color: var(--go); letter-spacing: -.02em }
+  .fx-lead span { font-size: 13.5px; color: var(--ink); font-weight: 600 }
+  .fx-lead em { font-style: normal; color: var(--dim); font-size: 12.5px; font-family: var(--mono) }
+</style>
 </head>
 <body>
 <main class="wrap">
@@ -20,8 +28,10 @@
     <div class="stat"><b id="s-cs">—</b><span>Score form</span></div>
     <div class="stat" id="s-roi-tile"><b id="s-roi">—</b><span>Hold-out ROI</span></div>
   </div>
-  <h2 class="lab-h">Upcoming</h2>
+  <div class="chips" id="cut"></div>
+  <h2 class="lab-h" id="pickhead">Best leans</h2>
   <div id="out"><div class="skel"></div><div class="skel"></div></div>
+  <p class="note" id="note"></p>
 </main>
 <script src="/js/core.js"></script>
 <script>
@@ -106,8 +116,28 @@
     return box;
   }
 
-  function card(g) {
+  function headlineOf(g) {
+    var best = null;
+    (g.lines || []).forEach(function (l) {
+      if (l.p == null || !isFinite(l.p)) return;
+      if (!best || l.p > best.p) best = l;
+    });
+    return best;
+  }
+
+  function card(g, rank) {
     var box = V.el("article", "game finder-card");
+    var head = V.el("div", "fx-rank");
+    head.appendChild(V.el("span", "idx", String(rank)));
+    var hl = headlineOf(g);
+    if (hl) {
+      var lead = V.el("div", "fx-lead");
+      lead.appendChild(V.el("b", null, pct(hl.p)));
+      lead.appendChild(V.el("span", null, hl.label));
+      if (hl.price) lead.appendChild(V.el("em", null, "@ " + odds(hl.price)));
+      head.appendChild(lead);
+    }
+    box.appendChild(head);
     box.appendChild(meet(g));
 
     var csItems = [];
@@ -136,7 +166,50 @@
     return box;
   }
 
+  var LAST = null;
+  var CUTS = [0.70, 0.80, 0.85, 0.90];
+  var CUT = 0.80;
+  try { var savedCut = Number(localStorage.getItem("vfs_finder_cut")); if (CUTS.indexOf(savedCut) >= 0) CUT = savedCut; } catch (e) {}
+
+  function paintCuts() {
+    var box = document.getElementById("cut");
+    box.textContent = "";
+    CUTS.forEach(function (c) {
+      var b = V.el("button", "chip" + (CUT === c ? " on" : ""), (c * 100).toFixed(0) + "%+");
+      b.type = "button";
+      b.addEventListener("click", function () {
+        CUT = c;
+        try { localStorage.setItem("vfs_finder_cut", String(c)); } catch (e) {}
+        paintCuts(); render();
+      });
+      box.appendChild(b);
+    });
+  }
+
+  function render() {
+    var out = document.getElementById("out");
+    out.textContent = "";
+    var all = (LAST && LAST.picks) || [];
+    var kept = all.map(function (g) { return { g: g, h: headlineOf(g) }; })
+      .filter(function (x) { return x.h && x.h.p >= CUT; })
+      .sort(function (a, b) { return b.h.p - a.h.p; });
+
+    if (!all.length) {
+      out.appendChild(V.el("div", "empty", "No upcoming games to forecast yet."));
+    } else if (!kept.length) {
+      out.appendChild(V.el("div", "empty", "Nothing clears " + pct(CUT) + " on the card right now — lower the cut."));
+    } else {
+      kept.forEach(function (x, i) { out.appendChild(card(x.g, i + 1)); });
+    }
+    document.getElementById("pickhead").textContent = "Best leans — " + kept.length + " of " + all.length;
+    document.getElementById("note").textContent =
+      (LAST && LAST.nGames || 0) + " settled in memory · showing " + kept.length + " at " + pct(CUT) +
+      "+ · the model's read, not a promise. Tap a line to add it.";
+    V.tick();
+  }
+
   V.fetchFinder().then(function (d) {
+    LAST = d;
     var f = d.form || {};
     var h = d.holdout || {};
     document.getElementById("stats").hidden = false;
@@ -144,16 +217,8 @@
     document.getElementById("s-cs").textContent = form(f.cs || h.cs);
     document.getElementById("s-roi").textContent = h.n ? ((h.roi >= 0 ? "+" : "") + (h.roi * 100).toFixed(1) + "%") : "—";
     document.getElementById("s-roi-tile").className = "stat" + (h.roi > 0 ? " go" : h.roi < 0 ? " bad" : "");
-
-    var out = document.getElementById("out");
-    out.textContent = "";
-    var picks = d.picks || [];
-    if (!picks.length) {
-      out.appendChild(V.el("div", "empty", "No upcoming games to forecast yet."));
-    } else {
-      picks.forEach(function (g) { out.appendChild(card(g)); });
-    }
-    V.tick();
+    paintCuts();
+    render();
   }).catch(function (e) {
     document.getElementById("out").textContent = "";
     document.getElementById("out").appendChild(V.el("div", "empty", e.message));
