@@ -455,6 +455,7 @@ export async function listRecentResultsTT(limit = 60) {
     SELECT * FROM tt_games
     WHERE r_home IS NOT NULL AND r_away IS NOT NULL
       AND match_id NOT LIKE 'sofa:%'
+      AND match_id NOT LIKE 's24:%'
     ORDER BY COALESCE(settled_at, to_timestamp(start_at / 1000)) DESC NULLS LAST,
              start_at DESC NULLS LAST
     LIMIT ${limit}`;

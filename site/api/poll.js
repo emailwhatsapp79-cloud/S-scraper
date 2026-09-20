@@ -7,6 +7,7 @@ import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
 import { settleGames } from "./_results.js";
 import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT } from "./_tt.js";
 import { pullSofaHistory } from "./_sofa.js";
+import { pullScores24 } from "./_s24.js";
 
 export default async function handler(req, res) {
   cors(res);
@@ -43,12 +44,13 @@ export default async function handler(req, res) {
     const { events } = await fetchTTCard();
     const ttSaved = await storeTT(events.map(ttNormalise));
     const ttTouched = (await enrichSettleTT(80)).touched;
-    let sofa = null;
-    try {
-      const names = events.flatMap((ev) => [ev.homeTeamName, ev.awayTeamName].filter(Boolean));
-      sofa = await pullSofaHistory(names, { players: 8, pages: 5 });
-    } catch (e) { sofa = { error: String(e?.message || e) }; }
-    tt = { saved: ttSaved, touched: ttTouched, sofa };
+    const names = events.flatMap((ev) => [ev.homeTeamName, ev.awayTeamName].filter(Boolean));
+    let s24 = null, sofa = null;
+    try { s24 = await pullScores24(names, { pages: 3, first: 50, days: 14 }); }
+    catch (e) { s24 = { error: String(e?.message || e) }; }
+    try { sofa = await pullSofaHistory(names, { players: 4, pages: 5 }); }
+    catch (e) { sofa = { error: String(e?.message || e) }; }
+    tt = { saved: ttSaved, touched: ttTouched, s24, sofa };
   } catch (e) { tt = { error: String(e?.message || e) }; }
 
   res.setHeader("Cache-Control", "no-store");

@@ -299,10 +299,12 @@
     document.getElementById("s-up").textContent = String(d.count || 0);
     document.getElementById("s-settled").textContent = String(d.settled || 0);
     var sn = document.getElementById("sofa-note");
-    if (d.sofa && d.sofa.error) sn.textContent = "SofaScore: " + d.sofa.error;
-    else if (d.sofa && d.sofa.saved) sn.textContent = "SofaScore banked " + d.sofa.saved + " results this load.";
-    else if (d.sofa && d.sofa.players === 0) sn.textContent = "SofaScore: nothing new this load.";
-    else sn.textContent = "";
+    var bits = [];
+    if (d.s24 && d.s24.saved) bits.push("scores24 +" + d.s24.saved);
+    else if (d.s24 && d.s24.error) bits.push("scores24 " + d.s24.error);
+    if (d.sofa && d.sofa.saved) bits.push("SofaScore +" + d.sofa.saved);
+    else if (d.sofa && d.sofa.error) bits.push("SofaScore " + d.sofa.error);
+    sn.textContent = bits.join(" · ");
     render();
   }).catch(function (e) {
     document.getElementById("out").textContent = "";
