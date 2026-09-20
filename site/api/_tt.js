@@ -352,8 +352,8 @@ export function fitTT(games) {
     H.last = g.start || 0; A.last = g.start || 0;
     H.rec.push({ t: g.start || 0, won: hw, vs: nameKey(g.away) });
     A.rec.push({ t: g.start || 0, won: !hw, vs: nameKey(g.home) });
-    if (H.rec.length > 20) H.rec.shift();
-    if (A.rec.length > 20) A.rec.shift();
+    if (H.rec.length > 80) H.rec.shift();
+    if (A.rec.length > 80) A.rec.shift();
     const T = String(g.tourn || "").trim();
     if (T) {
       const ht = H.tourn[T] || (H.tourn[T] = { n: 0, w: 0 });
@@ -388,16 +388,26 @@ function shape(r) {
 async function loadSettledForFit() {
   await ensureTT();
   const rows = await sql`
-    SELECT home, away, tourn, start_at, r_home, r_away
+    SELECT match_id, home, away, tourn, start_at, r_home, r_away
     FROM tt_games
     WHERE r_home IS NOT NULL AND r_away IS NOT NULL
     ORDER BY start_at ASC NULLS LAST
-    LIMIT 4000`;
-  return rows.map((r) => ({
+    LIMIT 8000`;
+  const games = rows.map((r) => ({
+    id: r.match_id,
     home: r.home, away: r.away, tourn: r.tourn || "",
     start: r.start_at ? Number(r.start_at) : 0,
     res: { home: r.r_home, away: r.r_away },
   }));
+  const seen = new Map();
+  for (const g of games) {
+    const pair = [nameKey(g.home), nameKey(g.away)].sort().join("|");
+    const k = pair + "|" + Math.round((g.start || 0) / 900000);
+    const prev = seen.get(k);
+    if (!prev) seen.set(k, g);
+    else if (!String(g.id || "").startsWith("sofa:")) seen.set(k, g);
+  }
+  return [...seen.values()];
 }
 
 function attachForecast(games, pack) {
@@ -442,6 +452,7 @@ export async function listRecentResultsTT(limit = 60) {
   const rows = await sql`
     SELECT * FROM tt_games
     WHERE r_home IS NOT NULL AND r_away IS NOT NULL
+      AND match_id NOT LIKE 'sofa:%'
     ORDER BY COALESCE(settled_at, to_timestamp(start_at / 1000)) DESC NULLS LAST,
              start_at DESC NULLS LAST
     LIMIT ${limit}`;

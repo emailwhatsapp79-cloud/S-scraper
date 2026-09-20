@@ -6,6 +6,7 @@ import { refreshSlips } from "./_slips.js";
 import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
 import { settleGames } from "./_results.js";
 import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT } from "./_tt.js";
+import { pullSofaHistory } from "./_sofa.js";
 
 export default async function handler(req, res) {
   cors(res);
@@ -42,7 +43,12 @@ export default async function handler(req, res) {
     const { events } = await fetchTTCard();
     const ttSaved = await storeTT(events.map(ttNormalise));
     const ttTouched = (await enrichSettleTT(80)).touched;
-    tt = { saved: ttSaved, touched: ttTouched };
+    let sofa = null;
+    try {
+      const names = events.flatMap((ev) => [ev.homeTeamName, ev.awayTeamName].filter(Boolean));
+      sofa = await pullSofaHistory(names, { players: 8, pages: 5 });
+    } catch (e) { sofa = { error: String(e?.message || e) }; }
+    tt = { saved: ttSaved, touched: ttTouched, sofa };
   } catch (e) { tt = { error: String(e?.message || e) }; }
 
   res.setHeader("Cache-Control", "no-store");
