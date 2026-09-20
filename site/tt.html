@@ -184,21 +184,27 @@
     return box;
   }
 
-  function recLine(w, l, n) {
-    return w + "–" + l + " in " + n;
+  function lastNameOf(s) {
+    var t = String(s || "").trim();
+    if (t.indexOf(",") >= 0) return t.split(",")[0].trim();
+    var p = t.split(/\s+/);
+    return p[p.length - 1] || t;
   }
 
   function factsBlock(g) {
     var box = V.el("div", "tt-facts");
     var h = g.h2hRec;
+    var hn = lastNameOf(g.home), an = lastNameOf(g.away);
     if (h && h.n) {
-      box.appendChild(V.el("div", null, "H2H  " + h.home + "–" + h.away + "  (" + h.n + ")"));
+      box.appendChild(V.el("div", null,
+        "They've played " + h.n + " time" + (h.n === 1 ? "" : "s") + ". " +
+        hn + " won " + h.home + ", " + an + " won " + h.away + "."));
     } else {
-      box.appendChild(V.el("div", null, "H2H  no meetings in the pile yet"));
+      box.appendChild(V.el("div", null, "They haven't played each other in our history yet."));
     }
     var fh = g.formH, fa = g.formA;
-    if (fh) box.appendChild(V.el("div", null, g.home + " last " + fh.n + " vs field  " + recLine(fh.w, fh.l, fh.n)));
-    if (fa) box.appendChild(V.el("div", null, g.away + " last " + fa.n + " vs field  " + recLine(fa.w, fa.l, fa.n)));
+    if (fh) box.appendChild(V.el("div", null, hn + " has won " + fh.w + " of his last " + fh.n + " games."));
+    if (fa) box.appendChild(V.el("div", null, an + " has won " + fa.w + " of his last " + fa.n + " games."));
     return box;
   }
 

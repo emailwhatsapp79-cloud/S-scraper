@@ -314,14 +314,19 @@ export function forecastTT(pack, g) {
   const H = pack.players[nameKey(g.home)] || blank;
   const A = pack.players[nameKey(g.away)] || blank;
   const parts = [];
-  parts.push(1 / (1 + 10 ** ((A.elo - H.elo) / 400)));
+  parts.push({ p: 1 / (1 + 10 ** ((A.elo - H.elo) / 400)), w: 1 });
 
   const h2hRec = combinedH2H(pack.h2h || {}, g.home, g.away);
-  if (h2hRec.n >= 2) parts.push((h2hRec.home + 1) / (h2hRec.n + 2));
+  if (h2hRec.n >= 2) {
+    const hp = (h2hRec.home + 1) / (h2hRec.n + 2);
+    parts.push({ p: hp, w: 1 + Math.min(4, h2hRec.n / 1.5) });
+  }
 
   const formH = formVsField(H.rec, nameKey(g.away));
-  const formA = formVsField(A.rec, nameKey(g.home));
-  if (formH && formA && formH.p + formA.p > 0) parts.push(formH.p / (formH.p + formA.p));
+  const formA = formVsField(A.rec, nameKey(g.away) && nameKey(g.home));
+  if (formH && formA && formH.p + formA.p > 0) {
+    parts.push({ p: formH.p / (formH.p + formA.p), w: 0.6 });
+  }
 
   const T = String(g.tourn || "").trim();
   if (T) {
@@ -329,11 +334,12 @@ export function forecastTT(pack, g) {
     if (ht && at && ht.n >= 3 && at.n >= 3) {
       const ph = (ht.w + 1) / (ht.n + 2);
       const pa = (at.w + 1) / (at.n + 2);
-      if (ph + pa > 0) parts.push(ph / (ph + pa));
+      if (ph + pa > 0) parts.push({ p: ph / (ph + pa), w: 0.4 });
     }
   }
 
-  let p = parts.reduce((s, x) => s + x, 0) / parts.length;
+  const sw = parts.reduce((s, x) => s + x.w, 0);
+  let p = sw ? parts.reduce((s, x) => s + x.p * x.w, 0) / sw : 0.5;
   p += pack.ha || 0;
   if (g.start && H.last && g.start - H.last < 2 * 3600 * 1000) p -= 0.03;
   if (g.start && A.last && g.start - A.last < 2 * 3600 * 1000) p += 0.03;
