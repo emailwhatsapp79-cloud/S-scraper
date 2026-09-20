@@ -538,9 +538,6 @@
         '<div class="mark" aria-hidden="true"><svg viewBox="0 0 100 100" width="20" height="20" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M27 43 L45 67 L75 23"/></svg></div>' +
         '<div class="brand"><b>Vantage</b><span>SportyBet screener</span></div>' +
         extra +
-        '<a class="gear-btn" href="/tt" data-nav="tt" aria-label="Table tennis" title="Table tennis">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="9" r="6"/><path d="M6 13.2 3.4 19.6"/><circle cx="17.6" cy="15.4" r="1.3" fill="currentColor" stroke="none"/></svg>' +
-        '</a>' +
         '<a class="gear-btn" href="/ledger" data-nav="ledger" aria-label="History" title="History">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>' +
         '</a>' +
@@ -567,7 +564,10 @@
           "Betslip</a>" +
         '<a href="/lab" data-nav="lab">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6l-5 8a2 2 0 0 0 1.8 3h12.4a2 2 0 0 0 1.8-3l-5-8V3"/><path d="M8 3h8M8 13h8"/></svg>' +
-          "Lab</a>";
+          "Lab</a>" +
+        '<a href="/tt" data-nav="tt">' +
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="9" r="6"/><path d="M6 13.2 3.4 19.6"/><circle cx="17.6" cy="15.4" r="1.3" fill="currentColor" stroke="none"/></svg>' +
+          "TT</a>";
       document.body.appendChild(nav);
     }
     document.querySelectorAll(".nav a, .gear-btn").forEach(function (a) {

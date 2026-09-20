@@ -309,7 +309,7 @@ p { text-wrap: pretty }
 
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
-  display: grid; grid-template-columns: 1fr 1fr 72px 1fr;
+  display: grid; grid-template-columns: 1fr 1fr 72px 1fr 1fr;
   align-items: end;
   height: calc(var(--nav-h) + env(safe-area-inset-bottom));
   padding: 6px 4px env(safe-area-inset-bottom);
