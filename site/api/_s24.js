@@ -229,8 +229,83 @@ async function fromRapi(byLast, pages, first, days) {
   return { rows, errors };
 }
 
+function teamSlugs(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return [];
+  const slug = (s) => String(s).toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  let first = "", last = "";
+  if (raw.includes(",")) {
+    last = raw.split(",")[0].trim();
+    first = raw.split(",").slice(1).join(" ").trim();
+  } else {
+    const p = raw.split(/\s+/);
+    first = p[0] || "";
+    last = p.slice(1).join(" ");
+  }
+  const out = [];
+  if (first && last) {
+    out.push(slug(first) + "-" + slug(last));
+    out.push(slug(last) + "-" + slug(first));
+  } else if (raw) out.push(slug(raw));
+  return [...new Set(out.filter((s) => s.length > 3))];
+}
+
+async function fromPlayers(names, byLast, limit, pages) {
+  const uniq = [];
+  const seenN = new Set();
+  for (const n of names || []) {
+    const k = nameKey(n);
+    if (!k || seenN.has(k)) continue;
+    seenN.add(k);
+    uniq.push(n);
+    if (uniq.length >= limit) break;
+  }
+  const rows = [];
+  const seen = new Set();
+  let used = 0;
+  for (const name of uniq) {
+    for (const slug of teamSlugs(name)) {
+      let after = "", any = false;
+      try {
+        for (let p = 0; p < pages; p++) {
+          const data = await rapi("/teams/table-tennis/" + slug + "/matches", {
+            lang: "en", first: "20",
+            ...(after ? { after } : {}),
+          });
+          const edges = data?.data?.edges || [];
+          if (!edges.length) break;
+          any = true;
+          for (const e of edges) {
+            const n = e.node || {};
+            const tourn = n.unique_tournament?.name || n.uniqueTournament?.name || n.league_slug || "";
+            const row = rowFromNode(n, tourn, byLast);
+            if (!row || seen.has(row.id)) continue;
+            seen.add(row.id);
+            rows.push(row);
+          }
+          const info = data?.data?.pageInfo || {};
+          if (!info.hasNextPage || !info.endCursor) break;
+          after = info.endCursor;
+        }
+      } catch { /* try the other slug */ }
+      if (any) { used++; break; }
+    }
+  }
+  return { rows, used };
+}
+
 export async function pullScores24(names, opts = {}) {
   await ensure();
+  if (!names.length) {
+    const rows = await sql`
+      SELECT home, away FROM tt_games
+      WHERE start_at IS NULL OR start_at > ${Date.now() - 3600000}
+      ORDER BY start_at ASC NULLS LAST
+      LIMIT 80`;
+    names = rows.flatMap((r) => [r.home, r.away]);
+  }
   const byLast = byLastMap(names);
   const pages = opts.pages ?? 2;
   const first = opts.first ?? 50;
@@ -239,16 +314,18 @@ export async function pullScores24(names, opts = {}) {
   const all = [];
   const seen = new Set();
 
-  try {
-    const htmlRows = await fromHtml(byLast);
-    notes.push("html " + htmlRows.length);
-    for (const r of htmlRows) {
-      if (seen.has(r.id)) continue;
-      seen.add(r.id);
-      all.push(r);
+  if (!opts.skipHtml) {
+    try {
+      const htmlRows = await fromHtml(byLast);
+      notes.push("html " + htmlRows.length);
+      for (const r of htmlRows) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        all.push(r);
+      }
+    } catch (e) {
+      notes.push("html " + (e?.message || e));
     }
-  } catch (e) {
-    notes.push("html " + (e?.message || e));
   }
 
   if (all.length < 80 || opts.more) {
@@ -263,6 +340,21 @@ export async function pullScores24(names, opts = {}) {
       }
     } catch (e) {
       notes.push("rapi " + (e?.message || e));
+    }
+  }
+
+  const pLimit = opts.players ?? 0;
+  if (pLimit > 0) {
+    try {
+      const extra = await fromPlayers(names, byLast, pLimit, opts.playerPages ?? 4);
+      notes.push("players " + extra.used + "/" + extra.rows.length);
+      for (const r of extra.rows) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        all.push(r);
+      }
+    } catch (e) {
+      notes.push("players " + (e?.message || e));
     }
   }
 

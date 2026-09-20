@@ -8,7 +8,12 @@ export default async function handler(req, res) {
   if (guard(req, res)) return;
   const started = Date.now();
   let s24 = null;
-  try { s24 = await pullScores24([], { pages: 2, first: 50, days: 14, more: true }); }
+  try {
+    s24 = await pullScores24([], {
+      skipHtml: true, more: true, pages: 6, first: 50, days: 30,
+      players: 10, playerPages: 4,
+    });
+  }
   catch (e) { s24 = { error: String(e?.message || e) }; }
   let counts = { total: 0, settled: 0 };
   try { counts = await countsTT(); } catch { /* ignore */ }
