@@ -67,6 +67,7 @@
   .tt-res .rt time { display: block; font-family: var(--mono); font-size: 11.5px; color: var(--dim); margin-top: 3px }
 
   .seg { display: inline-flex; background: var(--card); box-shadow: var(--shadow); border-radius: 999px; padding: 3px; gap: 3px; margin-bottom: 12px }
+  .stats { grid-template-columns: 1fr 1fr }
   .seg button { border: 0; background: transparent; color: var(--dim); font: inherit; font-weight: 600; font-size: 13px; padding: 6px 14px; border-radius: 999px; cursor: pointer }
   .seg button.on { background: var(--bg); color: var(--ink) }
 </style>
@@ -74,9 +75,8 @@
 <body>
 <main class="wrap">
   <div class="stats">
-    <div class="stat"><b id="s-up">—</b><span>Upcoming</span></div>
-    <div class="stat"><b id="s-stored">—</b><span>Banked</span></div>
-    <div class="stat go"><b id="s-settled">—</b><span>Results in</span></div>
+    <div class="stat"><b id="s-up">—</b><span>On the card</span></div>
+    <div class="stat go"><b id="s-settled">—</b><span>Finished — trains %</span></div>
   </div>
   <div class="seg" id="seg">
     <button type="button" data-mode="up" class="on">Upcoming</button>
@@ -292,7 +292,6 @@
     if (!d.ok) throw new Error(d.error || "Could not read the table-tennis card");
     LAST = d;
     document.getElementById("s-up").textContent = String(d.count || 0);
-    document.getElementById("s-stored").textContent = String(d.stored || 0);
     document.getElementById("s-settled").textContent = String(d.settled || 0);
     render();
   }).catch(function (e) {

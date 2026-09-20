@@ -282,9 +282,10 @@ function recentRate(rec) {
 export function fitTT(games) {
   const players = {};
   const h2h = {};
+  let homeN = 0, homeW = 0;
   const P = (name) => {
     const k = nameKey(name);
-    return players[k] || (players[k] = { n: 0, w: 0, elo: 1500, last: 0, rec: [] });
+    return players[k] || (players[k] = { n: 0, w: 0, elo: 1500, last: 0, rec: [], tourn: {} });
   };
   const settled = (games || [])
     .filter((g) => g.res && g.res.home != null && g.res.away != null)
@@ -292,35 +293,57 @@ export function fitTT(games) {
   for (const g of settled) {
     const hw = g.res.home > g.res.away;
     const H = P(g.home), A = P(g.away);
+    const need = Math.max(g.res.home, g.res.away) || 3;
+    const margin = Math.abs(g.res.home - g.res.away) / need;
     const exp = 1 / (1 + 10 ** ((A.elo - H.elo) / 400));
-    const k = 20;
+    const k = 12 + 20 * margin;
     H.elo += k * ((hw ? 1 : 0) - exp);
     A.elo += k * ((hw ? 0 : 1) - (1 - exp));
     H.n++; A.n++;
     if (hw) H.w++; else A.w++;
+    homeN++; if (hw) homeW++;
     H.last = g.start || 0; A.last = g.start || 0;
     H.rec.push({ t: g.start || 0, won: hw });
     A.rec.push({ t: g.start || 0, won: !hw });
     if (H.rec.length > 12) H.rec.shift();
     if (A.rec.length > 12) A.rec.shift();
+    const T = String(g.tourn || "").trim();
+    if (T) {
+      const ht = H.tourn[T] || (H.tourn[T] = { n: 0, w: 0 });
+      const at = A.tourn[T] || (A.tourn[T] = { n: 0, w: 0 });
+      ht.n++; at.n++;
+      if (hw) ht.w++; else at.w++;
+    }
     const hk = nameKey(g.home) + ">" + nameKey(g.away);
     const row = h2h[hk] || (h2h[hk] = { n: 0, hw: 0 });
     row.n++;
     if (hw) row.hw++;
   }
-  return { players, h2h };
+  const ha = homeN >= 30 ? Math.min(0.08, Math.max(-0.08, homeW / homeN - 0.5)) : 0;
+  return { players, h2h, ha, homeN };
 }
 
 export function forecastTT(pack, g) {
-  const H = pack.players[nameKey(g.home)] || { n: 0, elo: 1500, rec: [], last: 0 };
-  const A = pack.players[nameKey(g.away)] || { n: 0, elo: 1500, rec: [], last: 0 };
+  const blank = { n: 0, elo: 1500, rec: [], last: 0, tourn: {} };
+  const H = pack.players[nameKey(g.home)] || blank;
+  const A = pack.players[nameKey(g.away)] || blank;
   let p = 1 / (1 + 10 ** ((A.elo - H.elo) / 400));
   const parts = [p];
   const pair = pack.h2h[nameKey(g.home) + ">" + nameKey(g.away)];
   if (pair && pair.n >= 2) parts.push((pair.hw + 1) / (pair.n + 2));
   const rH = recentRate(H.rec), rA = recentRate(A.rec);
   if (rH != null && rA != null && (rH + rA) > 0) parts.push(rH / (rH + rA));
+  const T = String(g.tourn || "").trim();
+  if (T) {
+    const ht = H.tourn[T], at = A.tourn[T];
+    if (ht && at && ht.n >= 3 && at.n >= 3) {
+      const ph = (ht.w + 1) / (ht.n + 2);
+      const pa = (at.w + 1) / (at.n + 2);
+      if (ph + pa > 0) parts.push(ph / (ph + pa));
+    }
+  }
   p = parts.reduce((s, x) => s + x, 0) / parts.length;
+  p += pack.ha || 0;
 
   if (g.start && H.last && g.start - H.last < 2 * 3600 * 1000) p -= 0.03;
   if (g.start && A.last && g.start - A.last < 2 * 3600 * 1000) p += 0.03;
@@ -337,6 +360,7 @@ export function forecastTT(pack, g) {
   return {
     pHome: p, pAway: 1 - p,
     nH: H.n, nA: A.n, h2h: pair ? pair.n : 0,
+    ha: pack.ha || 0,
     bo, cs,
   };
 }
@@ -359,13 +383,13 @@ function shape(r) {
 async function loadSettledForFit() {
   await ensureTT();
   const rows = await sql`
-    SELECT home, away, start_at, r_home, r_away
+    SELECT home, away, tourn, start_at, r_home, r_away
     FROM tt_games
     WHERE r_home IS NOT NULL AND r_away IS NOT NULL
     ORDER BY start_at ASC NULLS LAST
     LIMIT 4000`;
   return rows.map((r) => ({
-    home: r.home, away: r.away,
+    home: r.home, away: r.away, tourn: r.tourn || "",
     start: r.start_at ? Number(r.start_at) : 0,
     res: { home: r.r_home, away: r.r_away },
   }));
