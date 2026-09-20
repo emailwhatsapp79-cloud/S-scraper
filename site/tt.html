@@ -293,6 +293,12 @@
     render();
   });
 
+  function readJson(r) {
+    return r.text().then(function (t) {
+      try { return JSON.parse(t); } catch { return { ok: false, error: "fill timeout" }; }
+    });
+  }
+
   function apply(d) {
     LAST = d;
     document.getElementById("s-up").textContent = String(d.count || 0);
@@ -300,25 +306,25 @@
     render();
   }
 
-  fetch("/api/tt").then(function (r) { return r.json(); }).then(function (d) {
-    if (!d.ok) throw new Error(d.error || "Could not read the table-tennis card");
-    apply(d);
-    document.getElementById("sofa-note").textContent =
-      (d.settled && d.settled > 50) ? "Refreshing history…" : "Banking finished games…";
-    return fetch("/api/tt-fill").then(function (r) { return r.json(); });
-  }).then(function (f) {
-    if (!f) return;
+  function fillPass(left) {
     var sn = document.getElementById("sofa-note");
-    if (f.s24 && f.s24.saved) sn.textContent = "Banked " + f.s24.saved + " finished games";
-    else if (f.s24 && f.s24.note && /403/.test(f.s24.note)) sn.textContent = "Outside sites blocked this server. Training on SportyBet results only (" + (f.settled || 0) + ").";
-    else if (f.s24 && (f.s24.error || f.s24.note)) sn.textContent = "Could not bank extra history this load.";
-    else sn.textContent = "No new finished games this load.";
-    if (f.s24 && f.s24.saved) {
-      return fetch("/api/tt").then(function (r) { return r.json(); }).then(function (d) {
+    sn.textContent = "Refreshing history… " + (document.getElementById("s-settled").textContent || "");
+    return fetch("/api/tt-fill").then(readJson).then(function (f) {
+      if (f && f.settled) document.getElementById("s-settled").textContent = String(f.settled);
+      if (f && (f.hasMore || f.error === "fill timeout") && left > 1) return fillPass(left - 1);
+      sn.textContent = "History " + (f && f.settled ? f.settled : "") + " finished games";
+      return fetch("/api/tt").then(readJson).then(function (d) {
         if (d && d.ok) apply(d);
       });
-    }
+    });
+  }
+
+  fetch("/api/tt").then(readJson).then(function (d) {
+    if (!d.ok) throw new Error(d.error || "Could not read the table-tennis card");
+    apply(d);
+    return fillPass(20);
   }).catch(function (e) {
+    if (LAST) return;
     document.getElementById("out").textContent = "";
     document.getElementById("out").appendChild(V.el("div", "empty", e.message));
   });

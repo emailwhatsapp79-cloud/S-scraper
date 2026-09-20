@@ -200,9 +200,18 @@ async function fromRapi(byLast, pages, first, days) {
   const rows = [];
   const seen = new Set();
   const errors = [];
+  let hasMore = false;
+  await sql`CREATE TABLE IF NOT EXISTS tt_s24_state (
+    k TEXT PRIMARY KEY,
+    cursor TEXT,
+    updated TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
   for (const slug of LEAGUES) {
     let after = "";
     try {
+      const st = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${slug}`;
+      after = (st[0] && st[0].cursor) || "";
+      if (after === "DONE") continue;
       for (let p = 0; p < pages; p++) {
         const data = await rapi("/leagues/table-tennis/" + slug + "/matches", {
           lang: "en", first: String(first), status: "ended",
@@ -211,7 +220,11 @@ async function fromRapi(byLast, pages, first, days) {
           ...(after ? { after } : {}),
         });
         const edges = data?.data?.edges || [];
-        if (!edges.length) break;
+        if (!edges.length) {
+          await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
+            ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
+          break;
+        }
         for (const e of edges) {
           const row = rowFromNode(e.node, slug, byLast);
           if (!row || seen.has(row.id)) continue;
@@ -219,14 +232,24 @@ async function fromRapi(byLast, pages, first, days) {
           rows.push(row);
         }
         const info = data?.data?.pageInfo || {};
-        if (!info.hasNextPage || !info.endCursor) break;
+        if (!info.hasNextPage || !info.endCursor) {
+          await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
+            ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
+          after = "DONE";
+          break;
+        }
         after = info.endCursor;
+        await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${after})
+          ON CONFLICT (k) DO UPDATE SET cursor = ${after}, updated = now()`;
+        hasMore = true;
       }
+      if (after && after !== "DONE") hasMore = true;
     } catch (e) {
       errors.push(slug + ": " + (e?.message || e));
+      hasMore = true;
     }
   }
-  return { rows, errors };
+  return { rows, errors, hasMore };
 }
 
 function teamSlugs(name) {
@@ -313,6 +336,7 @@ export async function pullScores24(names, opts = {}) {
   const notes = [];
   const all = [];
   const seen = new Set();
+  let hasMore = false;
 
   if (!opts.skipHtml) {
     try {
@@ -331,7 +355,8 @@ export async function pullScores24(names, opts = {}) {
   if (all.length < 80 || opts.more) {
     try {
       const extra = await fromRapi(byLast, pages, first, days);
-      notes.push("rapi " + extra.rows.length);
+      notes.push("rapi " + extra.rows.length + (extra.hasMore ? " more…" : " done"));
+      if (extra.hasMore) hasMore = true;
       if (extra.errors.length) notes.push(extra.errors.join("; "));
       for (const r of extra.rows) {
         if (seen.has(r.id)) continue;
@@ -359,5 +384,5 @@ export async function pullScores24(names, opts = {}) {
   }
 
   const saved = all.length ? await bulkInsert(all) : 0;
-  return { saved, seen: all.length, note: notes.join(" · ") };
+  return { saved, seen: all.length, note: notes.join(" · "), hasMore };
 }

@@ -50,14 +50,26 @@ function isUpcomingTT(status, start) {
   return true;
 }
 
+function foldToken(t) {
+  return t
+    .replace(/SKYI$/g, "SKI")
+    .replace(/SKIY$/g, "SKI")
+    .replace(/SKII$/g, "SKI")
+    .replace(/SKYJ$/g, "SKI")
+    .replace(/YI$/g, "I")
+    .replace(/IY$/g, "I");
+}
+
 function nameKey(s) {
-  // "Vorsulyak, Yaroslav" and "Yaroslav Vorsulyak" must be the same person.
+  // "Vorsulyak, Yaroslav" == "Yaroslav Vorsulyak"
+  // "Moshovskyi" == "Moshovskiy"
   return String(s || "")
     .toUpperCase()
     .replace(/[^A-Z]+/g, " ")
     .trim()
     .split(/\s+/)
     .filter(Boolean)
+    .map(foldToken)
     .sort()
     .join("|");
 }
