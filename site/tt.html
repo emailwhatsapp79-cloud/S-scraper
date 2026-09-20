@@ -213,13 +213,20 @@
     row("Played", comma(nH), comma(nA), nH > nA, nA > nH);
     if (h.n) row("Head to head", String(h.home), String(h.away), h.home > h.away, h.away > h.home);
     else row("Head to head", "—", "—");
+    if (h.n && (h.setsH || h.setsA)) {
+      row("H2H sets", String(h.setsH || 0), String(h.setsA || 0), h.setsH > h.setsA, h.setsA > h.setsH);
+    }
     row(
-      "Last 20",
+      "Last 50",
       fh ? fh.w + "W · " + fh.l + "L" : "—",
       fa ? fa.w + "W · " + fa.l + "L" : "—",
       fh && fa && fh.w > fa.w,
       fh && fa && fa.w > fh.w
     );
+    if (fh && fa && (fh.sw || fa.sw)) {
+      row("Sets", fh.sw + "–" + fh.sl, fa.sw + "–" + fa.sl, fh.sw - fh.sl > fa.sw - fa.sl, fa.sw - fa.sl > fh.sw - fh.sl);
+      row("3–0 wins", String(fh.straight || 0), String(fa.straight || 0), fh.straight > fa.straight, fa.straight > fh.straight);
+    }
     t.appendChild(body);
     return t;
   }

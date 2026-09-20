@@ -294,19 +294,33 @@ function detectBO(cs) {
 }
 
 function formVsField(rec, excludeKey) {
-  const list = (rec || []).filter((x) => x.vs !== excludeKey).slice(-20);
+  const list = (rec || []).filter((x) => x.vs !== excludeKey).slice(-50);
   if (list.length < 3) return null;
   const w = list.filter((x) => x.won).length;
-  return { n: list.length, w, l: list.length - w, p: (w + 2) / (list.length + 4) };
+  let sw = 0, sl = 0, straight = 0, close = 0;
+  for (const x of list) {
+    const a = Number(x.sw), b = Number(x.sl);
+    if (isFinite(a) && isFinite(b)) {
+      sw += a; sl += b;
+      if (x.won && b === 0) straight++;
+      if (x.won && b > 0 && a - b === 1) close++;
+    }
+  }
+  const p = sw + sl >= 4
+    ? (sw + 2) / (sw + sl + 4)
+    : (w + 2) / (list.length + 4);
+  return { n: list.length, w, l: list.length - w, sw, sl, straight, close, p };
 }
 
 function combinedH2H(h2h, home, away) {
   const a = nameKey(home), b = nameKey(away);
-  const ab = h2h[a + ">" + b] || { n: 0, hw: 0 };
-  const ba = h2h[b + ">" + a] || { n: 0, hw: 0 };
+  const ab = h2h[a + ">" + b] || { n: 0, hw: 0, hs: 0, as: 0 };
+  const ba = h2h[b + ">" + a] || { n: 0, hw: 0, hs: 0, as: 0 };
   const n = ab.n + ba.n;
   const homeWins = ab.hw + (ba.n - ba.hw);
-  return { n, home: homeWins, away: n - homeWins };
+  const setsH = (ab.hs || 0) + (ba.as || 0);
+  const setsA = (ab.as || 0) + (ba.hs || 0);
+  return { n, home: homeWins, away: n - homeWins, setsH, setsA };
 }
 
 export function forecastTT(pack, g) {
@@ -318,12 +332,15 @@ export function forecastTT(pack, g) {
 
   const h2hRec = combinedH2H(pack.h2h || {}, g.home, g.away);
   if (h2hRec.n >= 2) {
-    const hp = (h2hRec.home + 1) / (h2hRec.n + 2);
-    parts.push({ p: hp, w: 1 + Math.min(4, h2hRec.n / 1.5) });
+    const sets = (h2hRec.setsH || 0) + (h2hRec.setsA || 0);
+    const hp = sets >= 4
+      ? (h2hRec.setsH + 1) / (sets + 2)
+      : (h2hRec.home + 1) / (h2hRec.n + 2);
+    parts.push({ p: hp, w: 1 + Math.min(4, (sets || h2hRec.n) / 3) });
   }
 
   const formH = formVsField(H.rec, nameKey(g.away));
-  const formA = formVsField(A.rec, nameKey(g.away) && nameKey(g.home));
+  const formA = formVsField(A.rec, nameKey(g.home));
   if (formH && formA && formH.p + formA.p > 0) {
     parts.push({ p: formH.p / (formH.p + formA.p), w: 0.6 });
   }
@@ -376,8 +393,8 @@ export function fitTT(games) {
     if (hw) H.w++; else A.w++;
     homeN++; if (hw) homeW++;
     H.last = g.start || 0; A.last = g.start || 0;
-    H.rec.push({ t: g.start || 0, won: hw, vs: nameKey(g.away) });
-    A.rec.push({ t: g.start || 0, won: !hw, vs: nameKey(g.home) });
+    H.rec.push({ t: g.start || 0, won: hw, vs: nameKey(g.away), sw: g.res.home, sl: g.res.away });
+    A.rec.push({ t: g.start || 0, won: !hw, vs: nameKey(g.home), sw: g.res.away, sl: g.res.home });
     if (H.rec.length > 80) H.rec.shift();
     if (A.rec.length > 80) A.rec.shift();
     const T = String(g.tourn || "").trim();
@@ -388,9 +405,11 @@ export function fitTT(games) {
       if (hw) ht.w++; else at.w++;
     }
     const hk = nameKey(g.home) + ">" + nameKey(g.away);
-    const row = h2h[hk] || (h2h[hk] = { n: 0, hw: 0 });
+    const row = h2h[hk] || (h2h[hk] = { n: 0, hw: 0, hs: 0, as: 0 });
     row.n++;
     if (hw) row.hw++;
+    row.hs += Number(g.res.home) || 0;
+    row.as += Number(g.res.away) || 0;
   }
   const ha = homeN >= 30 ? Math.min(0.08, Math.max(-0.08, homeW / homeN - 0.5)) : 0;
   return { players, h2h, ha, homeN };
