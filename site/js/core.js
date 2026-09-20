@@ -855,7 +855,7 @@
       sel.appendChild(el("span", "pick", l.label));
       sel.appendChild(document.createTextNode(" @ " + Number(l.price).toFixed(2)));
       left.appendChild(sel);
-      if (st !== "ended" && l.livePrice != null && isFinite(l.livePrice)) {
+      if (st === "live" && l.livePrice != null && isFinite(l.livePrice)) {
         var live = el("div", "live-odds");
         live.appendChild(el("span", "lo-l", "Live odds"));
         var px = Number(l.livePrice);

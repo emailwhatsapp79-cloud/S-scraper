@@ -263,7 +263,9 @@ export async function refreshSlips() {
     if (!snap) continue;
     const won = snap.ended ? dcHit(leg.selection, snap.ftHome, snap.ftAway) : null;
     const wonText = won == null ? null : (won ? "yes" : "no");
-    const livePrice = snap.prices && isFinite(snap.prices[leg.selection])
+    // Only record a genuine in-play price — never the prematch echo of a game
+    // that hasn't kicked off, so "Live odds" means what it says.
+    const livePrice = snap.live && snap.prices && isFinite(snap.prices[leg.selection])
       ? snap.prices[leg.selection]
       : null;
     await sql`
