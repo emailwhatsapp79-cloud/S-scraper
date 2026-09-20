@@ -500,8 +500,8 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
   padding: 2px 6px;
 }
 .live-odds .lo-n { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.live-odds .lo-n.dn, .live-odds .lo-a.dn { color: var(--bad); }
-.live-odds .lo-n.up, .live-odds .lo-a.up { color: var(--go); }
+.live-odds .lo-n.dn, .live-odds .lo-a.dn { color: var(--go); }
+.live-odds .lo-n.up, .live-odds .lo-a.up { color: var(--bad); }
 .live-odds .lo-a { font-size: 13px; line-height: 1; }
 .leg .yes, .leg .no { justify-self: center; text-align: center; font-weight: 700 }
 .leg .yes { color: var(--go) }
