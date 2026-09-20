@@ -193,32 +193,51 @@ async function rapi(path, query) {
   return r.json();
 }
 
+async function endedPage(slug, first, from, to, after) {
+  return rapi("/leagues/table-tennis/" + slug + "/matches", {
+    lang: "en", first: String(first), status: "ended",
+    "date_between[]": [from, to],
+    with_statistics: "false", audience: "en",
+    ...(after ? { after } : {}),
+  });
+}
+
+function takeRows(edges, slug, byLast, rows) {
+  for (const e of edges || []) {
+    const row = rowFromNode(e.node, slug, byLast);
+    if (row) rows.push(row);
+  }
+}
+
 async function pullLeague(slug, byLast, pages, first, from, to) {
   const rows = [];
   const errors = [];
   let hasMore = false;
-  let after = "";
   try {
+    // Always grab the newest ended page so games that just finished land now,
+    // even while the cursor is walking months backward.
+    const latest = await endedPage(slug, first, from, to, "");
+    takeRows(latest?.data?.edges, slug, byLast, rows);
+    const latestInfo = latest?.data?.pageInfo || {};
+
     const st = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${slug}`;
-    after = (st[0] && st[0].cursor) || "";
+    let after = (st[0] && st[0].cursor) || "";
     if (after === "DONE") return { rows, errors, hasMore: false };
+    if (!after) after = latestInfo.endCursor || "";
+    if (!after) {
+      await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
+        ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
+      return { rows, errors, hasMore: false };
+    }
     for (let p = 0; p < pages; p++) {
-      const data = await rapi("/leagues/table-tennis/" + slug + "/matches", {
-        lang: "en", first: String(first), status: "ended",
-        "date_between[]": [from, to],
-        with_statistics: "false", audience: "en",
-        ...(after ? { after } : {}),
-      });
+      const data = await endedPage(slug, first, from, to, after);
       const edges = data?.data?.edges || [];
       if (!edges.length) {
         await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
           ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
         break;
       }
-      for (const e of edges) {
-        const row = rowFromNode(e.node, slug, byLast);
-        if (row) rows.push(row);
-      }
+      takeRows(edges, slug, byLast, rows);
       const info = data?.data?.pageInfo || {};
       if (!info.hasNextPage || !info.endCursor) {
         await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
