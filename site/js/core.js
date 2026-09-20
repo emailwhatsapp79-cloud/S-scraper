@@ -642,27 +642,31 @@
   }
 
   function enrollBio() {
-    if (!window.PublicKeyCredential) return Promise.resolve();
+    if (!window.PublicKeyCredential) {
+      return Promise.reject(new Error("This browser cannot save a fingerprint"));
+    }
     return PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function (ok) {
-      if (!ok) return;
+      if (!ok) throw new Error("This phone has no fingerprint / Face ID for the browser");
       return fetch("/api/gate", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ bio: "register-options" })
-      }).then(function (r) { return r.json(); }).then(function (d) {
-        if (!d.ok || !d.options) return;
-        return navigator.credentials.create({ publicKey: creationOpts(d.options) });
-      }).then(function (cred) {
-        if (!cred) return;
-        return fetch("/api/gate", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ bio: "register", cred: credJSON(cred) })
-        }).then(function (r) { return r.json(); }).then(function (d) {
-          if (d && d.bio) try { localStorage.setItem("vfs-bio", "1"); } catch (e) {}
-        });
       });
-    }).catch(function () {});
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok || !d.options) throw new Error(d.error || "Could not start fingerprint");
+      return navigator.credentials.create({ publicKey: creationOpts(d.options) });
+    }).then(function (cred) {
+      if (!cred) throw new Error("Cancelled");
+      return fetch("/api/gate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ bio: "register", cred: credJSON(cred) })
+      }).then(function (r) { return r.json(); });
+    }).then(function (d) {
+      if (!d || !d.bio) throw new Error((d && d.error) || "Fingerprint was not saved");
+      try { localStorage.setItem("vfs-bio", "1"); } catch (e) {}
+      return d;
+    });
   }
 
   function unlockBio() {
@@ -703,8 +707,7 @@
       '<div class="gate-box">' +
         '<div class="mark" aria-hidden="true"><svg viewBox="0 0 100 100" width="26" height="26" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M27 43 L45 67 L75 23"/></svg></div>' +
         '<b>Vantage</b>' +
-        '<p>Fingerprint or your six-digit code. Locks again in 30 minutes.</p>' +
-        '<button class="bio" type="button" id="gate-bio" hidden>Use fingerprint</button>' +
+        '<p>Enter your code</p>' +
         '<div class="dots" id="gate-dots"></div>' +
         '<p class="err" id="gate-err" hidden></p>' +
         '<div class="pad" id="gate-pad"></div>' +
@@ -737,34 +740,54 @@
         body: JSON.stringify({ pin: pin })
       }).then(function (r) { return r.json(); }).then(function (d) {
         if (!d.open) return fail("Wrong code");
-        enrollBio().then(function () { opened(d); });
+        opened(d);
       }).catch(function () { fail("Could not reach the lock"); });
     }
     var pad = document.getElementById("gate-pad");
-    ["1","2","3","4","5","6","7","8","9","","0","⌫"].forEach(function (ch) {
-      var b = el("button", "key" + (ch === "" ? " ghost" : ""), ch === "⌫" ? "⌫" : ch);
-      b.type = "button";
-      if (!ch) { b.disabled = true; b.textContent = ""; }
-      else b.addEventListener("click", function () { press(ch); });
-      pad.appendChild(b);
-    });
-    paintDots();
-    var bioBtn = document.getElementById("gate-bio");
+    var FP =
+      '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4"/>' +
+        '<path d="M14 13.12c0 2.38 0 6.38-1 8.88"/>' +
+        '<path d="M17.29 21.02c.12-.6.43-2.3.5-3.02"/>' +
+        '<path d="M2 12a10 10 0 0 1 18-6"/>' +
+        '<path d="M2 16h.01"/>' +
+        '<path d="M21.8 16c.2-2 .131-5.354 0-6"/>' +
+        '<path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2"/>' +
+        '<path d="M8.65 22c.21-.66.45-1.32.57-2"/>' +
+        '<path d="M9 6.8a6 6 0 0 1 9 5.2v2"/>' +
+      "</svg>";
     function runBio() {
       document.getElementById("gate-err").hidden = true;
       unlockBio().then(opened).catch(function (err) {
-        fail(err && err.message ? err.message : "Use your code");
+        if (!err || err.name === "NotAllowedError") return;
+        var msg = String(err.message || "");
+        if (/cancel|not set|expired|abort/i.test(msg)) return;
+        fail("Try the code");
       });
     }
-    var canBio = window.PublicKeyCredential;
-    try { if (localStorage.getItem("vfs-bio") === "1") canBio = canBio && true; } catch (e) {}
-    if (bioBtn && window.PublicKeyCredential) {
-      bioBtn.hidden = false;
-      bioBtn.addEventListener("click", runBio);
-      fetch("/api/gate").then(function (r) { return r.json(); }).then(function (d) {
-        if (d.bio) runBio();
-      }).catch(function () {});
-    }
+    ["1","2","3","4","5","6","7","8","9","fp","0","⌫"].forEach(function (ch) {
+      var b = el("button", "key" + (ch === "fp" ? " fp" : ch === "" ? " ghost" : ""));
+      b.type = "button";
+      if (ch === "fp") {
+        b.innerHTML = FP;
+        b.setAttribute("aria-label", "Fingerprint");
+        b.disabled = true;
+        b.addEventListener("click", runBio);
+      } else if (ch === "⌫") {
+        b.textContent = "⌫";
+        b.addEventListener("click", function () { press(ch); });
+      } else {
+        b.textContent = ch;
+        b.addEventListener("click", function () { press(ch); });
+      }
+      pad.appendChild(b);
+    });
+    paintDots();
+    fetch("/api/gate").then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.bio) return;
+      var fp = pad.querySelector(".key.fp");
+      if (fp) fp.disabled = false;
+    }).catch(function () {});
   }
 
   function gateCheck() {
@@ -1155,7 +1178,7 @@
     leagueKey: leagueKey, teamsBlock: teamsBlock, crest: crest,
     fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips, fetchPicks: fetchPicks,
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
-    injectChrome: injectChrome, paintSlip: paintSlip,
+    injectChrome: injectChrome, paintSlip: paintSlip, enrollBio: enrollBio,
     naira: naira, wilson: wilson, legStats: legStats, slipCard: slipCard,
     pickCard: pickCard, pickStats: pickStats,
     dcWon: dcWon, zFor: zFor, analyse: analyse, fetchAnalytics: fetchAnalytics

@@ -49,7 +49,7 @@
   <p class="note" id="ping-note"></p>
 
   <h2 style="font-size:16px;margin:28px 0 8px">Profile</h2>
-  <p class="lede" style="margin-bottom:8px">Change the lock code. Six digits. Current one first, then the new one twice. After you unlock with the code, the phone will offer fingerprint — then you can open Vantage with Face ID / fingerprint. It locks itself every 30 minutes.</p>
+  <p class="lede" style="margin-bottom:8px">Change the lock code. Six digits. Current one first, then the new one twice. The site locks itself every 30 minutes.</p>
   <div class="knobs pin-form">
     <label for="pin-old">Current code</label>
     <input id="pin-old" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">
@@ -60,6 +60,11 @@
   </div>
   <button class="primary" id="pin-save" type="button">Save new code</button>
   <p class="note" id="pin-note"></p>
+
+  <h2 style="font-size:16px;margin:28px 0 8px">Fingerprint</h2>
+  <p class="lede" style="margin-bottom:8px">Set it here, while you are already in. After that the empty key under 1–4–7 on the lock is a fingerprint. The code still works.</p>
+  <button class="ghost" id="bio-save" type="button">Add fingerprint</button>
+  <p class="note" id="bio-note"></p>
 </main>
 <script src="/js/core.js"></script>
 <script>
@@ -136,6 +141,28 @@
       note.textContent = "Code changed. Next lock uses the new one.";
     }).catch(function (e) {
       note.textContent = e.message;
+    }).then(function () { btn.disabled = false; });
+  });
+
+  fetch("/api/gate").then(function (r) { return r.json(); }).then(function (d) {
+    if (d.bio) {
+      document.getElementById("bio-save").textContent = "Fingerprint on";
+      document.getElementById("bio-save").classList.add("on");
+      document.getElementById("bio-note").textContent = "Lock screen: tap the print under 1 · 4 · 7.";
+    }
+  }).catch(function () {});
+
+  document.getElementById("bio-save").addEventListener("click", function () {
+    var note = document.getElementById("bio-note");
+    var btn = document.getElementById("bio-save");
+    btn.disabled = true;
+    note.textContent = "Phone should ask for fingerprint now.";
+    V.enrollBio().then(function () {
+      btn.textContent = "Fingerprint on";
+      btn.classList.add("on");
+      note.textContent = "Saved. Lock, then tap the print under 1 · 4 · 7.";
+    }).catch(function (e) {
+      note.textContent = e.message || "Could not save fingerprint";
     }).then(function () { btn.disabled = false; });
   });
 })();

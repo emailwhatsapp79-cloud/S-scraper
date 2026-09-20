@@ -607,16 +607,6 @@ body.locked .top { visibility: hidden }
 }
 .gate-box b { display: block; font-size: 22px; letter-spacing: -0.03em }
 .gate-box p { color: var(--dim); margin: 8px 0 18px }
-.gate .bio {
-  width: 100%;
-  min-height: 48px;
-  margin: 0 0 18px;
-  background: var(--go);
-  color: var(--go-ink);
-  font-weight: 700;
-  font-size: 16px;
-}
-.gate .bio[hidden] { display: none; }
 .dots { display: flex; justify-content: center; gap: 10px; margin-bottom: 22px }
 .dots i {
   width: 10px; height: 10px; border-radius: 50%;
@@ -640,6 +630,13 @@ body.locked .top { visibility: hidden }
 }
 .pad .key:active { background: var(--go); color: var(--go-ink) }
 .pad .key:disabled { opacity: 0; pointer-events: none }
+.pad .key.fp {
+  display: grid;
+  place-items: center;
+  color: var(--dim);
+}
+.pad .key.fp:disabled { opacity: 0; }
+.pad .key.fp svg { display: block; }
 .gate .err { color: var(--bad); min-height: 1.2em; margin: 0 0 12px }
 
 /* --- Strategy Lab --- */
