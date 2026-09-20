@@ -101,14 +101,26 @@ export async function fetchEvent(eventId) {
   }
 }
 
+// A live event carries two copies of each market: the live one (product 1,
+// status 0, an availableScore and a fresh lastOddsChangeTime) and a frozen
+// pre-match copy (product 3). Pick the live copy — freshest odds win — so the
+// price reflects the game in play, not the opening line.
+function pickMarket(list) {
+  return list.slice().sort((a, b) => {
+    const la = a.product === 1 ? 1 : 0, lb = b.product === 1 ? 1 : 0;
+    if (la !== lb) return lb - la;
+    return (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0);
+  })[0];
+}
+
 function pricesOf(ev) {
-  const got = {};
+  const bySlot = {};
   for (const m of ev.markets || []) {
     const slot = WANTED[m.desc];
-    if (slot && !got[slot]) got[slot] = legs(m);
+    if (slot) (bySlot[slot] = bySlot[slot] || []).push(m);
   }
-  const ft = got.ft || {};
-  const dc = got.dc || {};
+  const ft = bySlot.ft ? legs(pickMarket(bySlot.ft)) : {};
+  const dc = bySlot.dc ? legs(pickMarket(bySlot.dc)) : {};
   return {
     "1": ft.Home ?? null,
     X: ft.Draw ?? null,
