@@ -251,7 +251,7 @@ export async function pullScores24(names, opts = {}) {
     notes.push("html " + (e?.message || e));
   }
 
-  if (all.length < 80) {
+  if (all.length < 80 || opts.more) {
     try {
       const extra = await fromRapi(byLast, pages, first, days);
       notes.push("rapi " + extra.rows.length);

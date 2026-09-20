@@ -51,7 +51,15 @@ function isUpcomingTT(status, start) {
 }
 
 function nameKey(s) {
-  return String(s || "").trim().toUpperCase().replace(/\s+/g, " ");
+  // "Vorsulyak, Yaroslav" and "Yaroslav Vorsulyak" must be the same person.
+  return String(s || "")
+    .toUpperCase()
+    .replace(/[^A-Z]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .sort()
+    .join("|");
 }
 
 function scoreKey(desc) {
@@ -405,7 +413,7 @@ async function loadSettledForFit() {
     const k = pair + "|" + Math.round((g.start || 0) / 900000);
     const prev = seen.get(k);
     if (!prev) seen.set(k, g);
-    else if (!String(g.id || "").startsWith("sofa:")) seen.set(k, g);
+    else if (!/^(sofa:|s24:)/.test(String(g.id || ""))) seen.set(k, g);
   }
   return [...seen.values()];
 }

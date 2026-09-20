@@ -303,7 +303,8 @@
   fetch("/api/tt").then(function (r) { return r.json(); }).then(function (d) {
     if (!d.ok) throw new Error(d.error || "Could not read the table-tennis card");
     apply(d);
-    document.getElementById("sofa-note").textContent = "Banking finished games…";
+    document.getElementById("sofa-note").textContent =
+      (d.settled && d.settled > 50) ? "Refreshing history…" : "Banking finished games…";
     return fetch("/api/tt-fill").then(function (r) { return r.json(); });
   }).then(function (f) {
     if (!f) return;
