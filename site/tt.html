@@ -80,6 +80,7 @@
     <div class="stat"><b id="s-up">—</b><span>On the card</span></div>
     <div class="stat go"><b id="s-settled">—</b><span>Finished — trains %</span></div>
   </div>
+  <p class="note" id="sofa-note"></p>
   <div class="seg" id="seg">
     <button type="button" data-mode="up" class="on">Upcoming</button>
     <button type="button" data-mode="res">Results</button>
@@ -272,6 +273,11 @@
     LAST = d;
     document.getElementById("s-up").textContent = String(d.count || 0);
     document.getElementById("s-settled").textContent = String(d.settled || 0);
+    var sn = document.getElementById("sofa-note");
+    if (d.sofa && d.sofa.error) sn.textContent = "SofaScore: " + d.sofa.error;
+    else if (d.sofa && d.sofa.saved) sn.textContent = "SofaScore banked " + d.sofa.saved + " results this load.";
+    else if (d.sofa && d.sofa.players === 0) sn.textContent = "SofaScore: nothing new this load.";
+    else sn.textContent = "";
     render();
   }).catch(function (e) {
     document.getElementById("out").textContent = "";
