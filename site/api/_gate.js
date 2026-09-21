@@ -1,4 +1,4 @@
-// Personal PIN + fingerprint gate. Cookie lasts 30 minutes. Override PIN with env GATE_PIN.
+// Personal PIN + fingerprint gate. Session length is Settings → Auto lock.
 import { createHash, createHmac, timingSafeEqual } from "crypto";
 import { cors } from "./_db.js";
 import { loadPinHash } from "./_vault.js";
@@ -7,6 +7,15 @@ const SALT = "vfs-gate-v1";
 const PIN_HASH = "a1130bfe4270bc67bed0b71f0ae687df544ee38a5b342a468b15549612e9629f";
 const SECRET = process.env.GATE_SECRET || "3ed841c2806431522acc2d288f64f1fc275800b5c9ad19fc";
 export const TTL_MS = 30 * 60 * 1000;
+export const LOCK_MINS = [30, 60, 120, 180, 240, 300, 360];
+
+export function clampLockMin(n) {
+  const m = Number(n);
+  if (!isFinite(m)) return 30;
+  let best = 30;
+  for (const a of LOCK_MINS) if (Math.abs(a - m) < Math.abs(best - m)) best = a;
+  return best;
+}
 const COOKIE = "vfs_gate";
 
 function sha(s) {
@@ -55,17 +64,29 @@ export function readGate(req) {
   return { open: true, remainingMs: left };
 }
 
-export function setGateCookie(res, on) {
+export async function sessionMs() {
+  try {
+    const { loadPrefs } = await import("./_vault.js");
+    const p = await loadPrefs();
+    return clampLockMin(p.lockMin) * 60 * 1000;
+  } catch {
+    return TTL_MS;
+  }
+}
+
+export async function setGateCookie(res, on) {
   if (!on) {
     res.setHeader("Set-Cookie", `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
-    return;
+    return 0;
   }
-  const exp = Date.now() + TTL_MS;
+  const ms = await sessionMs();
+  const exp = Date.now() + ms;
   const val = encodeURIComponent(exp + "." + sign(exp));
   res.setHeader(
     "Set-Cookie",
-    `${COOKIE}=${val}; Path=/; Max-Age=${Math.floor(TTL_MS / 1000)}; HttpOnly; Secure; SameSite=Lax`,
+    `${COOKIE}=${val}; Path=/; Max-Age=${Math.floor(ms / 1000)}; HttpOnly; Secure; SameSite=Lax`,
   );
+  return ms;
 }
 
 /** Returns true if the response is already finished (blocked or preflight). */

@@ -43,13 +43,43 @@
   <div class="knobs" id="knobs"></div>
   <button class="reset" id="reset" type="button">Reset to defaults</button>
 
-  <h2 style="font-size:16px;margin:28px 0 8px">Pings</h2>
-  <p class="lede" style="margin-bottom:8px">A tap when a booked leg hits Yes or No — different sound for each — and another when the whole bet settles. Works with the phone locked if you Allow pings and add this site to your home screen.</p>
-  <button class="ghost" id="pings" type="button">Allow pings</button>
-  <p class="note" id="ping-note"></p>
+  <h2 style="font-size:16px;margin:28px 0 8px">Phone</h2>
+  <p class="lede" style="margin-bottom:8px">Notifications, fingerprint, and how long the site stays open.</p>
+  <div class="set-list">
+    <div class="set-row">
+      <div>
+        <b>Notifications</b>
+        <span>Yes / No on booked legs, even with the phone locked</span>
+      </div>
+      <button type="button" class="switch" id="sw-pings" role="switch" aria-checked="false" aria-label="Notifications"></button>
+    </div>
+    <div class="set-row">
+      <div>
+        <b>Fingerprint</b>
+        <span>Unlock with the print under 1 · 4 · 7. Code still works.</span>
+      </div>
+      <button type="button" class="switch" id="sw-bio" role="switch" aria-checked="false" aria-label="Fingerprint"></button>
+    </div>
+    <div class="set-row">
+      <div>
+        <b>Auto lock</b>
+        <span>Locks again after this time</span>
+      </div>
+      <select id="lock-min" aria-label="Auto lock">
+        <option value="30">30 min</option>
+        <option value="60">1 hour</option>
+        <option value="120">2 hours</option>
+        <option value="180">3 hours</option>
+        <option value="240">4 hours</option>
+        <option value="300">5 hours</option>
+        <option value="360">6 hours</option>
+      </select>
+    </div>
+  </div>
+  <p class="note" id="phone-note"></p>
 
   <h2 style="font-size:16px;margin:28px 0 8px">Profile</h2>
-  <p class="lede" style="margin-bottom:8px">Change the lock code. Six digits. Current one first, then the new one twice. The site locks itself every 30 minutes.</p>
+  <p class="lede" style="margin-bottom:8px">Change the lock code. Six digits. Current one first, then the new one twice.</p>
   <div class="knobs pin-form">
     <label for="pin-old">Current code</label>
     <input id="pin-old" type="password" inputmode="numeric" maxlength="6" autocomplete="current-password">
@@ -62,8 +92,7 @@
   <p class="note" id="pin-note"></p>
 
   <h2 style="font-size:16px;margin:28px 0 8px">Fingerprint</h2>
-  <p class="lede" style="margin-bottom:8px">Set it here, while you are already in. After that the empty key under 1–4–7 on the lock is a fingerprint. The code still works.</p>
-  <button class="ghost" id="bio-save" type="button">Add fingerprint</button>
+  <p class="lede" style="margin-bottom:8px">Turn the switch on above. First time, this phone will ask you to save a print. After that the empty key under 1–4–7 on the lock is fingerprint.</p>
   <p class="note" id="bio-note"></p>
 </main>
 <script src="/js/core.js"></script>
@@ -99,18 +128,70 @@
     fillRuleText();
   });
 
-  var pingBtn = document.getElementById("pings");
-  if ("Notification" in window && Notification.permission === "granted") {
-    pingBtn.textContent = "Pings on";
-    pingBtn.classList.add("on");
+  var pingBtn = document.getElementById("sw-pings");
+  var bioBtn = document.getElementById("sw-bio");
+  var lockSel = document.getElementById("lock-min");
+  var note = document.getElementById("phone-note");
+
+  function sw(el, on) {
+    el.setAttribute("aria-checked", on ? "true" : "false");
+    el.classList.toggle("on", !!on);
   }
+
+  function paintPhone() {
+    sw(pingBtn, V.device.pings !== false);
+    sw(bioBtn, V.device.bio !== false);
+    lockSel.value = String(V.device.lockMin || 30);
+  }
+  paintPhone();
+  window.addEventListener("vfs-ready", paintPhone);
+
   pingBtn.addEventListener("click", function () {
-    V.enablePings().then(function () {
-      pingBtn.textContent = "Pings on";
-      pingBtn.classList.add("on");
-      document.getElementById("ping-note").textContent = "You should have just got a Yes chime. Next: each booked leg Yes/No, then the full bet.";
+    var on = pingBtn.getAttribute("aria-checked") !== "true";
+    if (on) {
+      V.enablePings().then(function () {
+        sw(pingBtn, true);
+        note.textContent = "Pings on. You should have heard a Yes chime.";
+      }).catch(function (e) {
+        sw(pingBtn, false);
+        note.textContent = e.message || "Could not turn pings on";
+      });
+    } else {
+      V.saveDevice({ pings: false }).then(function () {
+        sw(pingBtn, false);
+        note.textContent = "Pings off.";
+      });
+    }
+  });
+
+  bioBtn.addEventListener("click", function () {
+    var on = bioBtn.getAttribute("aria-checked") !== "true";
+    bioBtn.disabled = true;
+    var go = on
+      ? fetch("/api/gate").then(function (r) { return r.json(); }).then(function (d) {
+          if (d.bioEnrolled) return V.saveDevice({ bio: true });
+          return V.enrollBio().then(function () { return V.saveDevice({ bio: true }); });
+        })
+      : V.saveDevice({ bio: false });
+    go.then(function () {
+      sw(bioBtn, on);
+      note.textContent = on ? "Fingerprint on. Lock, then tap the print under 1 · 4 · 7." : "Fingerprint off. Code still unlocks.";
+      var bn = document.getElementById("bio-note");
+      if (bn) bn.textContent = note.textContent;
     }).catch(function (e) {
-      document.getElementById("ping-note").textContent = e.message;
+      sw(bioBtn, false);
+      note.textContent = e.message || "Could not change fingerprint";
+    }).then(function () { bioBtn.disabled = false; });
+  });
+
+  lockSel.addEventListener("change", function () {
+    var m = Number(lockSel.value) || 30;
+    V.saveDevice({ lockMin: m }).then(function (d) {
+      if (d && d.remainingMs && V.scheduleLock) V.scheduleLock(d.remainingMs);
+      var label = lockSel.options[lockSel.selectedIndex].text;
+      note.textContent = "Locks after " + label + ".";
+    }).catch(function () {
+      note.textContent = "Could not save auto lock";
     });
   });
 
@@ -145,26 +226,12 @@
   });
 
   fetch("/api/gate").then(function (r) { return r.json(); }).then(function (d) {
-    if (d.bio) {
-      document.getElementById("bio-save").textContent = "Fingerprint on";
-      document.getElementById("bio-save").classList.add("on");
-      document.getElementById("bio-note").textContent = "Lock screen: tap the print under 1 · 4 · 7.";
+    if (d.bioEnrolled || d.bio) {
+      document.getElementById("bio-note").textContent = d.bio
+        ? "On. Lock screen: tap the print under 1 · 4 · 7."
+        : "Saved on this phone, switch is off.";
     }
   }).catch(function () {});
-
-  document.getElementById("bio-save").addEventListener("click", function () {
-    var note = document.getElementById("bio-note");
-    var btn = document.getElementById("bio-save");
-    btn.disabled = true;
-    note.textContent = "Phone should ask for fingerprint now.";
-    V.enrollBio().then(function () {
-      btn.textContent = "Fingerprint on";
-      btn.classList.add("on");
-      note.textContent = "Saved. Lock, then tap the print under 1 · 4 · 7.";
-    }).catch(function (e) {
-      note.textContent = e.message || "Could not save fingerprint";
-    }).then(function () { btn.disabled = false; });
-  });
 })();
 </script>
 </body>

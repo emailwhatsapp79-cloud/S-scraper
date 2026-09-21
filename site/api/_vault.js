@@ -13,7 +13,7 @@ export async function ensure() {
   ready = true;
 }
 
-const EMPTY = { shape: null, bankroll: null };
+const EMPTY = { shape: null, bankroll: null, pings: true, bio: true, lockMin: 30 };
 
 export async function loadPrefs() {
   await ensure();
@@ -21,9 +21,13 @@ export async function loadPrefs() {
   if (!rows[0]) return { ...EMPTY };
   try {
     const data = open(rows[0].v);
+    const lockMin = Number(data && data.lockMin);
     return {
       shape: data && data.shape && typeof data.shape === "object" ? data.shape : null,
       bankroll: data && data.bankroll && typeof data.bankroll.amount === "number" ? data.bankroll : null,
+      pings: data && data.pings === false ? false : true,
+      bio: data && data.bio === false ? false : true,
+      lockMin: Number.isFinite(lockMin) ? lockMin : 30,
     };
   } catch {
     return { ...EMPTY };
@@ -35,6 +39,9 @@ export async function savePrefs(patch) {
   const next = {
     shape: patch.shape && typeof patch.shape === "object" ? patch.shape : cur.shape,
     bankroll: patch.bankroll && typeof patch.bankroll.amount === "number" ? patch.bankroll : cur.bankroll,
+    pings: typeof patch.pings === "boolean" ? patch.pings : cur.pings,
+    bio: typeof patch.bio === "boolean" ? patch.bio : cur.bio,
+    lockMin: patch.lockMin != null ? patch.lockMin : cur.lockMin,
   };
   const packed = seal(next);
   await sql`
@@ -60,6 +67,9 @@ export function publicPrefs(p) {
   return {
     shape: p.shape,
     bankroll: p.bankroll ? { amount: p.bankroll.amount, starting: p.bankroll.starting || p.bankroll.amount } : null,
+    pings: p.pings !== false,
+    bio: p.bio !== false,
+    lockMin: p.lockMin || 30,
   };
 }
 

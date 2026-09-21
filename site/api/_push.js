@@ -74,6 +74,11 @@ const RECENT = 45 * 60 * 1000;
 
 export async function notifyBooked(slips) {
   if (!Array.isArray(slips) || !slips.length) return { sent: 0 };
+  try {
+    const { loadPrefs } = await import("./_vault.js");
+    const p = await loadPrefs();
+    if (p.pings === false) return { sent: 0 };
+  } catch { /* send */ }
   const now = Date.now();
   let sent = 0;
   for (const sp of slips) {

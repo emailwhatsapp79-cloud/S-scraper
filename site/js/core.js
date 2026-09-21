@@ -854,6 +854,14 @@
       } else {
         save();
       }
+      if (d.pings === false) device.pings = false;
+      if (d.bio === false) device.bio = false;
+      if (d.lockMin) device.lockMin = Number(d.lockMin) || 30;
+      try {
+        localStorage.setItem("vfs_pings", device.pings ? "1" : "0");
+        localStorage.setItem("vfs_bio", device.bio ? "1" : "0");
+        localStorage.setItem("vfs_lock_min", String(device.lockMin));
+      } catch (e) {}
       w.dispatchEvent(new Event("vfs-ready"));
       return d;
     });
@@ -872,6 +880,7 @@
   }
 
   function ping(title, body, tag, kind) {
+    if (device.pings === false) return;
     playKind(kind);
     if (!("Notification" in window) || Notification.permission !== "granted") return;
     var sound = kind === "yes" ? "/sounds/yes.wav" : kind === "no" ? "/sounds/no.wav" : kind === "kick" ? "/sounds/kick.wav" : "";
@@ -967,6 +976,34 @@
     });
   }
 
+  var device = { pings: true, bio: true, lockMin: 30 };
+  try {
+    if (localStorage.getItem("vfs_pings") === "0") device.pings = false;
+    if (localStorage.getItem("vfs_bio") === "0") device.bio = false;
+    var lm = Number(localStorage.getItem("vfs_lock_min"));
+    if (lm >= 30) device.lockMin = lm;
+  } catch (e) {}
+
+  function saveDevice(patch) {
+    if (!patch) return Promise.resolve(device);
+    if (typeof patch.pings === "boolean") device.pings = patch.pings;
+    if (typeof patch.bio === "boolean") device.bio = patch.bio;
+    if (patch.lockMin != null) device.lockMin = Number(patch.lockMin) || 30;
+    try {
+      localStorage.setItem("vfs_pings", device.pings ? "1" : "0");
+      localStorage.setItem("vfs_bio", device.bio ? "1" : "0");
+      localStorage.setItem("vfs_lock_min", String(device.lockMin));
+    } catch (e) {}
+    return fetch("/api/settings", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(patch)
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d && d.remainingMs) scheduleLock(d.remainingMs);
+      return d;
+    });
+  }
+
   function enablePings() {
     if (!("Notification" in window)) return Promise.reject(new Error("This browser will not ping"));
     return Notification.requestPermission().then(function (p) {
@@ -975,13 +1012,14 @@
         ? navigator.serviceWorker.register("/sw.js").then(function () { return subscribePush(); })
         : Promise.resolve();
       return ready.then(function () {
+        saveDevice({ pings: true });
         ping("Pings on", "Yes, No, and the full bet — even if the phone is locked.", "ping-test", "yes");
         return p;
       });
     });
   }
 
-  if (navigator.serviceWorker && "Notification" in window && Notification.permission === "granted") {
+  if (navigator.serviceWorker && "Notification" in window && Notification.permission === "granted" && device.pings !== false) {
     navigator.serviceWorker.register("/sw.js").then(function () { subscribePush(); }).catch(function () {});
   }
   if (navigator.serviceWorker) {
@@ -1237,6 +1275,7 @@
     fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips, fetchPicks: fetchPicks,
     paintKnobs: paintKnobs, el: el, tick: tick, copyBtn: copyBtn,
     injectChrome: injectChrome, paintSlip: paintSlip, enrollBio: enrollBio,
+    enablePings: enablePings, saveDevice: saveDevice, device: device, scheduleLock: scheduleLock,
     naira: naira, wilson: wilson, legStats: legStats, slipCard: slipCard,
     pickCard: pickCard, pickStats: pickStats,
     dcWon: dcWon, zFor: zFor, analyse: analyse, fetchAnalytics: fetchAnalytics

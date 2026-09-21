@@ -1,6 +1,6 @@
 import { cors } from "./_db.js";
-import { pinOk, hashPin, readGate, setGateCookie, TTL_MS } from "./_gate.js";
-import { savePinHash } from "./_vault.js";
+import { pinOk, hashPin, readGate, setGateCookie, sessionMs } from "./_gate.js";
+import { savePinHash, loadPrefs } from "./_vault.js";
 import { hasBio, beginRegister, finishRegister, beginAuth, finishAuth } from "./_bio.js";
 
 function six(s) {
@@ -14,16 +14,25 @@ export default async function handler(req, res) {
 
   if (req.method === "GET") {
     const g = readGate(req);
-    let bio = false;
-    try { bio = await hasBio(); } catch { /* vault may be empty */ }
-    return res.status(200).json({ ok: true, open: g.open, remainingMs: g.remainingMs, bio, ttlMs: TTL_MS });
+    let enrolled = false;
+    try { enrolled = await hasBio(); } catch { /* vault may be empty */ }
+    let enabled = true;
+    try {
+      const p = await loadPrefs();
+      enabled = p.bio !== false;
+    } catch { /* default on */ }
+    const ttlMs = await sessionMs();
+    return res.status(200).json({
+      ok: true, open: g.open, remainingMs: g.remainingMs,
+      bio: enrolled && enabled, bioEnrolled: enrolled, ttlMs,
+    });
   }
 
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "GET or POST" });
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
 
   if (body.lock) {
-    setGateCookie(res, false);
+    await setGateCookie(res, false);
     return res.status(200).json({ ok: true, open: false });
   }
 
@@ -73,8 +82,8 @@ export default async function handler(req, res) {
   if (body.bio === "assert") {
     try {
       await finishAuth(req, body.cred);
-      setGateCookie(res, true);
-      return res.status(200).json({ ok: true, open: true, remainingMs: TTL_MS, bio: true });
+      const ms = await setGateCookie(res, true);
+      return res.status(200).json({ ok: true, open: true, remainingMs: ms, bio: true });
     } catch (e) {
       return res.status(401).json({ ok: false, open: false, error: String(e.message || e) });
     }
@@ -83,6 +92,6 @@ export default async function handler(req, res) {
   if (!(await pinOk(body.pin))) {
     return res.status(401).json({ ok: false, open: false, error: "Wrong code" });
   }
-  setGateCookie(res, true);
-  return res.status(200).json({ ok: true, open: true, remainingMs: TTL_MS });
+  const ms = await setGateCookie(res, true);
+  return res.status(200).json({ ok: true, open: true, remainingMs: ms });
 }

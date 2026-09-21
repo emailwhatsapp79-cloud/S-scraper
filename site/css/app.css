@@ -306,6 +306,58 @@ p { text-wrap: pretty }
   text-align: center;
   letter-spacing: 0.28em;
 }
+.set-list {
+  background: var(--card);
+  box-shadow: var(--shadow);
+  border-radius: var(--r);
+  overflow: hidden;
+  margin: 16px 0;
+}
+.set-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+}
+.set-row:first-child { border-top: 0 }
+.set-row b { display: block; font-size: 15px; font-weight: 650 }
+.set-row span { display: block; font-size: 12.5px; color: var(--dim); margin-top: 2px; line-height: 1.35 }
+.switch {
+  width: 48px;
+  height: 30px;
+  padding: 0;
+  border-radius: 999px;
+  background: #2A3340;
+  box-shadow: none;
+  position: relative;
+  flex-shrink: 0;
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform .18s ease;
+}
+.switch[aria-checked="true"], .switch.on { background: var(--go) }
+.switch[aria-checked="true"]::after, .switch.on::after { transform: translateX(18px) }
+.set-row select {
+  background: var(--bg);
+  color: var(--ink);
+  border: 0;
+  box-shadow: var(--shadow);
+  border-radius: var(--r3);
+  min-height: 40px;
+  padding: 0 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
 
 .nav {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
