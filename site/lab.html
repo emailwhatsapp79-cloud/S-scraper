@@ -149,34 +149,22 @@
     GAMES = d.games || [];
     document.getElementById("pool").textContent = GAMES.length;
     run();
+    var el = document.getElementById("pat");
+    var box = document.getElementById("pat-picks");
+    var p = d.pattern;
+    if (!p) { el.textContent = "Pattern not fitted yet — next heartbeat will train it."; return; }
+    var h = p.holdout || {};
+    function pct(x) { return x == null ? "—" : (x * 100).toFixed(1) + "%"; }
+    var line = (p.nGames || 0).toLocaleString() + " finished games. Hold-out " + (h.n || 0) +
+      ": model picks the winner " + pct(h.hit) + ", book " + pct(h.bookHit) +
+      ". Brier " + (h.brier == null ? "—" : Number(h.brier).toFixed(3)) + " vs book " + (h.bookBrier == null ? "—" : Number(h.bookBrier).toFixed(3)) + ".";
+    if (h.dcN) line += " Double-chance tries " + h.dcN + ", hit " + pct(h.dcHit) + ", ROI " + pct(h.dcRoi) + ".";
+    el.textContent = p.edge
+      ? line + " Hold-out beat the prices."
+      : line + " No pattern that beats the price on games it had not seen. It stays quiet until that changes.";
+    if (box) box.textContent = "";
   }).catch(function (e) {
     document.getElementById("verdict").innerHTML = '<span class="err">' + e.message + "</span>";
-  });
-
-  fetch("/api/vf-model").then(function (r) { return r.json(); }).then(function (d) {
-    var el = document.getElementById("pat");
-    if (!d || !d.ok) { el.innerHTML = '<span class="err">' + ((d && d.error) || "Could not read the model") + "</span>"; return; }
-    var h = d.holdout || {};
-    function pct(x) { return x == null ? "—" : (x * 100).toFixed(1) + "%"; }
-    var line = (d.nGames || 0).toLocaleString() + " finished games. Hold-out " + (h.n || 0) +
-      ": model picks the winner " + pct(h.hit) + ", book " + pct(h.bookHit) +
-      ". Brier " + (h.brier == null ? "—" : h.brier.toFixed(3)) + " vs book " + (h.bookBrier == null ? "—" : h.bookBrier.toFixed(3)) + ".";
-    if (h.dcN) line += " Double-chance tries " + h.dcN + ", hit " + pct(h.dcHit) + ", ROI " + pct(h.dcRoi) + ".";
-    if (d.edge) {
-      el.innerHTML = line + " <b class=\"ok\">Hold-out beat the prices — picks below.</b>";
-    } else {
-      el.textContent = line + " No pattern that beats the price on games it had not seen. It will stay quiet until that changes.";
-    }
-    var box = document.getElementById("pat-picks");
-    box.textContent = "";
-    (d.picks || []).slice(0, 20).forEach(function (p) {
-      var row = V.el("div", "rule");
-      row.textContent = (p.home || "") + " vs " + (p.away || "") + " · " + p.label + " @ " + Number(p.price).toFixed(2) +
-        " · model " + p.pDC + "%";
-      box.appendChild(row);
-    });
-  }).catch(function (e) {
-    document.getElementById("pat").innerHTML = '<span class="err">' + e.message + "</span>";
   });
 })();
 </script>
