@@ -141,6 +141,15 @@ function proxyOrigins() {
   return [...new Set(out)];
 }
 
+// Every upstream call is time-boxed — without this, one hung scores24/proxy
+// request stalls the whole function until the 30s platform limit kills it.
+async function timedFetch(url, opts, timeoutMs = 8000) {
+  const ac = new AbortController();
+  const to = setTimeout(() => ac.abort(), timeoutMs);
+  try { return await fetch(url, { ...opts, signal: ac.signal }); }
+  finally { clearTimeout(to); }
+}
+
 async function fetchS24(target, accept) {
   const errors = [];
   for (const origin of proxyOrigins()) {
@@ -148,14 +157,14 @@ async function fetchS24(target, accept) {
       const u = target.includes("/rapi/")
         ? origin + "/api/s24-proxy?kind=rapi&u=" + encodeURIComponent(target)
         : origin + "/api/s24-proxy";
-      const r = await fetch(u, { headers: { "x-fill-key": fillKey(), Accept: accept || "*/*" } });
+      const r = await timedFetch(u, { headers: { "x-fill-key": fillKey(), Accept: accept || "*/*" } });
       if (r.ok) return r;
       errors.push("edge " + r.status);
     } catch (e) {
       errors.push("edge " + (e?.message || e));
     }
   }
-  const r = await fetch(target, {
+  const r = await timedFetch(target, {
     headers: { ...HDR, Accept: accept || HDR.Accept },
   });
   if (!r.ok) throw new Error((errors[0] ? errors[0] + " · " : "") + "direct HTTP " + r.status);

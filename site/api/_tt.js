@@ -33,15 +33,22 @@ async function ensureTT() {
   ready = true;
 }
 
-async function getJson(path, params) {
+async function getJson(path, params, timeoutMs = 7000) {
   const q = new URLSearchParams(params);
-  const r = await fetch(`${BASE}/${path}?${q}`, {
-    headers: { "User-Agent": UA, Accept: "application/json" },
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  const body = await r.json();
-  if (body.bizCode !== 10000) throw new Error(`bizCode ${body.bizCode}`);
-  return body.data;
+  const ac = new AbortController();
+  const to = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${BASE}/${path}?${q}`, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+      signal: ac.signal,
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const body = await r.json();
+    if (body.bizCode !== 10000) throw new Error(`bizCode ${body.bizCode}`);
+    return body.data;
+  } finally {
+    clearTimeout(to);
+  }
 }
 
 function isUpcomingTT(status, start) {

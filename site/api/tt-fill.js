@@ -16,16 +16,16 @@ export default async function handler(req, res) {
     const { events } = await fetchTTCard();
     card = await storeTT(events.map(normalise));
   } catch (e) { cardErr = String(e?.message || e); }
-  try { enriched = (await enrichSettleTT(20)).touched; } catch { /* keep going */ }
+  try { enriched = (await enrichSettleTT(15)).touched; } catch { /* keep going */ }
 
-  // scores24 history with whatever budget is left before ~23s. skipHtml: the
+  // scores24 history with whatever budget is left before ~20s. skipHtml: the
   // per-cup "newest page" pull already grabs recent games, and the full board
   // dump is slow — leave it to the daily poll.
   let s24 = null;
-  const budget = Math.max(5000, 23000 - (Date.now() - started));
+  const budget = Math.max(4000, 20000 - (Date.now() - started));
   try {
     s24 = await pullScores24([], {
-      skipHtml: true, more: true, pages: 4, first: 50, days: 400,
+      skipHtml: true, more: true, pages: 3, first: 50, days: 400,
       players: 0, deadlineMs: budget,
     });
   } catch (e) { s24 = { error: String(e?.message || e), hasMore: true }; }
