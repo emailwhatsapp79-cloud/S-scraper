@@ -387,12 +387,20 @@ export function forecastTT(pack, g) {
 
   const sw = parts.reduce((s, x) => s + x.w, 0);
   let p = sw ? parts.reduce((s, x) => s + x.p * x.w, 0) / sw : 0.5;
-  p += (pack.ha || 0) * 0.5;
+  // Listed "home" on this card is not a venue. Don't gift the first name 2–8%.
   if (g.start && H.last && g.start - H.last < 2 * 3600 * 1000) p -= 0.02;
   if (g.start && A.last && g.start - A.last < 2 * 3600 * 1000) p += 0.02;
 
   const ev = Math.min(nH, nA) + 2 * (h2hRec.n || 0);
   p = 0.5 + (p - 0.5) * (ev / (ev + 25));
+
+  // Independent read, but not 30 points off the market. If we disagree that
+  // hard, pull halfway — that's the Sikon / Hnoiovyi failure mode.
+  const book = g.win ? winPctBook(g.win.home, g.win.away) : null;
+  if (book) {
+    const gap = p - book.home;
+    if (Math.abs(gap) > 0.12) p = p - gap * 0.55;
+  }
   p = Math.min(0.72, Math.max(0.28, p));
 
   return {
