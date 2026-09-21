@@ -22,10 +22,10 @@ export default async function handler(req, res) {
   // per-cup "newest page" pull already grabs recent games, and the full board
   // dump is slow — leave it to the daily poll.
   let s24 = null;
-  const budget = Math.max(4000, 20000 - (Date.now() - started));
+  const budget = Math.max(4000, 16000 - (Date.now() - started));
   try {
     s24 = await pullScores24([], {
-      skipHtml: true, more: true, pages: 3, first: 50, days: 400,
+      skipHtml: true, more: true, pages: 2, first: 50, days: 400,
       players: 0, deadlineMs: budget,
     });
   } catch (e) { s24 = { error: String(e?.message || e), hasMore: true }; }
