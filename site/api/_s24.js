@@ -222,12 +222,13 @@ async function pullLeague(slug, byLast, pages, first, from, to) {
     takeRows(latest?.data?.edges, slug, byLast, rows);
     const latestInfo = latest?.data?.pageInfo || {};
 
-    const st = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${slug}`;
+    const k = "y1|" + slug;
+    const st = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${k}`;
     let after = (st[0] && st[0].cursor) || "";
     if (after === "DONE") return { rows, errors, hasMore: false };
     if (!after) after = latestInfo.endCursor || "";
     if (!after) {
-      await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
+      await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${k}, ${"DONE"})
         ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
       return { rows, errors, hasMore: false };
     }
@@ -235,20 +236,20 @@ async function pullLeague(slug, byLast, pages, first, from, to) {
       const data = await endedPage(slug, first, from, to, after);
       const edges = data?.data?.edges || [];
       if (!edges.length) {
-        await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
+        await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${k}, ${"DONE"})
           ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
         break;
       }
       takeRows(edges, slug, byLast, rows);
       const info = data?.data?.pageInfo || {};
       if (!info.hasNextPage || !info.endCursor) {
-        await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${"DONE"})
+        await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${k}, ${"DONE"})
           ON CONFLICT (k) DO UPDATE SET cursor = ${"DONE"}, updated = now()`;
         after = "DONE";
         break;
       }
       after = info.endCursor;
-      await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${slug}, ${after})
+      await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${k}, ${after})
         ON CONFLICT (k) DO UPDATE SET cursor = ${after}, updated = now()`;
       hasMore = true;
     }
@@ -390,7 +391,7 @@ export async function pullScores24(names, opts = {}) {
   const byLast = byLastMap(names);
   const pages = opts.pages ?? 2;
   const first = opts.first ?? 50;
-  const days = opts.days ?? 7;
+  const days = opts.days ?? 400;
   const notes = [];
   const all = [];
   const seen = new Set();

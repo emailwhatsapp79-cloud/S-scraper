@@ -4,7 +4,7 @@ const SHARE = "https://www.sportybet.com/api/ng/orders/share";
 const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36";
 
-// vFootball market/outcome ids are stable on SportyBet.
+// vFootball 1X2.
 export const OUTCOMES = {
   "1":  { marketId: "1",  outcomeId: "1" },
   "X":  { marketId: "1",  outcomeId: "2" },
@@ -14,10 +14,22 @@ export const OUTCOMES = {
   X2:   { marketId: "10", outcomeId: "11" },
 };
 
+// Real table tennis Winner is a 2-way (no draw).
+export const TT_OUTCOMES = {
+  "1": { marketId: "186", outcomeId: "4" },
+  "2": { marketId: "186", outcomeId: "5" },
+};
+
+function isTT(leg) {
+  if (leg.sport === "tt") return true;
+  const lg = String(leg.league || "");
+  return /setka|elite series|liga pro|tt cup|challenger series|table tennis/i.test(lg);
+}
+
 export function toSelection(leg) {
   const sel = String(leg.selection || "");
-  let map = OUTCOMES[sel];
-  if (!map) {
+  let map = isTT(leg) ? TT_OUTCOMES[sel] : OUTCOMES[sel];
+  if (!map && !isTT(leg)) {
     const m = sel.match(/^(\d+):(\d+)$/);
     if (m) {
       const h = Number(m[1]), a = Number(m[2]);
@@ -47,7 +59,7 @@ export async function shareSelections(legs) {
       Accept: "application/json, text/plain, */*",
       "Content-Type": "application/json;charset=UTF-8",
       Origin: "https://www.sportybet.com",
-      Referer: "https://www.sportybet.com/ng/m/virtual/sporty-virtual/vfootball",
+      Referer: "https://www.sportybet.com/ng/",
     },
     body: JSON.stringify({ selections }),
   });

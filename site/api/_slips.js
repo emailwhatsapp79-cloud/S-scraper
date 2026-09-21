@@ -45,7 +45,7 @@ export async function ensureSlips() {
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_code TEXT`;
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_url TEXT`;
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_error TEXT`;
-  await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS live_price DOUBLE PRECISION`;
+  await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS sport TEXT`;
   schemaReady = true;
 }
 
@@ -155,6 +155,19 @@ async function tryShare(legs) {
   }
 }
 
+function ttRowToGame(r) {
+  return {
+    id: r.match_id,
+    eventId: r.event_id || null,
+    home: r.home,
+    away: r.away,
+    league: r.tourn || "Table tennis",
+    kickoff: r.start_at ? Number(r.start_at) : null,
+    ft: { home: r.win_home, draw: null, away: r.win_away },
+    sport: "tt",
+  };
+}
+
 export async function createSlip(stake, incoming) {
   await ensureSlips();
   const raw = Array.isArray(incoming) ? incoming : [];
@@ -167,21 +180,42 @@ export async function createSlip(stake, incoming) {
   const rows = eventIds.length
     ? await sql`SELECT * FROM games WHERE event_id = ANY(${eventIds}) OR game_id = ANY(${ids})`
     : await sql`SELECT * FROM games WHERE game_id = ANY(${ids})`;
+  const ttRows = eventIds.length
+    ? await sql`SELECT * FROM tt_games WHERE event_id = ANY(${eventIds}) OR match_id = ANY(${ids})`
+    : await sql`SELECT * FROM tt_games WHERE match_id = ANY(${ids})`;
   const byEvent = new Map(rows.map((r) => [String(r.event_id || ""), rowToGame(r)]));
   const byId = new Map(rows.map((r) => [String(r.game_id), rowToGame(r)]));
+  for (const r of ttRows) {
+    const g = ttRowToGame(r);
+    if (g.eventId) byEvent.set(String(g.eventId), g);
+    byId.set(String(g.id), g);
+  }
   const legs = [];
   for (const row of raw.slice(0, 12)) {
     const id = String(row.gameId || row.id || "");
     const eid = String(row.eventId || "");
     let g = (eid && byEvent.get(eid)) || byId.get(id);
+    if (!g && row.home && row.eventId && row.price) {
+      g = {
+        id, eventId: row.eventId, home: row.home, away: row.away,
+        league: row.league || "Table tennis",
+        kickoff: row.kickoff || null,
+        ft: { home: row.selection === "1" ? Number(row.price) : null, draw: null, away: row.selection === "2" ? Number(row.price) : null },
+        sport: /setka|elite series|liga pro|tt cup|challenger|table tennis/i.test(String(row.league || "")) ? "tt" : "fb",
+      };
+    }
     if (!g) throw new Error(`Game ${id} is not on the stored card`);
-    if (g.eventId) {
+    if (g.sport !== "tt" && g.eventId) {
       const ev = await fetchEvent(g.eventId);
       if (ev && ev.homeTeamName) {
         g = { ...g, home: ev.homeTeamName, away: ev.awayTeamName || g.away };
       }
     }
-    const pick = resolvePick(g, row.selection);
+    const pick = resolvePick(g, row.selection) || (
+      isFinite(Number(row.price)) && Number(row.price) > 1
+        ? { selection: String(row.selection), label: LABELS[String(row.selection)] || String(row.selection), price: Number(row.price) }
+        : null
+    );
     if (!pick) throw new Error(`${g.home} v ${g.away} has no price for that pick`);
     legs.push({
       gameId: g.id,
@@ -190,6 +224,7 @@ export async function createSlip(stake, incoming) {
       away: g.away,
       league: g.league,
       kickoff: g.kickoff,
+      sport: g.sport || "fb",
       ...pick,
     });
   }
@@ -207,10 +242,10 @@ export async function createSlip(stake, incoming) {
     await sql`
       INSERT INTO slip_legs (
         slip_id, pos, game_id, event_id, home, away, league, kickoff,
-        selection, selection_label, price)
+        selection, selection_label, price, sport)
       VALUES (
         ${id}, ${i}, ${l.gameId}, ${l.eventId}, ${l.home}, ${l.away}, ${l.league}, ${l.kickoff},
-        ${l.selection}, ${l.label}, ${l.price})`;
+        ${l.selection}, ${l.label}, ${l.price}, ${l.sport || "fb"})`;
   }
 
   await refreshSlips();
@@ -228,6 +263,8 @@ export async function reshareSlip(slipId) {
     away: l.away,
     selection: l.selection,
     price: Number(l.price),
+    league: l.league,
+    sport: l.sport || "fb",
   }));
   const share = await tryShare(legs);
   await sql`
