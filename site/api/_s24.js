@@ -11,12 +11,14 @@ const HDR = {
   Origin: "https://scores24.live",
   Referer: "https://scores24.live/en/table-tennis",
 };
-const LEAGUES = [
-  "tt-elite-series-1",
-  "tt-cup-1",
+const CORE = [
   "czech-liga-pro-1",
-  "setka-cup-1",
+  "tt-elite-series-1",
+  "setka-cup-0",
+  "international-tt-cup",
+  "challenger-series-tt",
 ];
+const LEAGUES = CORE;
 
 function nameKey(s) {
   return String(s || "").trim().toUpperCase().replace(/\s+/g, " ");
@@ -258,6 +260,27 @@ async function pullLeague(slug, byLast, pages, first, from, to) {
   return { rows, errors, hasMore };
 }
 
+async function listLeagues(from, to) {
+  const found = [...CORE];
+  try {
+    const data = await rapi("/sports/table-tennis/matches", {
+      lang: "en", sport: "table-tennis", first: "1", status: "ended",
+      "date_between[]": [from, to], audience: "en",
+    });
+    const groups = Array.isArray(data) ? data : (data?.data || data || []);
+    for (const c of groups) {
+      for (const lg of c.leagues || []) {
+        const slug = lg.slug || lg.league?.slug;
+        const name = lg.name || lg.league?.name || "";
+        if (!slug) continue;
+        if (/^wtt-/i.test(slug) || /xd$/i.test(slug) || /double/i.test(name)) continue;
+        found.push(slug);
+      }
+    }
+  } catch { /* CORE still runs */ }
+  return [...new Set(found)];
+}
+
 async function fromRapi(byLast, pages, first, days) {
   const now = Date.now();
   const from = stamp(now - days * 24 * 3600 * 1000);
@@ -267,8 +290,9 @@ async function fromRapi(byLast, pages, first, days) {
     cursor TEXT,
     updated TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
+  const slugs = await listLeagues(from, to);
   const parts = await Promise.all(
-    LEAGUES.map((slug) => pullLeague(slug, byLast, pages, first, from, to)),
+    slugs.map((slug) => pullLeague(slug, byLast, pages, first, from, to)),
   );
   const rows = [];
   const seen = new Set();
