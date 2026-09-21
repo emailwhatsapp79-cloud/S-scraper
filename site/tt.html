@@ -333,23 +333,27 @@
     render();
   }
 
-  function fillPass(left) {
+  function fillPass() {
     var sn = document.getElementById("sofa-note");
     sn.textContent = "Refreshing history… " + comma(document.getElementById("s-settled").textContent.replace(/,/g, "") || 0);
     return fetch("/api/tt-fill").then(readJson).then(function (f) {
       if (f && f.settled != null) document.getElementById("s-settled").textContent = comma(f.settled);
-      if (f && (f.hasMore || f.error === "fill timeout") && left > 1) return fillPass(left - 1);
-      sn.textContent = comma(f && f.settled) + " finished games in the pile";
+      if (f && (f.hasMore || f.error === "fill timeout")) {
+        return fillPass();
+      }
+      sn.textContent = comma(f && f.settled) + " in the pile — catching new results every 2 min";
       return fetch("/api/tt").then(readJson).then(function (d) {
         if (d && d.ok) apply(d);
+      }).then(function () {
+        setTimeout(fillPass, 120000);
       });
-    });
+    }).catch(function () { setTimeout(fillPass, 120000); });
   }
 
   fetch("/api/tt").then(readJson).then(function (d) {
     if (!d.ok) throw new Error(d.error || "Could not read the table-tennis card");
     apply(d);
-    return fillPass(20);
+    return fillPass();
   }).catch(function (e) {
     if (LAST) return;
     document.getElementById("out").textContent = "";

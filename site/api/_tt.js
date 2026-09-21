@@ -436,14 +436,15 @@ async function loadSettledForFit() {
     SELECT match_id, home, away, tourn, start_at, r_home, r_away
     FROM tt_games
     WHERE r_home IS NOT NULL AND r_away IS NOT NULL
-    ORDER BY start_at ASC NULLS LAST
-    LIMIT 8000`;
+    ORDER BY start_at DESC NULLS LAST
+    LIMIT 25000`;
   const games = rows.map((r) => ({
     id: r.match_id,
     home: r.home, away: r.away, tourn: r.tourn || "",
     start: r.start_at ? Number(r.start_at) : 0,
     res: { home: r.r_home, away: r.r_away },
   }));
+  games.sort((a, b) => (a.start || 0) - (b.start || 0));
   const seen = new Map();
   for (const g of games) {
     const pair = [nameKey(g.home), nameKey(g.away)].sort().join("|");
