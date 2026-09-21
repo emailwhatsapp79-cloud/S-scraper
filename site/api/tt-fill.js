@@ -5,6 +5,7 @@
 import { guard } from "./_gate.js";
 import { fetchTTCard, normalise, storeTT, enrichSettleTT, countsTT, rebuildPack } from "./_tt.js";
 import { pullScores24 } from "./_s24.js";
+import { pullSetka } from "./_setka.js";
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
@@ -23,18 +24,26 @@ export default async function handler(req, res) {
     });
   }
   const wantCard = String(req.query?.card || "") === "1";
-  let card = 0, enriched = 0, cardErr = null;
+  let card = 0, enriched = 0, cardErr = null, setka = null;
 
   if (wantCard) {
+    let setkaNames = [];
     try {
       const { events } = await fetchTTCard();
-      card = await storeTT(events.map(normalise));
+      const games = events.map(normalise);
+      card = await storeTT(games);
+      // Only Setka-Cup players live in the Setka feed; skip the rest.
+      setkaNames = games.filter((g) => /setka/i.test(g.tourn || ""))
+        .flatMap((g) => [g.home, g.away]).filter(Boolean);
     } catch (e) { cardErr = String(e?.message || e); }
     try { enriched = (await enrichSettleTT(12)).touched; } catch { /* keep going */ }
+    // Official Setka feed — fills history for the pools scores24 doesn't carry.
+    try { setka = await pullSetka(setkaNames, { players: 5, tournaments: 6, deadlineMs: 9000 }); }
+    catch (e) { setka = { error: String(e?.message || e) }; }
   }
 
   let s24 = null;
-  const budget = Math.max(6000, (wantCard ? 14000 : 24000) - (Date.now() - started));
+  const budget = Math.max(4000, (wantCard ? 8000 : 24000) - (Date.now() - started));
   try {
     s24 = await pullScores24([], {
       skipHtml: true, more: true, pages: wantCard ? 2 : 4, first: 50, days: 400,
@@ -48,7 +57,7 @@ export default async function handler(req, res) {
   res.status(200).json({
     ok: !s24?.error,
     tookMs: Date.now() - started,
-    card, enriched, cardErr,
+    card, enriched, cardErr, setka,
     s24,
     hasMore: !!(s24 && (s24.hasMore || s24.error)),
     stored: counts.total,
