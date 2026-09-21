@@ -676,18 +676,25 @@ async function persistPack(raw, slice) {
 }
 
 // Return the stored pack. Never fit on a card load — that is what made TT hang.
+// A cheap built_at check keeps a warm instance from serving a frozen copy after
+// another instance (or the poll) has rebuilt the pack.
 async function ensureModelPack() {
   await ensurePackTable();
-  if (_pack && _pack.data) return _pack.data;
+  let builtAt = null;
+  try {
+    const meta = await sql`SELECT built_at FROM tt_model WHERE k = 'pack'`;
+    builtAt = meta[0] && meta[0].built_at ? new Date(meta[0].built_at).toISOString() : null;
+  } catch { builtAt = null; }
+  if (_pack && _pack.data && (!builtAt || _pack.builtAt === builtAt)) return _pack.data;
   let full = [];
   try { full = await sql`SELECT pack, built_at FROM tt_model WHERE k = 'pack'`; } catch { full = []; }
-  if (!full[0] || !full[0].pack) return EMPTY_PACK;
+  if (!full[0] || !full[0].pack) return (_pack && _pack.data) || EMPTY_PACK;
   try {
     const data = JSON.parse(full[0].pack);
     _pack = { builtAt: new Date(full[0].built_at).toISOString(), data };
     return data;
   } catch {
-    return EMPTY_PACK;
+    return (_pack && _pack.data) || EMPTY_PACK;
   }
 }
 
