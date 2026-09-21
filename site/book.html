@@ -163,6 +163,7 @@
   }
 
   renderDraft();
+  window.addEventListener("vfs-book", renderDraft);
   loadSlips(false);
   loadSlips(true);
   setInterval(function () { loadSlips(true); }, 60000);

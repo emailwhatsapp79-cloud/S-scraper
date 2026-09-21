@@ -162,6 +162,7 @@
   function saveBook(legs) {
     try { localStorage.setItem(BOOK_KEY, JSON.stringify(legs)); } catch (e) {}
     paintSlip();
+    try { window.dispatchEvent(new Event("vfs-book")); } catch (e) {}
     return legs;
   }
   function inBook(id) {
@@ -1206,7 +1207,46 @@
     sp.legs.slice()
       .sort(function (a, b) { return rank[matchState(a)] - rank[matchState(b)]; })
       .forEach(function (l) { card.appendChild(legRow(l)); });
+
+    var leftover = (sp.legs || []).filter(function (l) { return matchState(l) !== "ended"; });
+    if (leftover.length) {
+      var re = el("button", "rebet", "Rebet · " + leftover.length + " left");
+      re.type = "button";
+      re.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        rebetSlip(sp);
+      });
+      card.appendChild(re);
+    }
     return card;
+  }
+
+  function rebetSlip(sp) {
+    var add = (sp.legs || []).filter(function (l) { return matchState(l) !== "ended"; }).map(function (l) {
+      return {
+        id: l.gameId || l.id,
+        eventId: l.eventId || null,
+        home: l.home,
+        away: l.away,
+        league: l.league || "",
+        kickoff: l.kickoff || null,
+        selection: l.selection,
+        label: l.label,
+        price: Number(l.price)
+      };
+    }).filter(function (l) { return l.id && l.selection; });
+    if (!add.length) return [];
+    var legs = loadBook().slice();
+    add.forEach(function (p) {
+      var hit = -1;
+      legs.forEach(function (x, n) { if (x.id === p.id) hit = n; });
+      if (hit >= 0) legs[hit] = p;
+      else legs.push(p);
+    });
+    saveBook(legs);
+    if (!/\/book(?:\.html)?$/.test(location.pathname)) location.href = "/book";
+    return legs;
   }
 
   function pickCard(pk) {
@@ -1269,6 +1309,7 @@
     hydrate: hydrate, enablePings: enablePings, noticeSlips: noticeSlips,
     screen: screen, makePick: makePick, acca: acca,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
+    rebetSlip: rebetSlip,
     card: card, compactRow: compactRow,
     until: until, clock: clock, dayLabel: dayLabel, byKick: byKick,
     leagueKey: leagueKey, teamsBlock: teamsBlock, crest: crest,
