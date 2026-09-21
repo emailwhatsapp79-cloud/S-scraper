@@ -102,7 +102,7 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("tt");
-  var LAST = null, LEAGUE = "All", MODE = "up";
+  var LAST = null, LEAGUE = "All", MODE = "up", MIN60 = false;
 
   function odds(v) { return (v == null || !isFinite(Number(v))) ? "—" : Number(v).toFixed(2); }
 
@@ -290,17 +290,40 @@
     return box;
   }
 
+  function ourWin(g) {
+    var p = g.pct || g.ours;
+    if (!p) return null;
+    var a = Number(p.home), b = Number(p.away);
+    if (!isFinite(a) && !isFinite(b)) return null;
+    return Math.max(isFinite(a) ? a : 0, isFinite(b) ? b : 0);
+  }
+
   function filtered(list) {
-    return LEAGUE === "All" ? list : list.filter(function (g) { return (g.tourn || "Other") === LEAGUE; });
+    var out = LEAGUE === "All" ? list.slice() : list.filter(function (g) { return (g.tourn || "Other") === LEAGUE; });
+    if (MODE === "up" && MIN60) {
+      out = out.filter(function (g) { return ourWin(g) >= 60; });
+    }
+    return out;
   }
 
   function tourns(games) {
-    var counts = { All: games.length };
-    games.forEach(function (g) { var k = g.tourn || "Other"; counts[k] = (counts[k] || 0) + 1; });
+    var pool = (MODE === "up" && MIN60)
+      ? games.filter(function (g) { return ourWin(g) >= 60; })
+      : games;
+    var counts = { All: pool.length };
+    pool.forEach(function (g) { var k = g.tourn || "Other"; counts[k] = (counts[k] || 0) + 1; });
     var names = Object.keys(counts).filter(function (k) { return k !== "All"; })
       .sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 6);
     var box = document.getElementById("tourns");
     box.textContent = "";
+    if (MODE === "up") {
+      var n60 = games.filter(function (g) { return ourWin(g) >= 60; }).length;
+      var hot = V.el("button", "chip" + (MIN60 ? " on" : ""), "60%+ " + n60);
+      hot.type = "button";
+      hot.setAttribute("aria-pressed", MIN60 ? "true" : "false");
+      hot.addEventListener("click", function () { MIN60 = !MIN60; render(); });
+      box.appendChild(hot);
+    }
     ["All"].concat(names).forEach(function (name) {
       var b = V.el("button", "chip" + (LEAGUE === name ? " on" : ""), name + " " + (counts[name] || 0));
       b.type = "button";
@@ -317,7 +340,9 @@
     if (!list.length) {
       out.appendChild(V.el("div", "empty", MODE === "res"
         ? "No results banked yet — they fill in as matches finish."
-        : "No upcoming table tennis on the card right now."));
+        : (MIN60
+          ? "None at 60%+ on this card right now."
+          : "No upcoming table tennis on the card right now.")));
     } else if (MODE === "res") {
       list.forEach(function (g) { out.appendChild(resultRow(g)); });
     } else {
