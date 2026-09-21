@@ -729,3 +729,6 @@ html:not(.gate-ok) body .top { visibility: hidden }
 .lab-sub { font-size: 12px; color: var(--dim); }
 .lab-sub .ok { color: var(--go, #1f9d57); }
 .stat.bad b { color: var(--bad, #c8434e); }
+
+.pat-box { margin: 18px 0 8px }
+.pat-box .lab-h { margin-top: 0 }

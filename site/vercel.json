@@ -10,6 +10,10 @@
   },
   "crons": [
     {
+      "path": "/api/vf-fill",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/poll",
       "schedule": "15 23 * * *"
     },

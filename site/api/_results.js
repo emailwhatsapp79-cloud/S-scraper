@@ -4,7 +4,7 @@ import { sql } from "./_db.js";
 import { fetchEvent, scoreOf } from "./_card.js";
 
 /** Fetch and store results for finished games that don't have one yet. */
-export async function settleGames(limit = 45) {
+export async function settleGames(limit = 80) {
   const now = Date.now();
   const due = await sql`
     SELECT game_id, event_id FROM games
@@ -20,7 +20,10 @@ export async function settleGames(limit = 45) {
   let settled = 0;
   for (let i = 0; i < due.length; i++) {
     const snap = snaps[i];
-    if (!snap || !snap.ended || snap.ftHome == null) continue;
+    if (!snap || snap.ftHome == null) continue;
+    // Live snapshots carry the running score; only bank a result once it's over,
+    // otherwise we'd freeze a 0–0 at kick-off.
+    if (!snap.ended) continue;
     await sql`
       UPDATE games SET
         r_hg = ${snap.ftHome}, r_ag = ${snap.ftAway},
@@ -32,19 +35,62 @@ export async function settleGames(limit = 45) {
   return { checked: due.length, settled };
 }
 
+/** Bank any live events that already show an ended score — they drop off the list fast. */
+export async function settleFromEvents(events) {
+  let settled = 0;
+  for (const ev of events || []) {
+    const snap = scoreOf(ev);
+    if (!snap || !snap.ended || snap.ftHome == null) continue;
+    const id = snap.eventId || null;
+    const gid = snap.gameId || null;
+    if (id) {
+      const r = await sql`
+        UPDATE games SET
+          r_hg = ${snap.ftHome}, r_ag = ${snap.ftAway},
+          r_hthg = ${snap.htHome}, r_htag = ${snap.htAway},
+          r_status = ${snap.status || "ended"}, settled_at = now()
+        WHERE r_status IS NULL AND event_id = ${id}
+        RETURNING game_id`;
+      settled += r.length;
+    } else if (gid) {
+      const r = await sql`
+        UPDATE games SET
+          r_hg = ${snap.ftHome}, r_ag = ${snap.ftAway},
+          r_hthg = ${snap.htHome}, r_htag = ${snap.htAway},
+          r_status = ${snap.status || "ended"}, settled_at = now()
+        WHERE r_status IS NULL AND game_id = ${gid}
+        RETURNING game_id`;
+      settled += r.length;
+    }
+  }
+  return settled;
+}
+
 /** Settled games with odds + result, compact, for the Lab to analyse. */
-export async function settledGames(limit = 4000) {
+export async function settledGames(limit = 8000) {
   const rows = await sql`
-    SELECT game_id, league, kickoff,
+    SELECT game_id, home, away, league, kickoff,
            ft_home, ft_draw, ft_away, dc_1x, dc_12, dc_x2,
            ht_home, ht_draw, ht_away, r_hg, r_ag, r_hthg, r_htag
     FROM games WHERE r_status IS NOT NULL
     ORDER BY kickoff DESC LIMIT ${limit}`;
   return rows.map((r) => ({
-    id: r.game_id, league: r.league || "", kickoff: r.kickoff ? Number(r.kickoff) : null,
+    id: r.game_id,
+    home: r.home || "", away: r.away || "",
+    league: r.league || "", kickoff: r.kickoff ? Number(r.kickoff) : null,
     ft: { home: r.ft_home, draw: r.ft_draw, away: r.ft_away },
     dc: r.dc_1x == null ? null : { home_draw: r.dc_1x, home_away: r.dc_12, draw_away: r.dc_x2 },
     ht: r.ht_home == null ? null : { home: r.ht_home, draw: r.ht_draw, away: r.ht_away },
     res: { hg: r.r_hg, ag: r.r_ag, hthg: r.r_hthg, htag: r.r_htag },
   }));
+}
+
+export async function countsVF() {
+  const rows = await sql`
+    SELECT
+      COUNT(*) AS total,
+      COUNT(*) FILTER (WHERE r_status IS NOT NULL) AS settled
+    FROM games`;
+  const r = rows[0] || {};
+  return { total: Number(r.total || 0), settled: Number(r.settled || 0) };
 }
