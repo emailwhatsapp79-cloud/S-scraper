@@ -106,7 +106,7 @@ function rowFromNode(n, tourn, byLast) {
   };
 }
 
-async function bulkInsert(rows) {
+export async function bulkInsert(rows) {
   let saved = 0;
   for (let i = 0; i < rows.length; i += 15) {
     const slice = rows.slice(i, i + 15);
