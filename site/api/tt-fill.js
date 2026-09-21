@@ -10,11 +10,11 @@ export default async function handler(req, res) {
   let s24 = null;
   try {
     s24 = await pullScores24([], {
-      skipHtml: true, more: true, pages: 5, first: 50, days: 400,
-      players: 3, playerPages: 2,
+      skipHtml: true, more: true, pages: 2, first: 50, days: 400,
+      players: 0,
     });
   }
-  catch (e) { s24 = { error: String(e?.message || e) }; }
+  catch (e) { s24 = { error: String(e?.message || e), hasMore: true }; }
   let counts = { total: 0, settled: 0 };
   try { counts = await countsTT(); } catch { /* ignore */ }
   res.setHeader("Cache-Control", "no-store");
@@ -22,7 +22,7 @@ export default async function handler(req, res) {
     ok: !s24?.error,
     tookMs: Date.now() - started,
     s24,
-    hasMore: !!(s24 && s24.hasMore),
+    hasMore: !!(s24 && (s24.hasMore || s24.error)),
     stored: counts.total,
     settled: counts.settled,
   });

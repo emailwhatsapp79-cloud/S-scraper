@@ -338,16 +338,15 @@
     sn.textContent = "Refreshing history… " + comma(document.getElementById("s-settled").textContent.replace(/,/g, "") || 0);
     return fetch("/api/tt-fill").then(readJson).then(function (f) {
       if (f && f.settled != null) document.getElementById("s-settled").textContent = comma(f.settled);
-      if (f && (f.hasMore || f.error === "fill timeout")) {
-        return fillPass();
-      }
+      var keep = f && (f.hasMore || f.error || (f.s24 && (f.s24.hasMore || f.s24.error)));
+      if (keep) return new Promise(function (ok) { setTimeout(ok, 800); }).then(fillPass);
       sn.textContent = comma(f && f.settled) + " in the pile — catching new results every 2 min";
       return fetch("/api/tt").then(readJson).then(function (d) {
         if (d && d.ok) apply(d);
       }).then(function () {
         setTimeout(fillPass, 120000);
       });
-    }).catch(function () { setTimeout(fillPass, 120000); });
+    }).catch(function () { setTimeout(fillPass, 4000); });
   }
 
   fetch("/api/tt").then(readJson).then(function (d) {
