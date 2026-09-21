@@ -209,7 +209,8 @@ async function ensureTours() {
 export async function pullSetkaDays(opts = {}) {
   await ensure();
   await ensureTours();
-  const days = opts.days ?? 3;
+  const days = opts.days ?? 1;
+  const offset = opts.offset ?? 0; // start this many days back — lets a backfill walk older
   const deadline = Date.now() + (opts.deadlineMs || 20000);
   const today = ymd(Date.now());
 
@@ -220,7 +221,7 @@ export async function pullSetkaDays(opts = {}) {
   const seen = new Set();
   const marks = [];
   let daysHit = 0, tournsPulled = 0, err = null;
-  for (let d = 0; d < days; d++) {
+  for (let d = offset; d < offset + days; d++) {
     if (Date.now() > deadline) break;
     const date = ymd(Date.now() - d * 24 * 3600 * 1000);
     let list;

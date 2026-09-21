@@ -55,7 +55,7 @@ export default async function handler(req, res) {
     catch (e) { s24 = { error: String(e?.message || e) }; }
     // Broad Setka firehose. Payload is ~13s/day, so sweep the most recent day
     // or two each run; older days are marked done and never re-fetched.
-    try { setkaSweep = await pullSetkaDays({ days: 2, deadlineMs: 16000 }); }
+    try { setkaSweep = await pullSetkaDays({ days: 1, deadlineMs: 16000 }); }
     catch (e) { setkaSweep = { error: String(e?.message || e) }; }
     try { setka = await pullSetka(setkaNames, { players: 8, tournaments: 8, deadlineMs: 8000 }); }
     catch (e) { setka = { error: String(e?.message || e) }; }

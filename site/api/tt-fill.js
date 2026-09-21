@@ -27,8 +27,13 @@ export default async function handler(req, res) {
   // heavy for the card pass, so it gets its own mode with room to breathe.
   if (String(req.query?.setka || "") === "1") {
     let sweep = null;
-    try { sweep = await pullSetkaDays({ days: Number(req.query?.days) || 2, deadlineMs: 24000 }); }
-    catch (e) { sweep = { error: String(e?.message || e) }; }
+    try {
+      sweep = await pullSetkaDays({
+        days: Number(req.query?.days) || 1,
+        offset: Number(req.query?.offset) || 0,
+        deadlineMs: 24000,
+      });
+    } catch (e) { sweep = { error: String(e?.message || e) }; }
     let counts = { total: 0, settled: 0 };
     try { counts = await countsTT(); } catch { /* ignore */ }
     res.setHeader("Cache-Control", "no-store");
