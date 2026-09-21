@@ -42,14 +42,18 @@ export default async function handler(req, res) {
     catch (e) { setka = { error: String(e?.message || e) }; }
   }
 
+  // s24 runs on the alternating (non-card) passes; the card pass does card +
+  // enrich + Setka, so neither pass crowds the 30s budget.
   let s24 = null;
-  const budget = Math.max(4000, (wantCard ? 8000 : 24000) - (Date.now() - started));
-  try {
-    s24 = await pullScores24([], {
-      skipHtml: true, more: true, pages: wantCard ? 2 : 4, first: 50, days: 400,
-      players: 0, deadlineMs: budget,
-    });
-  } catch (e) { s24 = { error: String(e?.message || e), hasMore: true }; }
+  if (!wantCard) {
+    const budget = Math.max(6000, 24000 - (Date.now() - started));
+    try {
+      s24 = await pullScores24([], {
+        skipHtml: true, more: true, pages: 4, first: 50, days: 400,
+        players: 0, deadlineMs: budget,
+      });
+    } catch (e) { s24 = { error: String(e?.message || e), hasMore: true }; }
+  }
 
   let counts = { total: 0, settled: 0 };
   try { counts = await countsTT(); } catch { /* ignore */ }
@@ -59,7 +63,8 @@ export default async function handler(req, res) {
     tookMs: Date.now() - started,
     card, enriched, cardErr, setka,
     s24,
-    hasMore: !!(s24 && (s24.hasMore || s24.error)),
+    // Keep the page's fast loop going while either source still has more to bank.
+    hasMore: !!(s24 && (s24.hasMore || s24.error)) || !!(setka && setka.saved > 0),
     stored: counts.total,
     settled: counts.settled,
   });
