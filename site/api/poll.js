@@ -7,7 +7,7 @@ import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
 import { settleGames } from "./_results.js";
 import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT, rebuildPack } from "./_tt.js";
 import { pullScores24 } from "./_s24.js";
-import { pullSetka } from "./_setka.js";
+import { pullSetka, pullSetkaDays } from "./_setka.js";
 // Sofascore history is disabled: its API 403s every server request, so it banked
 // nothing and only wasted poll time. scores24 + the official Setka feed cover it.
 
@@ -50,15 +50,18 @@ export default async function handler(req, res) {
     const names = events.flatMap((ev) => [ev.homeTeamName, ev.awayTeamName].filter(Boolean));
     const setkaNames = games.filter((g) => /setka/i.test(g.tourn || ""))
       .flatMap((g) => [g.home, g.away]).filter(Boolean);
-    let s24 = null, setka = null;
-    try { s24 = await pullScores24(names, { skipHtml: false, more: true, pages: 5, first: 50, days: 400, players: 0, deadlineMs: 18000 }); }
+    let s24 = null, setka = null, setkaSweep = null;
+    try { s24 = await pullScores24(names, { skipHtml: false, more: true, pages: 5, first: 50, days: 400, players: 0, deadlineMs: 14000 }); }
     catch (e) { s24 = { error: String(e?.message || e) }; }
-    try { setka = await pullSetka(setkaNames, { players: 12, tournaments: 8, deadlineMs: 12000 }); }
+    // Broad Setka firehose (all pools over the last ~2 weeks), then card depth.
+    try { setkaSweep = await pullSetkaDays({ days: 14, deadlineMs: 12000 }); }
+    catch (e) { setkaSweep = { error: String(e?.message || e) }; }
+    try { setka = await pullSetka(setkaNames, { players: 8, tournaments: 8, deadlineMs: 8000 }); }
     catch (e) { setka = { error: String(e?.message || e) }; }
-    let pack = null;
-    try { pack = await rebuildPack(); pack = { built: pack?.builtAt || null, nGames: pack?.nGames || 0 }; }
-    catch (e) { pack = { error: String(e?.message || e) }; }
-    tt = { saved: ttSaved, touched: ttTouched, s24, setka, pack };
+    let trained = null;
+    try { trained = await rebuildPack(); }
+    catch (e) { trained = { error: String(e?.message || e) }; }
+    tt = { saved: ttSaved, touched: ttTouched, s24, setka, setkaSweep, trained };
   } catch (e) { tt = { error: String(e?.message || e) }; }
 
   res.setHeader("Cache-Control", "no-store");

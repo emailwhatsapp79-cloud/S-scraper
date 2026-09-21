@@ -5,7 +5,7 @@
 import { guard } from "./_gate.js";
 import { fetchTTCard, normalise, storeTT, enrichSettleTT, countsTT, rebuildPack } from "./_tt.js";
 import { pullScores24 } from "./_s24.js";
-import { pullSetka } from "./_setka.js";
+import { pullSetka, pullSetkaDays } from "./_setka.js";
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
@@ -37,9 +37,13 @@ export default async function handler(req, res) {
         .flatMap((g) => [g.home, g.away]).filter(Boolean);
     } catch (e) { cardErr = String(e?.message || e); }
     try { enriched = (await enrichSettleTT(12)).touched; } catch { /* keep going */ }
-    // Official Setka feed — fills history for the pools scores24 doesn't carry.
-    try { setka = await pullSetka(setkaNames, { players: 5, tournaments: 6, deadlineMs: 9000 }); }
-    catch (e) { setka = { error: String(e?.message || e) }; }
+    // Official Setka feed — sweep every recent tournament (all pools at once),
+    // then top up any card players the sweep didn't reach.
+    try {
+      const sweep = await pullSetkaDays({ days: 4, deadlineMs: 7000 });
+      const top = await pullSetka(setkaNames, { players: 3, tournaments: 4, deadlineMs: 4000 });
+      setka = { sweep, top };
+    } catch (e) { setka = { error: String(e?.message || e) }; }
   }
 
   // s24 runs on the alternating (non-card) passes; the card pass does card +

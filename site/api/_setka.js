@@ -185,3 +185,63 @@ export async function pullSetka(names, opts = {}) {
   const saved = uniqRows.length ? await bulkInsert(uniqRows) : 0;
   return { players: used, found, saved, note: `setka ${used}p/${saved}` };
 }
+
+function ymd(ms) {
+  return new Date(ms).toISOString().slice(0, 10);
+}
+
+let toursReady = false;
+async function ensureTours() {
+  if (toursReady) return;
+  await sql`CREATE TABLE IF NOT EXISTS tt_setka_tourn (
+    tid INT PRIMARY KEY,
+    done BOOLEAN NOT NULL DEFAULT FALSE,
+    pulled_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  toursReady = true;
+}
+
+/** Whole-firehose sweep: for each recent day, pull EVERY tournament's finished
+ *  matches — all pools at once, not just card players. A tournament from a past
+ *  day is fetched once (marked done); today's is re-fetched until the day ends.
+ *  Bounded by deadlineMs so it advances a bit each pass. */
+export async function pullSetkaDays(opts = {}) {
+  await ensure();
+  await ensureTours();
+  const days = opts.days ?? 4;
+  const deadline = Date.now() + (opts.deadlineMs || 12000);
+  const today = ymd(Date.now());
+
+  const doneRows = await sql`SELECT tid FROM tt_setka_tourn WHERE done = TRUE`;
+  const done = new Set(doneRows.map((r) => Number(r.tid)));
+
+  const rows = [];
+  const seen = new Set();
+  let tournsSeen = 0, tournsPulled = 0;
+  for (let d = 0; d < days; d++) {
+    if (Date.now() > deadline) break;
+    const date = ymd(Date.now() - d * 24 * 3600 * 1000);
+    let list;
+    try { list = await timedFetch(`${API}/Tournaments/en?date=${date}`); }
+    catch { continue; }
+    if (!Array.isArray(list)) continue;
+    for (const t of list) {
+      if (Date.now() > deadline) break;
+      const tid = Number(t.id);
+      if (!tid) continue;
+      tournsSeen++;
+      if (done.has(tid)) continue;                 // fully pulled already
+      if (/xd|women|double/i.test(String(t.division || t.name || ""))) continue;
+      const rs = await tournamentRows(tid);
+      for (const r of rs) { if (!seen.has(r.id)) { seen.add(r.id); rows.push(r); } }
+      tournsPulled++;
+      // A past day's tournament is final; today's may still be adding matches.
+      const isPast = date < today;
+      await sql`INSERT INTO tt_setka_tourn (tid, done, pulled_at)
+        VALUES (${tid}, ${isPast}, now())
+        ON CONFLICT (tid) DO UPDATE SET done = ${isPast}, pulled_at = now()`;
+    }
+  }
+  const saved = rows.length ? await bulkInsert(rows) : 0;
+  return { tournsSeen, tournsPulled, saved, note: `setka sweep ${tournsPulled}t/${saved}` };
+}
