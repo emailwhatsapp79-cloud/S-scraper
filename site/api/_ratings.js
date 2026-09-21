@@ -214,7 +214,10 @@ async function loadCardPlayers(games) {
     const long = k.split("|").filter((t) => t.length >= 4).sort((a, b) => b.length - a.length)[0];
     if (!long) continue;
     try {
-      const cand = await sql`SELECT * FROM tt_ratings WHERE name_key LIKE ${"%" + long + "%"} LIMIT 6`;
+      // Deterministic order (most-played first) so the same candidates resolve
+      // every time — otherwise a fuzzy-matched player's % flickers between loads.
+      const cand = await sql`SELECT * FROM tt_ratings WHERE name_key LIKE ${"%" + long + "%"}
+        ORDER BY n DESC, name_key ASC LIMIT 8`;
       for (const r of cand) if (!players[r.name_key]) players[r.name_key] = parsePlayer(r);
     } catch { /* skip */ }
   }

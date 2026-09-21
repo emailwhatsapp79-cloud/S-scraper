@@ -347,10 +347,22 @@
 
   function apply(d) {
     LAST = d;
+    var y = window.scrollY; // keep the reader's place across a re-render
     document.getElementById("s-up").textContent = String(d.count || 0);
     document.getElementById("s-settled").textContent = comma(d.settled || 0);
     backtest(d.model);
     render();
+    window.scrollTo(0, y);
+  }
+
+  // Only pull a fresh card + repaint at most once a minute (or when forced), so
+  // the background fill loop doesn't visibly refresh the page every second.
+  var lastPaint = Date.now();
+  function repaint(force) {
+    if (!force && Date.now() - lastPaint < 60000) return Promise.resolve();
+    lastPaint = Date.now();
+    return fetch("/api/tt").then(readJson).then(function (d) { if (d && d.ok) apply(d); })
+      .catch(function () {});
   }
 
   function pctOf(x) { return (x == null || !isFinite(x)) ? "—" : Math.round(x * 100) + "%"; }
@@ -384,14 +396,13 @@
         after = fetch("/api/tt-fill?pack=1").then(readJson).then(function () { return f; });
       }
       return after.then(function (f) {
-        if ((f && f.card) || (saved > 0 && fillN % 3 === 0)) {
-          fetch("/api/tt").then(readJson).then(function (d) { if (d && d.ok) apply(d); });
-        }
+        // Background filling runs every ~600ms, but only repaint the visible card
+        // occasionally — re-rendering every second was jumping scroll and making
+        // the odds/percentages appear to "change" on every tick.
+        repaint(false);
         if (keep) return new Promise(function (ok) { setTimeout(ok, 600); }).then(fillPass);
         sn.textContent = comma(f && f.settled) + " finished" + (note ? " · " + note : "") + " — keeps filling at night with the tab closed";
-        return fetch("/api/tt").then(readJson).then(function (d) {
-          if (d && d.ok) apply(d);
-        }).then(function () {
+        return repaint(true).then(function () {
           setTimeout(fillPass, 120000);
         });
       });
