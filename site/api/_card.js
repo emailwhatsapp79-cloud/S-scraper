@@ -92,10 +92,10 @@ export async function fetchLive() {
   return events;
 }
 
-export async function fetchEvent(eventId) {
+export async function fetchEvent(eventId, extra = {}) {
   if (!eventId) return null;
   try {
-    return await getJson("event", { eventId, marketId: MARKET_IDS });
+    return await getJson("event", { eventId, marketId: MARKET_IDS, ...extra });
   } catch {
     return null;
   }
@@ -138,26 +138,54 @@ export function parseScore(s) {
   return { home: Number(m[1]), away: Number(m[2]) };
 }
 
+function ttWinnerPrices(ev) {
+  const cands = (ev.markets || []).filter((m) => /^winner$/i.test(String(m.desc || "")));
+  if (!cands.length) return {};
+  cands.sort((a, b) => ((b.product === 1) - (a.product === 1)));
+  const w = {};
+  for (const o of cands[0].outcomes || []) {
+    const p = parseFloat(o.odds);
+    if (!isFinite(p) || p <= 1) continue;
+    const d = String(o.desc || "");
+    const id = String(o.id || o.outcomeId || "");
+    if (/^home$/i.test(d) || id === "4") w["1"] = p;
+    else if (/^away$/i.test(d) || id === "5") w["2"] = p;
+  }
+  return w;
+}
+
+function currentPoints(ev, setScore) {
+  const gs = Array.isArray(ev.gameScore) ? ev.gameScore : [];
+  if (!gs.length) return null;
+  const done = setScore ? setScore.home + setScore.away : 0;
+  const idx = gs.length > done ? gs.length - 1 : (done === 0 ? 0 : -1);
+  if (idx < 0) return null;
+  return parseScore(gs[idx]);
+}
+
 export function scoreOf(ev) {
   if (!ev) return null;
   const ft = parseScore(ev.setScore);
   const ht = Array.isArray(ev.gameScore) && ev.gameScore[0] ? parseScore(ev.gameScore[0]) : null;
   const status = ev.matchStatus || "";
+  const live = /^(H1|H2|HT|1H|2H|LIVE|set\s*\d|Playing)/i.test(status);
+  const pts = live ? currentPoints(ev, ft) : null;
+  const prices = { ...pricesOf(ev), ...ttWinnerPrices(ev) };
   return {
     gameId: String(ev.gameId),
     eventId: ev.eventId || null,
     home: ev.homeTeamName || "",
     away: ev.awayTeamName || "",
     status,
-    played: ev.playedSeconds || "",
+    played: pts ? (pts.home + ":" + pts.away) : (ev.playedSeconds || ""),
     setScore: ev.setScore || "",
     ftHome: ft ? ft.home : null,
     ftAway: ft ? ft.away : null,
     htHome: ht ? ht.home : null,
     htAway: ht ? ht.away : null,
     ended: /^end/i.test(status),
-    live: /^(H1|H2|HT|1H|2H|LIVE)/i.test(status),
-    prices: pricesOf(ev),
+    live,
+    prices,
   };
 }
 

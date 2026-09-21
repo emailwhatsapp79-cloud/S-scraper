@@ -288,7 +288,10 @@ export async function refreshSlips() {
 
   let liveMap = new Map();
   const eventIds = [...new Set(legs.map((l) => l.event_id).filter(Boolean))];
-  const snaps = await Promise.all(eventIds.map((id) => fetchEvent(id)));
+  const snaps = await Promise.all(eventIds.map((id) => {
+    const tt = legs.some((l) => l.event_id === id && l.sport === "tt");
+    return fetchEvent(id, tt ? { marketId: "186" } : {});
+  }));
   for (const ev of snaps) {
     const snap = scoreOf(ev);
     if (snap && snap.eventId) liveMap.set(snap.eventId, snap);
@@ -335,7 +338,7 @@ export async function refreshSlips() {
     const ls = grouped.get(slip.id) || [];
     const anyLost = ls.some((l) => l.won === "no");
     const allWon = ls.length > 0 && ls.every((l) => l.won === "yes");
-    const anyLive = ls.some((l) => l.match_status && /^(H1|H2|HT|1H|2H|LIVE)/i.test(l.match_status));
+    const anyLive = ls.some((l) => l.match_status && /^(H1|H2|HT|1H|2H|LIVE|set\s*\d|Playing)/i.test(l.match_status));
     let status = "open";
     let returned = null;
     let settledAt = null;

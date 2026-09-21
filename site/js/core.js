@@ -1027,7 +1027,7 @@
 
   function matchState(l) {
     if (l.won === true || l.won === false || /^end/i.test(l.status || "")) return "ended";
-    if (/^(H1|H2|HT|1H|2H|LIVE)/i.test(l.status || "")) return "live";
+    if (/^(H1|H2|HT|1H|2H|LIVE|set\s*\d|Playing)/i.test(l.status || "")) return "live";
     if (l.kickoff && Number(l.kickoff) <= Date.now() - 15000) return "live";
     return "wait";
   }
@@ -1040,12 +1040,17 @@
     return null;
   }
 
+  function pointsPair(l) {
+    var m = String(l.played || "").trim().match(/^(\d+)\s*[:\-]\s*(\d+)$/);
+    return m ? [Number(m[1]), Number(m[2])] : null;
+  }
+
   function phaseLabel(l, st) {
     if (st === "ended") return "FT";
     var status = l.status || "LIVE";
     var played = String(l.played || "");
-    var min = played.match(/^(\d+)/);
-    if (min) return status + " · " + min[1] + "'";
+    var min = played.match(/^(\d+)'?$/);
+    if (min && !pointsPair(l)) return status + " · " + min[1] + "'";
     return status;
   }
 
@@ -1080,9 +1085,18 @@
       var t = until(l.kickoff);
       if (t.text && t.text !== "kicked off") mid.appendChild(el("div", "phase", t.text));
     } else {
-      var a = pair ? pair[0] : 0, b = pair ? pair[1] : 0;
-      mid.appendChild(el("div", "scoreboard", a + " – " + b));
-      mid.appendChild(el("div", "phase", phaseLabel(l, st)));
+      var pts = st === "live" ? pointsPair(l) : null;
+      var a, b;
+      if (pts) {
+        a = pts[0]; b = pts[1];
+        mid.appendChild(el("div", "scoreboard points", a + " – " + b));
+        var sets = pair ? (pair[0] + "–" + pair[1]) : "";
+        mid.appendChild(el("div", "phase", (sets ? sets + " · " : "") + phaseLabel(l, st)));
+      } else {
+        a = pair ? pair[0] : 0; b = pair ? pair[1] : 0;
+        mid.appendChild(el("div", "scoreboard", a + " – " + b));
+        mid.appendChild(el("div", "phase", phaseLabel(l, st)));
+      }
     }
     row.appendChild(mid);
 
