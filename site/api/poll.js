@@ -5,7 +5,7 @@ import { fetchCard, normalise } from "./_card.js";
 import { refreshSlips } from "./_slips.js";
 import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
 import { settleGames } from "./_results.js";
-import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT } from "./_tt.js";
+import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT, rebuildPack } from "./_tt.js";
 import { pullSofaHistory } from "./_sofa.js";
 import { pullScores24 } from "./_s24.js";
 
@@ -50,7 +50,10 @@ export default async function handler(req, res) {
     catch (e) { s24 = { error: String(e?.message || e) }; }
     try { sofa = await pullSofaHistory(names, { players: 4, pages: 5 }); }
     catch (e) { sofa = { error: String(e?.message || e) }; }
-    tt = { saved: ttSaved, touched: ttTouched, s24, sofa };
+    let pack = null;
+    try { pack = await rebuildPack(); pack = { built: pack?.builtAt || null, nGames: pack?.nGames || 0 }; }
+    catch (e) { pack = { error: String(e?.message || e) }; }
+    tt = { saved: ttSaved, touched: ttTouched, s24, sofa, pack };
   } catch (e) { tt = { error: String(e?.message || e) }; }
 
   res.setHeader("Cache-Control", "no-store");

@@ -1,7 +1,8 @@
 // Real table tennis off SportyBet (sr:sport:20). Own table, own pipeline.
-// Win% is Elo + H2H + recent form, shrunk toward the book only when the
-// pile is thin. Correct score % comes from the same match probability
-// (set-win model), not from 1/odd.
+// Win% is our own read — Elo + H2H + recent form off the banked pile — shrunk
+// toward the book only while a pairing is thin on history. The fitted ratings
+// are cached as a "pack" (tt_model) and refreshed on a timer, so the card loads
+// fast instead of re-fitting tens of thousands of games on every request.
 import { sql } from "./_db.js";
 
 const BASE = "https://www.sportybet.com/api/ng/factsCenter";
@@ -246,53 +247,6 @@ function winPctBook(hOdds, aOdds) {
   return { home: ih / s, away: ia / s };
 }
 
-function binom(n, k) {
-  if (k < 0 || k > n) return 0;
-  k = Math.min(k, n - k);
-  let r = 1;
-  for (let i = 1; i <= k; i++) r = r * (n - k + i) / i;
-  return r;
-}
-
-function pMatchFromSet(ps, need) {
-  const q = 1 - ps;
-  let s = 0;
-  for (let k = 0; k < need; k++) {
-    s += binom(need - 1 + k, k) * Math.pow(ps, need) * Math.pow(q, k);
-  }
-  return s;
-}
-
-function matchToSet(pMatch, need) {
-  let lo = 0.05, hi = 0.95;
-  for (let i = 0; i < 24; i++) {
-    const mid = (lo + hi) / 2;
-    if (pMatchFromSet(mid, need) < pMatch) lo = mid;
-    else hi = mid;
-  }
-  return (lo + hi) / 2;
-}
-
-function setScores(ps, need) {
-  const q = 1 - ps;
-  const out = {};
-  for (let k = 0; k < need; k++) {
-    out[need + ":" + k] = binom(need - 1 + k, k) * Math.pow(ps, need) * Math.pow(q, k);
-    out[k + ":" + need] = binom(need - 1 + k, k) * Math.pow(q, need) * Math.pow(ps, k);
-  }
-  return out;
-}
-
-function detectBO(cs) {
-  if (cs) {
-    for (const k of Object.keys(cs)) {
-      const [a, b] = k.split(":").map(Number);
-      if (a === 4 || b === 4) return 4;
-    }
-  }
-  return 3;
-}
-
 function formVsField(rec, excludeKey) {
   const list = (rec || []).filter((x) => x.vs !== excludeKey).slice(-50);
   if (list.length < 3) return null;
@@ -377,6 +331,10 @@ export function fitTT(games) {
     const k = nameKey(name);
     return players[k] || (players[k] = { n: 0, w: 0, elo: 1500, last: 0, rec: [], tourn: {} });
   };
+  // Walk-forward check: grade each game against the rating we held BEFORE it,
+  // but only once both players have some history (a fresh 1500 vs 1500 is not a
+  // real prediction). This is honest self-scoring — did our number beat a coin?
+  const bt = { n: 0, hit: 0, brier: 0, bins: Array.from({ length: 5 }, () => ({ n: 0, w: 0 })) };
   const settled = (games || [])
     .filter((g) => g.res && g.res.home != null && g.res.away != null)
     .sort((a, b) => (a.start || 0) - (b.start || 0));
@@ -386,6 +344,17 @@ export function fitTT(games) {
     const need = Math.max(g.res.home, g.res.away) || 3;
     const margin = Math.abs(g.res.home - g.res.away) / need;
     const exp = 1 / (1 + 10 ** ((A.elo - H.elo) / 400));
+    if (H.n >= 5 && A.n >= 5) {
+      const y = hw ? 1 : 0;
+      bt.n++;
+      bt.brier += (exp - y) * (exp - y);
+      const rightSide = (exp >= 0.5) === (y === 1);
+      if (rightSide) bt.hit++;
+      const conf = Math.max(exp, 1 - exp);
+      const bi = Math.min(4, Math.max(0, Math.floor((conf - 0.5) / 0.1)));
+      bt.bins[bi].n++;
+      if (rightSide) bt.bins[bi].w++;
+    }
     const k = 12 + 20 * margin;
     H.elo += k * ((hw ? 1 : 0) - exp);
     A.elo += k * ((hw ? 0 : 1) - (1 - exp));
@@ -412,7 +381,19 @@ export function fitTT(games) {
     row.as += Number(g.res.away) || 0;
   }
   const ha = homeN >= 30 ? Math.min(0.08, Math.max(-0.08, homeW / homeN - 0.5)) : 0;
-  return { players, h2h, ha, homeN };
+  const backtest = {
+    n: bt.n,
+    hit: bt.n ? bt.hit / bt.n : null,
+    brier: bt.n ? bt.brier / bt.n : null,
+    // "when we call it 70%+, how often are we right" — the confident buckets
+    strongN: bt.bins.slice(2).reduce((s, b) => s + b.n, 0),
+    strongHit: (() => {
+      const n = bt.bins.slice(2).reduce((s, b) => s + b.n, 0);
+      const w = bt.bins.slice(2).reduce((s, b) => s + b.w, 0);
+      return n ? w / n : null;
+    })(),
+  };
+  return { players, h2h, ha, homeN, backtest };
 }
 
 function shape(r) {
@@ -464,22 +445,113 @@ function attachForecast(games, pack) {
     // stronger (1.29 vs 3.30 is not a coin flip). Anchor on the de-vigged book
     // and only let the model pull away from it as we actually see these two play.
     const book = g.win ? winPctBook(g.win.home, g.win.away) : null;
+    const h2hN = f.h2hRec ? f.h2hRec.n : 0;
+    const evidence = Math.min(f.nH, f.nA) + 2 * h2hN; // h2h meetings count double
     let pHome = f.pHome;
     if (book) {
-      const h2hN = f.h2hRec ? f.h2hRec.n : 0;
-      const evidence = Math.min(f.nH, f.nA) + 2 * h2hN; // h2h meetings count double
-      const wModel = evidence / (evidence + 12);        // 0 → all book; ½ at ~12 games
+      const wModel = evidence / (evidence + 12); // 0 → all book; ½ at ~12 games
       pHome = wModel * f.pHome + (1 - wModel) * book.home;
     }
     pHome = Math.min(0.97, Math.max(0.03, pHome));
-    g.ours = { home: Math.round(f.pHome * 100), away: Math.round((1 - f.pHome) * 100) };
-    g.book = book ? { home: Math.round(book.home * 100), away: Math.round(book.away * 100) } : null;
+    // pct = the headline Vantage number: our read, leaning on the book only while
+    // the pairing is thin. ours = the pure model read, shown for comparison — but
+    // only when there's enough history for it to mean something (no fake 50/50).
     g.pct = { home: Math.round(pHome * 100), away: Math.round((1 - pHome) * 100) };
+    g.book = book ? { home: Math.round(book.home * 100), away: Math.round(book.away * 100) } : null;
+    g.ours = evidence >= 3
+      ? { home: Math.round(f.pHome * 100), away: Math.round((1 - f.pHome) * 100) }
+      : null;
     g.nH = f.nH; g.nA = f.nA;
     g.h2hRec = f.h2hRec || { n: 0, home: 0, away: 0 };
     g.formH = f.formH; g.formA = f.formA;
   }
   return games;
+}
+
+// ── Ratings pack cache ──────────────────────────────────────────────────────
+// Fitting 25k games on every card load cost ~12s and grew with the pile. Instead
+// we fit once, stash the pack in tt_model, and rebuild it only when it goes
+// stale. The fit input is capped at the most recent 25k games, so a rebuild
+// stays bounded (~10s) no matter how deep the banked history grows.
+const PACK_STALE_MS = 6 * 60 * 1000;
+let _pack = null;         // { builtAt, data }
+let _packTable = false;
+
+async function ensurePackTable() {
+  if (_packTable) return;
+  await sql`CREATE TABLE IF NOT EXISTS tt_model (
+    k TEXT PRIMARY KEY,
+    pack TEXT,
+    built_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  _packTable = true;
+}
+
+// Keep only what forecastTT reads, and cap each player's history, so the stored
+// JSON stays a few MB rather than tens.
+function trimPack(raw) {
+  const players = {};
+  for (const [k, p] of Object.entries(raw.players)) {
+    players[k] = {
+      n: p.n, w: p.w, last: p.last,
+      elo: Math.round(p.elo * 10) / 10,
+      rec: (p.rec || []).slice(-40).map((x) => ({ won: x.won, vs: x.vs, sw: x.sw, sl: x.sl })),
+      tourn: p.tourn,
+    };
+  }
+  return {
+    players, h2h: raw.h2h, ha: raw.ha,
+    nGames: raw.homeN || 0,
+    backtest: raw.backtest || null,
+  };
+}
+
+async function buildAndSavePack() {
+  await ensurePackTable();
+  const raw = fitTT(await loadSettledForFit());
+  const data = trimPack(raw);
+  const iso = new Date().toISOString();
+  data.builtAt = iso;
+  const json = JSON.stringify(data);
+  await sql`
+    INSERT INTO tt_model (k, pack, built_at) VALUES ('pack', ${json}, ${iso})
+    ON CONFLICT (k) DO UPDATE SET pack = ${json}, built_at = ${iso}`;
+  _pack = { builtAt: iso, data };
+  return data;
+}
+
+// Return a usable pack: cached if fresh, reloaded if another instance rebuilt it,
+// rebuilt if missing or stale.
+async function ensureModelPack() {
+  await ensurePackTable();
+  let meta = [];
+  try { meta = await sql`SELECT built_at FROM tt_model WHERE k = 'pack'`; } catch { meta = []; }
+  const row = meta[0];
+  const age = row ? Date.now() - new Date(row.built_at).getTime() : Infinity;
+  if (!row || age > PACK_STALE_MS) return await buildAndSavePack();
+  const builtAt = new Date(row.built_at).toISOString();
+  if (_pack && _pack.builtAt === builtAt) return _pack.data;
+  const full = await sql`SELECT pack FROM tt_model WHERE k = 'pack'`;
+  try {
+    const data = JSON.parse(full[0].pack);
+    _pack = { builtAt, data };
+    return data;
+  } catch {
+    return await buildAndSavePack();
+  }
+}
+
+// Poll/cron can force a refresh so the pack stays warm even with no visitors.
+export async function rebuildPack() {
+  try { return await buildAndSavePack(); }
+  catch (e) { return { error: String(e?.message || e) }; }
+}
+
+export async function getModelMeta() {
+  try {
+    const d = await ensureModelPack();
+    return { builtAt: d.builtAt || null, nGames: d.nGames || 0, backtest: d.backtest || null };
+  } catch { return null; }
 }
 
 export async function listUpcomingTT(limit = 400) {
@@ -491,19 +563,21 @@ export async function listUpcomingTT(limit = 400) {
     ORDER BY start_at ASC NULLS LAST
     LIMIT ${limit}`;
   const games = rows.map(shape).filter((g) => g.upcoming);
-  const pack = fitTT(await loadSettledForFit());
+  let pack;
+  try { pack = await ensureModelPack(); }
+  catch { pack = fitTT(await loadSettledForFit()); } // never break the card
   return attachForecast(games, pack);
 }
 
+// Recently PLAYED matches from anywhere in the pile (SportyBet or the history
+// feed), newest match first — so "they've been playing" actually shows.
 export async function listRecentResultsTT(limit = 60) {
   await ensureTT();
   const rows = await sql`
     SELECT * FROM tt_games
     WHERE r_home IS NOT NULL AND r_away IS NOT NULL
-      AND match_id NOT LIKE 'sofa:%'
-      AND match_id NOT LIKE 's24:%'
-    ORDER BY COALESCE(settled_at, to_timestamp(start_at / 1000)) DESC NULLS LAST,
-             start_at DESC NULLS LAST
+      AND start_at IS NOT NULL
+    ORDER BY start_at DESC NULLS LAST
     LIMIT ${limit}`;
   return rows.map(shape);
 }

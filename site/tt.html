@@ -87,6 +87,7 @@
     <div class="stat go"><b id="s-settled">—</b><span>Finished — trains %</span></div>
   </div>
   <p class="note" id="sofa-note"></p>
+  <p class="note" id="bt-note"></p>
   <div class="seg" id="seg">
     <button type="button" data-mode="up" class="on">Upcoming</button>
     <button type="button" data-mode="res">Results</button>
@@ -146,7 +147,7 @@
   }
 
   function playersBlock(g) {
-    var pct = g.ours || g.pct || null;
+    var pct = g.pct || g.ours || null;
     var favHome = pct ? pct.home >= pct.away : (g.win && g.win.home != null && g.win.away != null && g.win.home <= g.win.away);
     var box = V.el("div", "tt-players");
     [[g.home, pct && pct.home, favHome, g.nH], [g.away, pct && pct.away, !favHome, g.nA]].forEach(function (p) {
@@ -209,6 +210,9 @@
       tr.appendChild(cell("td", b, hiB ? "hi" : ""));
       body.appendChild(tr);
     }
+    var ours = g.ours, book = g.book;
+    if (ours) row("Our win %", ours.home + "%", ours.away + "%", ours.home > ours.away, ours.away > ours.home);
+    if (book) row("Book win %", book.home + "%", book.away + "%", book.home > book.away, book.away > book.home);
     var nH = g.nH || 0, nA = g.nA || 0;
     row("Played", comma(nH), comma(nA), nH > nA, nA > nH);
     if (h.n) row("Head to head", String(h.home), String(h.away), h.home > h.away, h.away > h.home);
@@ -243,7 +247,7 @@
 
     box.appendChild(V.el("div", "tt-mkt-lab", "Winner"));
     var grid = V.el("div", "tt-g");
-    var pct = g.ours || g.pct || null;
+    var pct = g.pct || g.ours || null;
     var book = g.book || null;
     var favHome = pct ? pct.home >= pct.away : false;
     grid.appendChild(tapCell(g, "1", g.win && g.win.home, "Home", favHome ? "fav" : "", pct && pct.home, book && book.home));
@@ -330,7 +334,20 @@
     LAST = d;
     document.getElementById("s-up").textContent = String(d.count || 0);
     document.getElementById("s-settled").textContent = comma(d.settled || 0);
+    backtest(d.model);
     render();
+  }
+
+  function pctOf(x) { return (x == null || !isFinite(x)) ? "—" : Math.round(x * 100) + "%"; }
+  function backtest(m) {
+    var el = document.getElementById("bt-note");
+    var b = m && m.backtest;
+    if (!b || !b.n) { el.textContent = ""; return; }
+    // Honest self-score: replay history, grade each pick against the rating we
+    // held BEFORE the match. No book to compare on the old pile (no odds banked).
+    var line = "Model self-check · " + comma(b.n) + " graded · picks the winner " + pctOf(b.hit);
+    if (b.strongN) line += " · when it says 70%+, right " + pctOf(b.strongHit) + " (" + comma(b.strongN) + ")";
+    el.textContent = line;
   }
 
   function fillPass() {

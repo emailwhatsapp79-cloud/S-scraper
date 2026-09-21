@@ -319,23 +319,22 @@ async function fromRapi(byLast, pages, first, days) {
     updated TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
   const slugs = CORE;
-  const turn = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${"rr"}`;
-  let i = Number(turn[0] && turn[0].cursor) || 0;
-  if (!Number.isFinite(i) || i < 0) i = 0;
-  const slug = slugs[i % slugs.length];
-  await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${"rr"}, ${String(i + 1)})
-    ON CONFLICT (k) DO UPDATE SET cursor = ${String(i + 1)}, updated = now()`;
+  const deadline = Date.now() + 18000;
 
+  // Recent finished from every cup, then a deep-history walk on EVERY cup in
+  // parallel (used to be one rotating cup per pass — this fills ~5x faster while
+  // still banking the newest games each time).
   const fresh = await Promise.all(
     slugs.map((s) => pullLatest(s, byLast, first, from, to)),
   );
-  const deadline = Date.now() + 18000;
-  const part = await pullLeague(slug, byLast, pages, first, from, to, deadline);
+  const deep = await Promise.all(
+    slugs.map((s) => pullLeague(s, byLast, pages, first, from, to, deadline)),
+  );
 
   const rows = [];
   const seen = new Set();
   const errors = [];
-  for (const p of [...fresh, part]) {
+  for (const p of [...fresh, ...deep]) {
     errors.push(...(p.errors || []));
     for (const r of p.rows || []) {
       if (seen.has(r.id)) continue;
@@ -344,12 +343,13 @@ async function fromRapi(byLast, pages, first, days) {
     }
   }
   const done = await sql`SELECT k FROM tt_s24_state WHERE k LIKE ${"y2|%"} AND cursor = ${"DONE"}`;
-  const allDone = done.length >= slugs.length && !part.hasMore;
+  const anyMore = deep.some((p) => p.hasMore);
+  const allDone = done.length >= slugs.length && !anyMore;
   return {
     rows,
     errors,
-    hasMore: !allDone || part.hasMore,
-    slug,
+    hasMore: !allDone || anyMore,
+    slug: slugs.join(","),
   };
 }
 
