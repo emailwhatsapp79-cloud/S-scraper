@@ -53,8 +53,9 @@ export default async function handler(req, res) {
     let s24 = null, setka = null, setkaSweep = null;
     try { s24 = await pullScores24(names, { skipHtml: false, more: true, pages: 5, first: 50, days: 400, players: 0, deadlineMs: 14000 }); }
     catch (e) { s24 = { error: String(e?.message || e) }; }
-    // Broad Setka firehose (all pools over the last ~2 weeks), then card depth.
-    try { setkaSweep = await pullSetkaDays({ days: 14, deadlineMs: 12000 }); }
+    // Broad Setka firehose. Payload is ~13s/day, so sweep the most recent day
+    // or two each run; older days are marked done and never re-fetched.
+    try { setkaSweep = await pullSetkaDays({ days: 2, deadlineMs: 16000 }); }
     catch (e) { setkaSweep = { error: String(e?.message || e) }; }
     try { setka = await pullSetka(setkaNames, { players: 8, tournaments: 8, deadlineMs: 8000 }); }
     catch (e) { setka = { error: String(e?.message || e) }; }

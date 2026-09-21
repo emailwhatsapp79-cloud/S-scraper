@@ -23,6 +23,22 @@ export default async function handler(req, res) {
       stored: counts.total, settled: counts.settled,
     });
   }
+  // Dedicated Setka firehose sweep — the Tournaments payload is ~450KB/13s, too
+  // heavy for the card pass, so it gets its own mode with room to breathe.
+  if (String(req.query?.setka || "") === "1") {
+    let sweep = null;
+    try { sweep = await pullSetkaDays({ days: Number(req.query?.days) || 2, deadlineMs: 24000 }); }
+    catch (e) { sweep = { error: String(e?.message || e) }; }
+    let counts = { total: 0, settled: 0 };
+    try { counts = await countsTT(); } catch { /* ignore */ }
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).json({
+      ok: !sweep?.error, tookMs: Date.now() - started, sweep,
+      hasMore: !!(sweep && sweep.saved > 0),
+      stored: counts.total, settled: counts.settled,
+    });
+  }
+
   const wantCard = String(req.query?.card || "") === "1";
   let card = 0, enriched = 0, cardErr = null, setka = null;
 
@@ -37,13 +53,10 @@ export default async function handler(req, res) {
         .flatMap((g) => [g.home, g.away]).filter(Boolean);
     } catch (e) { cardErr = String(e?.message || e); }
     try { enriched = (await enrichSettleTT(12)).touched; } catch { /* keep going */ }
-    // Official Setka feed — sweep every recent tournament (all pools at once),
-    // then top up any card players the sweep didn't reach.
-    try {
-      const sweep = await pullSetkaDays({ days: 4, deadlineMs: 7000 });
-      const top = await pullSetka(setkaNames, { players: 3, tournaments: 4, deadlineMs: 4000 });
-      setka = { sweep, top };
-    } catch (e) { setka = { error: String(e?.message || e) }; }
+    // Card players' Setka history (fast, name-driven). The broad sweep runs in
+    // its own ?setka=1 mode and the daily poll.
+    try { setka = await pullSetka(setkaNames, { players: 4, tournaments: 6, deadlineMs: 9000 }); }
+    catch (e) { setka = { error: String(e?.message || e) }; }
   }
 
   // s24 runs on the alternating (non-card) passes; the card pass does card +

@@ -201,15 +201,16 @@ async function ensureTours() {
   toursReady = true;
 }
 
-/** Whole-firehose sweep: for each recent day, pull EVERY tournament's finished
- *  matches — all pools at once, not just card players. A tournament from a past
- *  day is fetched once (marked done); today's is re-fetched until the day ends.
- *  Bounded by deadlineMs so it advances a bit each pass. */
+/** Whole-firehose sweep: the Tournaments-by-date endpoint already embeds every
+ *  tournament's matches, so ONE (slow, ~13s, ~450KB) fetch per day yields all
+ *  pools at once — Ukraine, Moldova, global. A day whose date is already past is
+ *  swept once and marked done; today is re-swept until it closes. deadlineMs
+ *  bounds it (usually ~1 day per pass given the payload size). */
 export async function pullSetkaDays(opts = {}) {
   await ensure();
   await ensureTours();
-  const days = opts.days ?? 4;
-  const deadline = Date.now() + (opts.deadlineMs || 12000);
+  const days = opts.days ?? 3;
+  const deadline = Date.now() + (opts.deadlineMs || 20000);
   const today = ymd(Date.now());
 
   const doneRows = await sql`SELECT tid FROM tt_setka_tourn WHERE done = TRUE`;
@@ -217,31 +218,36 @@ export async function pullSetkaDays(opts = {}) {
 
   const rows = [];
   const seen = new Set();
-  let tournsSeen = 0, tournsPulled = 0;
+  const marks = [];
+  let daysHit = 0, tournsPulled = 0, err = null;
   for (let d = 0; d < days; d++) {
     if (Date.now() > deadline) break;
     const date = ymd(Date.now() - d * 24 * 3600 * 1000);
     let list;
-    try { list = await timedFetch(`${API}/Tournaments/en?date=${date}`); }
-    catch { continue; }
+    // Big payload — give it room (the default 8s cut it off on Vercel).
+    try { list = await timedFetch(`${API}/Tournaments/en?date=${date}`, 16000); }
+    catch (e) { err = err || String(e?.message || e); continue; }
     if (!Array.isArray(list)) continue;
+    daysHit++;
+    const isPast = date < today;
     for (const t of list) {
-      if (Date.now() > deadline) break;
       const tid = Number(t.id);
-      if (!tid) continue;
-      tournsSeen++;
-      if (done.has(tid)) continue;                 // fully pulled already
-      if (/xd|women|double/i.test(String(t.division || t.name || ""))) continue;
-      const rs = await tournamentRows(tid);
-      for (const r of rs) { if (!seen.has(r.id)) { seen.add(r.id); rows.push(r); } }
+      if (!tid || done.has(tid)) continue;
+      if (/women|double|xd/i.test(String(t.divisionToken || t.name || ""))) continue;
+      for (const m of t.matches || []) {
+        const r = matchRow(m);
+        if (r && !seen.has(r.id)) { seen.add(r.id); rows.push(r); }
+      }
       tournsPulled++;
-      // A past day's tournament is final; today's may still be adding matches.
-      const isPast = date < today;
-      await sql`INSERT INTO tt_setka_tourn (tid, done, pulled_at)
-        VALUES (${tid}, ${isPast}, now())
-        ON CONFLICT (tid) DO UPDATE SET done = ${isPast}, pulled_at = now()`;
+      if (isPast) marks.push(tid); // final — never fetch again
     }
   }
   const saved = rows.length ? await bulkInsert(rows) : 0;
-  return { tournsSeen, tournsPulled, saved, note: `setka sweep ${tournsPulled}t/${saved}` };
+  for (let i = 0; i < marks.length; i += 100) {
+    const chunk = marks.slice(i, i + 100);
+    await sql`INSERT INTO tt_setka_tourn (tid, done)
+      SELECT unnest(${chunk}::int[]), TRUE
+      ON CONFLICT (tid) DO UPDATE SET done = TRUE, pulled_at = now()`;
+  }
+  return { daysHit, tournsPulled, saved, err, note: `setka sweep ${tournsPulled}t/${saved}` };
 }
