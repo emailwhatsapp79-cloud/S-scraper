@@ -297,6 +297,18 @@ async function listLeagues(from, to) {
   return [...new Set(found)];
 }
 
+async function pullLatest(slug, byLast, first, from, to) {
+  const rows = [];
+  const errors = [];
+  try {
+    const latest = await endedPage(slug, first, from, to, "");
+    takeRows(latest?.data?.edges, slug, byLast, rows);
+  } catch (e) {
+    errors.push(slug + ": " + (e?.message || e));
+  }
+  return { rows, errors };
+}
+
 async function fromRapi(byLast, pages, first, days) {
   const now = Date.now();
   const from = stamp(now - days * 24 * 3600 * 1000);
@@ -306,20 +318,36 @@ async function fromRapi(byLast, pages, first, days) {
     cursor TEXT,
     updated TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
-  const slugs = await listLeagues(from, to);
+  const slugs = CORE;
   const turn = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${"rr"}`;
   let i = Number(turn[0] && turn[0].cursor) || 0;
   if (!Number.isFinite(i) || i < 0) i = 0;
   const slug = slugs[i % slugs.length];
   await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${"rr"}, ${String(i + 1)})
     ON CONFLICT (k) DO UPDATE SET cursor = ${String(i + 1)}, updated = now()`;
-  const deadline = Date.now() + 22000;
+
+  const fresh = await Promise.all(
+    slugs.map((s) => pullLatest(s, byLast, first, from, to)),
+  );
+  const deadline = Date.now() + 18000;
   const part = await pullLeague(slug, byLast, pages, first, from, to, deadline);
+
+  const rows = [];
+  const seen = new Set();
+  const errors = [];
+  for (const p of [...fresh, part]) {
+    errors.push(...(p.errors || []));
+    for (const r of p.rows || []) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      rows.push(r);
+    }
+  }
   const done = await sql`SELECT k FROM tt_s24_state WHERE k LIKE ${"y2|%"} AND cursor = ${"DONE"}`;
   const allDone = done.length >= slugs.length && !part.hasMore;
   return {
-    rows: part.rows,
-    errors: part.errors || [],
+    rows,
+    errors,
     hasMore: !allDone || part.hasMore,
     slug,
   };
