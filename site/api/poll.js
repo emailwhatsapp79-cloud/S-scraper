@@ -6,8 +6,9 @@ import { refreshSlips } from "./_slips.js";
 import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
 import { settleGames } from "./_results.js";
 import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT, rebuildPack } from "./_tt.js";
-import { pullSofaHistory } from "./_sofa.js";
 import { pullScores24 } from "./_s24.js";
+// Sofascore history is disabled: its API 403s every server request, so it banked
+// nothing and only wasted poll time. scores24 is the working source.
 
 export default async function handler(req, res) {
   cors(res);
@@ -45,15 +46,13 @@ export default async function handler(req, res) {
     const ttSaved = await storeTT(events.map(ttNormalise));
     const ttTouched = (await enrichSettleTT(80)).touched;
     const names = events.flatMap((ev) => [ev.homeTeamName, ev.awayTeamName].filter(Boolean));
-    let s24 = null, sofa = null;
+    let s24 = null;
     try { s24 = await pullScores24(names, { skipHtml: false, more: true, pages: 5, first: 50, days: 400, players: 0, deadlineMs: 18000 }); }
     catch (e) { s24 = { error: String(e?.message || e) }; }
-    try { sofa = await pullSofaHistory(names, { players: 4, pages: 5 }); }
-    catch (e) { sofa = { error: String(e?.message || e) }; }
     let pack = null;
     try { pack = await rebuildPack(); pack = { built: pack?.builtAt || null, nGames: pack?.nGames || 0 }; }
     catch (e) { pack = { error: String(e?.message || e) }; }
-    tt = { saved: ttSaved, touched: ttTouched, s24, sofa, pack };
+    tt = { saved: ttSaved, touched: ttTouched, s24, pack };
   } catch (e) { tt = { error: String(e?.message || e) }; }
 
   res.setHeader("Cache-Control", "no-store");
