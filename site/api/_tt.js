@@ -351,51 +351,53 @@ export function forecastTT(pack, g) {
   const foundH = findPlayer(pack.players || {}, g.home, blank);
   const foundA = findPlayer(pack.players || {}, g.away, blank);
   const H = foundH.rec, A = foundA.rec;
+  const nH = H.n || 0, nA = A.n || 0;
   const parts = [];
 
-  const thin = Math.min(H.n || 0, A.n || 0) < 8;
-  parts.push({
-    p: 1 / (1 + 10 ** (((A.elo || 1500) - (H.elo || 1500)) / 400)),
-    w: thin ? 0.2 : 0.8,
-  });
+  // Elo is the spine. A handful of H2H meetings used to outweigh hundreds of
+  // games (weight 1.5+n vs 0.8) and print 65% on names the book had at 30%.
+  const pElo = 1 / (1 + 10 ** (((A.elo || 1500) - (H.elo || 1500)) / 400));
+  parts.push({ p: pElo, w: Math.min(nH, nA) >= 8 ? 1 : 0.2 });
 
   const h2hRec = combinedH2H(pack.h2h || {}, foundH.key, foundA.key);
-  if (h2hRec.n >= 1) {
-    const sets = (h2hRec.setsH || 0) + (h2hRec.setsA || 0);
+  if (h2hRec.n >= 3) {
     const pat = (h2hRec.hPts || 0) + (h2hRec.aPts || 0);
-    let hp;
-    if (pat >= 2) hp = (h2hRec.hPts + 1) / (pat + 2);
-    else if (sets >= 4) hp = (h2hRec.setsH + 1) / (sets + 2);
-    else hp = (h2hRec.home + 1) / (h2hRec.n + 2);
-    parts.push({ p: hp, w: 1.5 + Math.min(5, h2hRec.n) });
+    const hp = pat >= 6
+      ? (h2hRec.hPts + 2) / (pat + 4)
+      : (h2hRec.home + 1) / (h2hRec.n + 2);
+    // Cap: 12+ H2H is 30% of the mix, never the whole call.
+    parts.push({ p: hp, w: 0.3 * Math.min(1, h2hRec.n / 12) });
   }
 
   const formH = formVsField(H.rec, foundA.key);
   const formA = formVsField(A.rec, foundH.key);
-  if (formH && formA && formH.p + formA.p > 0) {
-    parts.push({ p: formH.p / (formH.p + formA.p), w: 0.9 });
+  if (formH && formA && formH.n >= 15 && formA.n >= 15 && formH.p + formA.p > 0) {
+    parts.push({ p: formH.p / (formH.p + formA.p), w: 0.25 });
   }
 
   const T = tournKey(g.tourn);
   if (T) {
     const ht = H.tourn[T], at = A.tourn[T];
-    if (ht && at && ht.n >= 3 && at.n >= 3) {
+    if (ht && at && ht.n >= 8 && at.n >= 8) {
       const ph = (ht.w + 1) / (ht.n + 2);
       const pa = (at.w + 1) / (at.n + 2);
-      if (ph + pa > 0) parts.push({ p: ph / (ph + pa), w: 0.4 });
+      if (ph + pa > 0) parts.push({ p: ph / (ph + pa), w: 0.15 });
     }
   }
 
   const sw = parts.reduce((s, x) => s + x.w, 0);
   let p = sw ? parts.reduce((s, x) => s + x.p * x.w, 0) / sw : 0.5;
-  p += pack.ha || 0;
-  if (g.start && H.last && g.start - H.last < 2 * 3600 * 1000) p -= 0.03;
-  if (g.start && A.last && g.start - A.last < 2 * 3600 * 1000) p += 0.03;
-  p = Math.min(0.92, Math.max(0.08, p));
+  p += (pack.ha || 0) * 0.5;
+  if (g.start && H.last && g.start - H.last < 2 * 3600 * 1000) p -= 0.02;
+  if (g.start && A.last && g.start - A.last < 2 * 3600 * 1000) p += 0.02;
+
+  const ev = Math.min(nH, nA) + 2 * (h2hRec.n || 0);
+  p = 0.5 + (p - 0.5) * (ev / (ev + 25));
+  p = Math.min(0.72, Math.max(0.28, p));
 
   return {
     pHome: p, pAway: 1 - p,
-    nH: H.n, nA: A.n,
+    nH, nA,
     h2hRec, formH, formA,
   };
 }
@@ -559,7 +561,7 @@ function attachForecast(games, pack) {
     // Our number is the model only. SportyBet's price is shown beside it, never mixed in.
     const pHome = Math.min(0.97, Math.max(0.03, f.pHome));
     const ours = { home: Math.round(pHome * 100), away: Math.round((1 - pHome) * 100) };
-    const thin = ((f.nH || 0) < 8 || (f.nA || 0) < 8) && h2hN < 2;
+    const thin = ((f.nH || 0) < 15 || (f.nA || 0) < 15) && h2hN < 5;
     g.pct = !thin && evidence >= 1 ? ours : null;
     g.ours = !thin && evidence >= 1 ? ours : null;
     g.book = book ? { home: Math.round(book.home * 100), away: Math.round(book.away * 100) } : null;

@@ -249,7 +249,7 @@ export async function forecastCard(games) {
     const evidence = (f.nH || 0) + (f.nA || 0) + 3 * h2hN + (hasForm ? 6 : 0);
     const pHome = Math.min(0.97, Math.max(0.03, f.pHome));
     const ours = { home: Math.round(pHome * 100), away: Math.round((1 - pHome) * 100) };
-    const thin = ((f.nH || 0) < 8 || (f.nA || 0) < 8) && h2hN < 2;
+    const thin = ((f.nH || 0) < 15 || (f.nA || 0) < 15) && h2hN < 5;
     g.pct = !thin && evidence >= 1 ? ours : null;
     g.ours = !thin && evidence >= 1 ? ours : null;
     g.book = book ? { home: Math.round(book.home * 100), away: Math.round(book.away * 100) } : null;

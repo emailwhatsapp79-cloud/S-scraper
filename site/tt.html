@@ -298,17 +298,31 @@
     return Math.max(isFinite(a) ? a : 0, isFinite(b) ? b : 0);
   }
 
+  // 60%+ is a stake filter. Don't fade a 30% book just because H2H is loud.
+  function hotPick(g) {
+    var w = ourWin(g);
+    if (w == null || w < 60) return false;
+    var p = g.pct || g.ours;
+    if (!p) return false;
+    var ourH = Number(p.home) >= Number(p.away);
+    var b = g.book;
+    if (!b) return ((g.h2hRec && g.h2hRec.n) || 0) >= 8;
+    var bookH = Number(b.home) >= Number(b.away);
+    if (ourH !== bookH) return false;
+    return Math.max(Number(b.home) || 0, Number(b.away) || 0) >= 52;
+  }
+
   function filtered(list) {
     var out = LEAGUE === "All" ? list.slice() : list.filter(function (g) { return (g.tourn || "Other") === LEAGUE; });
     if (MODE === "up" && MIN60) {
-      out = out.filter(function (g) { return ourWin(g) >= 60; });
+      out = out.filter(hotPick);
     }
     return out;
   }
 
   function tourns(games) {
     var pool = (MODE === "up" && MIN60)
-      ? games.filter(function (g) { return ourWin(g) >= 60; })
+      ? games.filter(hotPick)
       : games;
     var counts = { All: pool.length };
     pool.forEach(function (g) { var k = g.tourn || "Other"; counts[k] = (counts[k] || 0) + 1; });
@@ -317,7 +331,7 @@
     var box = document.getElementById("tourns");
     box.textContent = "";
     if (MODE === "up") {
-      var n60 = games.filter(function (g) { return ourWin(g) >= 60; }).length;
+      var n60 = games.filter(hotPick).length;
       var hot = V.el("button", "chip" + (MIN60 ? " on" : ""), "60%+ " + n60);
       hot.type = "button";
       hot.setAttribute("aria-pressed", MIN60 ? "true" : "false");
