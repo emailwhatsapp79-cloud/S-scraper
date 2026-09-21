@@ -9,7 +9,7 @@ const BASE = "https://www.sportybet.com/api/ng/factsCenter";
 const SPORT = "sr:sport:20";
 const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36";
-const MARKET_IDS = "1";
+const MARKET_IDS = "186";
 
 let ready = false;
 async function ensureTT() {
@@ -68,18 +68,20 @@ function foldToken(t) {
     .replace(/IY$/g, "I");
 }
 
-function nameKey(s) {
-  // "Vorsulyak, Yaroslav" == "Yaroslav Vorsulyak"
-  // "Moshovskyi" == "Moshovskiy"
+function nameTokens(s) {
   return String(s || "")
     .toUpperCase()
     .replace(/[^A-Z]+/g, " ")
     .trim()
     .split(/\s+/)
-    .filter(Boolean)
-    .map(foldToken)
-    .sort()
-    .join("|");
+    .filter((t) => t.length > 1)
+    .map(foldToken);
+}
+
+function nameKey(s) {
+  // "Vorsulyak, Yaroslav" == "Yaroslav Vorsulyak"
+  // Drop single-letter initials so "Krejci, R" still meets "Richard Krejci".
+  return nameTokens(s).sort().join("|");
 }
 
 function scoreKey(desc) {
@@ -101,8 +103,8 @@ function parseMarkets(ev, home, away) {
         if (!isFinite(p)) continue;
         const d = String(o.desc || o.name || "");
         const id = String(o.id || o.outcomeId || o.oid || "");
-        if (/^home$/i.test(d) || d === home || id === "1") win.Home = p;
-        else if (/^away$/i.test(d) || d === away || id === "2") win.Away = p;
+        if (/^home$/i.test(d) || d === home || id === "1" || id === "4") win.Home = p;
+        else if (/^away$/i.test(d) || d === away || id === "2" || id === "5") win.Away = p;
       }
     } else if (correct) {
       for (const o of outs) {
@@ -209,7 +211,7 @@ export async function enrichSettleTT(limit = 80) {
   await ensureTT();
   const now = Date.now();
   const due = await sql`
-    SELECT match_id, event_id, start_at, r_status, win_home, cs_json
+    SELECT match_id, event_id, start_at, r_status, win_home, cs_json, home, away
     FROM tt_games
     WHERE event_id IS NOT NULL
       AND start_at IS NOT NULL
@@ -226,7 +228,7 @@ export async function enrichSettleTT(limit = 80) {
   for (let i = 0; i < due.length; i++) {
     const ev = evs[i];
     if (!ev) continue;
-    const { win, cs } = parseMarkets(ev, null, null);
+    const { win, cs } = parseMarkets(ev, due[i].home, due[i].away);
     const status = ev.matchStatus || "";
     const ended = /^end/i.test(status);
     const score = ended ? parseSet(ev.setScore) : null;
@@ -273,8 +275,26 @@ function formVsField(rec, excludeKey) {
   return { n: list.length, w, l: list.length - w, sw, sl, straight, close, p };
 }
 
-function combinedH2H(h2h, home, away) {
-  const a = nameKey(home), b = nameKey(away);
+function findPlayer(players, name, blank) {
+  const k = nameKey(name);
+  if (players[k]) return { rec: players[k], key: k };
+  const toks = k.split("|").filter(Boolean);
+  if (!toks.length) return { rec: blank, key: k };
+  const hits = Object.keys(players).filter((pk) => {
+    const set = new Set(pk.split("|"));
+    return toks.every((t) => set.has(t));
+  });
+  if (hits.length === 1) return { rec: players[hits[0]], key: hits[0] };
+  const long = toks.filter((t) => t.length >= 4);
+  if (long.length) {
+    const byLast = Object.keys(players).filter((pk) => long.every((t) => pk.split("|").includes(t)));
+    if (byLast.length === 1) return { rec: players[byLast[0]], key: byLast[0] };
+  }
+  return { rec: blank, key: k };
+}
+
+function combinedH2H(h2h, keyH, keyA) {
+  const a = keyH, b = keyA;
   const ab = h2h[a + ">" + b] || { n: 0, hw: 0, hs: 0, as: 0 };
   const ba = h2h[b + ">" + a] || { n: 0, hw: 0, hs: 0, as: 0 };
   const n = ab.n + ba.n;
@@ -286,12 +306,13 @@ function combinedH2H(h2h, home, away) {
 
 export function forecastTT(pack, g) {
   const blank = { n: 0, elo: 1500, rec: [], last: 0, tourn: {} };
-  const H = pack.players[nameKey(g.home)] || blank;
-  const A = pack.players[nameKey(g.away)] || blank;
+  const foundH = findPlayer(pack.players || {}, g.home, blank);
+  const foundA = findPlayer(pack.players || {}, g.away, blank);
+  const H = foundH.rec, A = foundA.rec;
   const parts = [];
   parts.push({ p: 1 / (1 + 10 ** ((A.elo - H.elo) / 400)), w: 1 });
 
-  const h2hRec = combinedH2H(pack.h2h || {}, g.home, g.away);
+  const h2hRec = combinedH2H(pack.h2h || {}, foundH.key, foundA.key);
   if (h2hRec.n >= 2) {
     const sets = (h2hRec.setsH || 0) + (h2hRec.setsA || 0);
     const hp = sets >= 4
@@ -300,8 +321,8 @@ export function forecastTT(pack, g) {
     parts.push({ p: hp, w: 1 + Math.min(4, (sets || h2hRec.n) / 3) });
   }
 
-  const formH = formVsField(H.rec, nameKey(g.away));
-  const formA = formVsField(A.rec, nameKey(g.home));
+  const formH = formVsField(H.rec, foundA.key);
+  const formA = formVsField(A.rec, foundH.key);
   if (formH && formA && formH.p + formA.p > 0) {
     parts.push({ p: formH.p / (formH.p + formA.p), w: 0.6 });
   }
@@ -480,7 +501,7 @@ function attachForecast(games, pack) {
 // we fit once, stash the pack in tt_model, and rebuild it only when it goes
 // stale. The fit input is capped at the most recent 25k games, so a rebuild
 // stays bounded (~10s) no matter how deep the banked history grows.
-const PACK_STALE_MS = 6 * 60 * 1000;
+const PACK_STALE_MS = 90 * 1000;
 let _pack = null;         // { builtAt, data }
 let _packTable = false;
 
@@ -566,7 +587,9 @@ export async function listUpcomingTT(limit = 400) {
   const cutoff = Date.now() - 2 * 60 * 1000;
   const rows = await sql`
     SELECT * FROM tt_games
-    WHERE start_at IS NULL OR start_at > ${cutoff}
+    WHERE start_at > ${cutoff}
+      AND match_id NOT LIKE ${"s24:%"}
+      AND match_id NOT LIKE ${"sofa:%"}
     ORDER BY start_at ASC NULLS LAST
     LIMIT ${limit}`;
   const games = rows.map(shape).filter((g) => g.upcoming);
@@ -594,7 +617,7 @@ export async function countsTT() {
   const rows = await sql`
     SELECT
       COUNT(*) AS total,
-      COUNT(*) FILTER (WHERE r_status IS NOT NULL) AS settled
+      COUNT(*) FILTER (WHERE r_home IS NOT NULL AND r_away IS NOT NULL) AS settled
     FROM tt_games`;
   const r = rows[0] || {};
   return { total: Number(r.total || 0), settled: Number(r.settled || 0) };

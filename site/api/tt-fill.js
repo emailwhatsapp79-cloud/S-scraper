@@ -3,12 +3,25 @@
 // card + a batch of its per-event odds/results, then bank a chunk of scores24
 // history. Bounded so the whole thing stays under the 30s function limit.
 import { guard } from "./_gate.js";
-import { fetchTTCard, normalise, storeTT, enrichSettleTT, countsTT } from "./_tt.js";
+import { fetchTTCard, normalise, storeTT, enrichSettleTT, countsTT, rebuildPack } from "./_tt.js";
 import { pullScores24 } from "./_s24.js";
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
   const started = Date.now();
+  if (String(req.query?.pack || "") === "1") {
+    let pack = null;
+    try { pack = await rebuildPack(); } catch (e) { pack = { error: String(e?.message || e) }; }
+    let counts = { total: 0, settled: 0 };
+    try { counts = await countsTT(); } catch { /* ignore */ }
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).json({
+      ok: !pack?.error,
+      tookMs: Date.now() - started,
+      pack, hasMore: false,
+      stored: counts.total, settled: counts.settled,
+    });
+  }
   const wantCard = String(req.query?.card || "") === "1";
   let card = 0, enriched = 0, cardErr = null;
 
