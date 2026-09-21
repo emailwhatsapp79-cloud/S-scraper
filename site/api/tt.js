@@ -1,14 +1,22 @@
-// Table-tennis card — serve only. Reads the banked pile from the DB (upcoming
-// games with our ratings, recent results, the model self-check) and returns it
-// fast. All the slow ingestion — pulling SportyBet's card and its per-event odds
-// — lives in /api/tt-fill (the page's background loop) and the daily poll, so a
-// card load never waits on SportyBet's servers. Gated like the rest of the app.
+// Table-tennis card. Grabs SportyBet's upcoming card (fast — one page, ~1.7s) so
+// every game shows the instant the page loads, then serves the banked pile from
+// the DB with our ratings attached. The slow part — per-event odds/score enrich
+// and scores24 history — stays in /api/tt-fill (the page's background loop) and
+// the daily poll, so the card never waits on that. Gated like the rest.
 import { guard } from "./_gate.js";
-import { listUpcomingTT, listRecentResultsTT, countsTT, getModelMeta } from "./_tt.js";
+import { fetchTTCard, normalise, storeTT, listUpcomingTT, listRecentResultsTT, countsTT, getModelMeta } from "./_tt.js";
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
   const started = Date.now();
+
+  // Fresh card first, so the available games are never stale on load. Failures
+  // here (SportyBet slow/down) never block the serve — we fall back to the DB.
+  let cardErr = null;
+  try {
+    const { events } = await fetchTTCard();
+    await storeTT(events.map(normalise));
+  } catch (e) { cardErr = String(e?.message || e); }
 
   let games = [], results = [], counts = { total: 0, settled: 0 }, model = null, error = null;
   try { games = await listUpcomingTT(400); } catch (e) { error = String(e?.message || e); }
@@ -20,7 +28,7 @@ export default async function handler(req, res) {
   res.status(200).json({
     ok: true,
     tookMs: Date.now() - started,
-    error,
+    error, cardErr,
     stored: counts.total,
     settled: counts.settled,
     count: games.length,
