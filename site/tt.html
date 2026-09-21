@@ -352,16 +352,19 @@
     el.textContent = line;
   }
 
+  var fillN = 0;
   function fillPass() {
     var sn = document.getElementById("sofa-note");
     sn.textContent = "Refreshing history… " + comma(document.getElementById("s-settled").textContent.replace(/,/g, "") || 0);
-    return fetch("/api/tt-fill").then(readJson).then(function (f) {
+    fillN += 1;
+    var q = (fillN % 3 === 0) ? "?card=1" : "";
+    return fetch("/api/tt-fill" + q).then(readJson).then(function (f) {
       if (f && f.settled != null) document.getElementById("s-settled").textContent = comma(f.settled);
       var note = (f && f.s24 && f.s24.note) || (f && f.error) || "";
       var keep = f && (f.hasMore || f.error === "fill timeout" || (f.s24 && f.s24.hasMore));
       sn.textContent = "Refreshing… " + comma(f && f.settled) + (note ? " · " + note : "");
       if (keep) return new Promise(function (ok) { setTimeout(ok, 600); }).then(fillPass);
-      sn.textContent = comma(f && f.settled) + " finished" + (note ? " · " + note : "") + " — new results every 2 min";
+      sn.textContent = comma(f && f.settled) + " finished" + (note ? " · " + note : "") + " — keeps filling at night with the tab closed";
       return fetch("/api/tt").then(readJson).then(function (d) {
         if (d && d.ok) apply(d);
       }).then(function () {

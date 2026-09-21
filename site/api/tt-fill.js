@@ -9,23 +9,22 @@ import { pullScores24 } from "./_s24.js";
 export default async function handler(req, res) {
   if (guard(req, res)) return;
   const started = Date.now();
+  const wantCard = String(req.query?.card || "") === "1";
   let card = 0, enriched = 0, cardErr = null;
 
-  // SportyBet first (fast): fresh upcoming games + odds/scores.
-  try {
-    const { events } = await fetchTTCard();
-    card = await storeTT(events.map(normalise));
-  } catch (e) { cardErr = String(e?.message || e); }
-  try { enriched = (await enrichSettleTT(15)).touched; } catch { /* keep going */ }
+  if (wantCard) {
+    try {
+      const { events } = await fetchTTCard();
+      card = await storeTT(events.map(normalise));
+    } catch (e) { cardErr = String(e?.message || e); }
+    try { enriched = (await enrichSettleTT(12)).touched; } catch { /* keep going */ }
+  }
 
-  // scores24 history with whatever budget is left before ~20s. skipHtml: the
-  // per-cup "newest page" pull already grabs recent games, and the full board
-  // dump is slow — leave it to the daily poll.
   let s24 = null;
-  const budget = Math.max(4000, 16000 - (Date.now() - started));
+  const budget = Math.max(6000, (wantCard ? 14000 : 24000) - (Date.now() - started));
   try {
     s24 = await pullScores24([], {
-      skipHtml: true, more: true, pages: 2, first: 50, days: 400,
+      skipHtml: true, more: true, pages: wantCard ? 2 : 4, first: 50, days: 400,
       players: 0, deadlineMs: budget,
     });
   } catch (e) { s24 = { error: String(e?.message || e), hasMore: true }; }

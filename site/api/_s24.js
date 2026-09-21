@@ -328,16 +328,21 @@ async function fromRapi(byLast, pages, first, days, deadlineMs) {
     updated TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
   const slugs = CORE;
+  const turn = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${"rr"}`;
+  let i = Number(turn[0] && turn[0].cursor) || 0;
+  if (!Number.isFinite(i) || i < 0) i = 0;
+  const pick = [slugs[i % slugs.length], slugs[(i + 1) % slugs.length]];
+  await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${"rr"}, ${String(i + 2)})
+    ON CONFLICT (k) DO UPDATE SET cursor = ${String(i + 2)}, updated = now()`;
   const deadline = Date.now() + (deadlineMs || 18000);
 
-  // Recent finished from every cup, then a deep-history walk on EVERY cup in
-  // parallel (used to be one rotating cup per pass — this fills ~5x faster while
-  // still banking the newest games each time).
+  // Newest finished from ALL cups every pass, so no league sits on 0.
+  // Deep walk only two cups — five in parallel was dying at 30s.
   const fresh = await Promise.all(
     slugs.map((s) => pullLatest(s, byLast, first, from, to)),
   );
   const deep = await Promise.all(
-    slugs.map((s) => pullLeague(s, byLast, pages, first, from, to, deadline)),
+    pick.map((s) => pullLeague(s, byLast, pages, first, from, to, deadline)),
   );
 
   const rows = [];
@@ -358,7 +363,7 @@ async function fromRapi(byLast, pages, first, days, deadlineMs) {
     rows,
     errors,
     hasMore: !allDone || anyMore,
-    slug: slugs.join(","),
+    slug: pick.join("+"),
   };
 }
 

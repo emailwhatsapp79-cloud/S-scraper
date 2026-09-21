@@ -46,7 +46,7 @@ export default async function handler(req, res) {
     const ttTouched = (await enrichSettleTT(80)).touched;
     const names = events.flatMap((ev) => [ev.homeTeamName, ev.awayTeamName].filter(Boolean));
     let s24 = null, sofa = null;
-    try { s24 = await pullScores24(names, { skipHtml: true, more: true, pages: 5, first: 50, days: 400, players: 0 }); }
+    try { s24 = await pullScores24(names, { skipHtml: false, more: true, pages: 5, first: 50, days: 400, players: 0, deadlineMs: 18000 }); }
     catch (e) { s24 = { error: String(e?.message || e) }; }
     try { sofa = await pullSofaHistory(names, { players: 4, pages: 5 }); }
     catch (e) { sofa = { error: String(e?.message || e) }; }
