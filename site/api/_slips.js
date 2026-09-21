@@ -143,6 +143,7 @@ function shapeLeg(l) {
     ht: l.ht_home == null ? null : { home: l.ht_home, away: l.ht_away },
     ft: l.ft_home == null ? null : { home: l.ft_home, away: l.ft_away },
     won: l.won == null ? null : l.won === "yes",
+    sport: l.sport || "fb",
   };
 }
 

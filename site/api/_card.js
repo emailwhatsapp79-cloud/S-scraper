@@ -168,9 +168,13 @@ export function scoreOf(ev) {
   const ft = parseScore(ev.setScore);
   const ht = Array.isArray(ev.gameScore) && ev.gameScore[0] ? parseScore(ev.gameScore[0]) : null;
   const status = ev.matchStatus || "";
-  const live = /^(H1|H2|HT|1H|2H|LIVE|set\s*\d|Playing)/i.test(status);
-  const pts = live ? currentPoints(ev, ft) : null;
-  const prices = { ...pricesOf(ev), ...ttWinnerPrices(ev) };
+  const sportId = String((ev.sport && ev.sport.id) || "");
+  const isTT = sportId === "sr:sport:20" || /^set\s*\d/i.test(status);
+  const live = isTT
+    ? /^(set\s*\d|Playing|LIVE)/i.test(status)
+    : /^(H1|H2|HT|1H|2H|LIVE)/i.test(status);
+  const pts = isTT && live ? currentPoints(ev, ft) : null;
+  const prices = isTT ? { ...pricesOf(ev), ...ttWinnerPrices(ev) } : pricesOf(ev);
   return {
     gameId: String(ev.gameId),
     eventId: ev.eventId || null,
