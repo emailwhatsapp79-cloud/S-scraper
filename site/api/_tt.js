@@ -489,24 +489,26 @@ function shape(r) {
   };
 }
 
+function rowsToGames(rows) {
+  const seen = new Map();
+  for (const r of rows) {
+    const g = {
+      id: r.match_id,
+      home: r.home, away: r.away, tourn: r.tourn || "",
+      start: r.start_at ? Number(r.start_at) : 0,
+      res: { home: r.r_home, away: r.r_away },
+    };
+    const pair = [nameKey(g.home), nameKey(g.away)].sort().join("|");
+    const k = pair + "|" + Math.round((g.start || 0) / 900000);
+    const prev = seen.get(k);
+    if (!prev) seen.set(k, g);
+    else if (!/^(sofa:|s24:)/.test(String(g.id || ""))) seen.set(k, g);
+  }
+  return [...seen.values()].sort((a, b) => (a.start || 0) - (b.start || 0));
+}
+
 async function loadSettledSlice(afterStart, afterId, limit) {
   await ensureTT();
-  const seen = new Map();
-  function take(rows) {
-    for (const r of rows) {
-      const g = {
-        id: r.match_id,
-        home: r.home, away: r.away, tourn: r.tourn || "",
-        start: r.start_at ? Number(r.start_at) : 0,
-        res: { home: r.r_home, away: r.r_away },
-      };
-      const pair = [nameKey(g.home), nameKey(g.away)].sort().join("|");
-      const k = pair + "|" + Math.round((g.start || 0) / 900000);
-      const prev = seen.get(k);
-      if (!prev) seen.set(k, g);
-      else if (!/^(sofa:|s24:)/.test(String(g.id || ""))) seen.set(k, g);
-    }
-  }
   const rows = await sql`
     SELECT match_id, home, away, tourn, start_at, r_home, r_away
     FROM tt_games
@@ -514,15 +516,25 @@ async function loadSettledSlice(afterStart, afterId, limit) {
       AND (start_at > ${afterStart} OR (start_at = ${afterStart} AND match_id > ${afterId}))
     ORDER BY start_at ASC, match_id ASC
     LIMIT ${limit}`;
-  take(rows);
-  const games = [...seen.values()].sort((a, b) => (a.start || 0) - (b.start || 0));
   const last = rows.length ? rows[rows.length - 1] : null;
   return {
-    games,
+    games: rowsToGames(rows),
     afterStart: last ? Number(last.start_at) : afterStart,
     afterId: last ? String(last.match_id) : afterId,
     more: rows.length >= limit,
   };
+}
+
+async function loadNewlySettled(sinceIso, limit) {
+  if (!sinceIso) return [];
+  const rows = await sql`
+    SELECT match_id, home, away, tourn, start_at, r_home, r_away
+    FROM tt_games
+    WHERE r_home IS NOT NULL AND r_away IS NOT NULL
+      AND settled_at > ${sinceIso}
+    ORDER BY start_at ASC NULLS LAST
+    LIMIT ${limit}`;
+  return rowsToGames(rows);
 }
 
 async function loadSettledForFit() {
@@ -615,15 +627,26 @@ async function buildAndSavePack() {
   } catch { into = null; }
 
   const slice = await loadSettledSlice(afterStart, afterId, 22000);
-  if (!slice.games.length) {
-    const cur = await ensureModelPack();
-    if (cur && cur.nGames) { cur.more = false; return cur; }
-    const again = await loadSettledSlice(0, "", 22000);
-    if (!again.games.length) return EMPTY_PACK;
-    return await persistPack(fitTT(again.games, null), again);
+  if (slice.games.length) {
+    const raw = fitTT(slice.games, into);
+    return await persistPack(raw, slice);
   }
-  const raw = fitTT(slice.games, into);
-  return await persistPack(raw, slice);
+  // Cursor is caught up. Still fold in games that *settled* after last train —
+  // live matches that just got a score, start_at is in the past so the cursor
+  // would skip them forever.
+  let lastBuilt = null;
+  try {
+    const meta = await sql`SELECT built_at FROM tt_model WHERE k = 'pack'`;
+    lastBuilt = meta[0] && meta[0].built_at ? new Date(meta[0].built_at).toISOString() : null;
+  } catch { lastBuilt = null; }
+  const fresh = await loadNewlySettled(lastBuilt, 8000);
+  if (fresh.length) {
+    const raw = fitTT(fresh, into);
+    return await persistPack(raw, { afterStart, afterId, more: false });
+  }
+  const cur = await ensureModelPack();
+  if (cur && cur.nGames) { cur.more = false; return cur; }
+  return EMPTY_PACK;
 }
 
 async function persistPack(raw, slice) {

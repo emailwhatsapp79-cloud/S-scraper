@@ -372,7 +372,9 @@
       sn.textContent = "Refreshing… " + comma(f && f.settled) + (note ? " · " + note : "");
       var saved = f && f.s24 && Number(f.s24.saved);
       var after = Promise.resolve(f);
-      if (saved > 0 && fillN % 3 === 0) {
+      // Retrain every other pass (and whenever history landed) so new results
+      // join the pack without waiting for a full 22k slice.
+      if (saved > 0 || fillN % 2 === 1) {
         after = fetch("/api/tt-fill?pack=1").then(readJson).then(function () { return f; });
       }
       return after.then(function (f) {

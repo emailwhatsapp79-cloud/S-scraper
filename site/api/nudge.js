@@ -62,11 +62,13 @@ export default async function handler(req, res) {
     });
   } catch (e) { s24 = { error: String(e?.message || e) }; }
   try { counts = await countsTT(); } catch { /* ignore */ }
+  let pack = null;
+  try { pack = await rebuildPack(); } catch (e) { pack = { error: String(e?.message || e) }; }
   res.setHeader("Cache-Control", "no-store");
   return res.status(200).json({
     ok: !slips?.error,
     tookMs: Date.now() - started,
-    slips, s24,
+    slips, s24, pack,
     settled: counts.settled,
   });
 }
