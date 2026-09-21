@@ -256,23 +256,54 @@ function winPctBook(hOdds, aOdds) {
   return { home: ih / s, away: ia / s };
 }
 
+function tournKey(t) {
+  return String(t || "").toLowerCase().replace(/[^a-z0-9]+/g, "").replace(/\d+$/, "");
+}
+
+// 3–0 wipe = 3, 3–1 = 2, 3–2 close = 1. This is the "strong hand" read:
+// 3–3 in matches is not 50/50 if one player keeps winning 3–0.
+function patternPts(wonSets, lostSets) {
+  const w = Number(wonSets), l = Number(lostSets);
+  if (!isFinite(w) || !isFinite(l) || w + l <= 0) return 0;
+  if (l === 0) return 3;
+  if (w - l <= 1) return 1;
+  return 2;
+}
+
+function emptyH2H() {
+  return { n: 0, hw: 0, hs: 0, as: 0, hW3: 0, hW2: 0, hW1: 0, aW3: 0, aW2: 0, aW1: 0 };
+}
+
+function bumpPattern(row, homeWon, pts) {
+  if (pts === 3) { if (homeWon) row.hW3++; else row.aW3++; }
+  else if (pts === 2) { if (homeWon) row.hW2++; else row.aW2++; }
+  else if (pts === 1) { if (homeWon) row.hW1++; else row.aW1++; }
+}
+
 function formVsField(rec, excludeKey) {
   const list = (rec || []).filter((x) => x.vs !== excludeKey).slice(-50);
   if (list.length < 3) return null;
   const w = list.filter((x) => x.won).length;
-  let sw = 0, sl = 0, straight = 0, close = 0;
+  let sw = 0, sl = 0, straight = 0, mid = 0, close = 0, pts = 0, opp = 0;
   for (const x of list) {
     const a = Number(x.sw), b = Number(x.sl);
     if (isFinite(a) && isFinite(b)) {
       sw += a; sl += b;
-      if (x.won && b === 0) straight++;
-      if (x.won && b > 0 && a - b === 1) close++;
+      const p = patternPts(a, b);
+      if (x.won) {
+        pts += p;
+        if (p === 3) straight++;
+        else if (p === 2) mid++;
+        else close++;
+      } else {
+        opp += p;
+      }
     }
   }
-  const p = sw + sl >= 4
-    ? (sw + 2) / (sw + sl + 4)
+  const p = (pts + opp) >= 4
+    ? (pts + 2) / (pts + opp + 4)
     : (w + 2) / (list.length + 4);
-  return { n: list.length, w, l: list.length - w, sw, sl, straight, close, p };
+  return { n: list.length, w, l: list.length - w, sw, sl, straight, mid, close, pts, p };
 }
 
 function findPlayer(players, name, blank) {
@@ -295,13 +326,24 @@ function findPlayer(players, name, blank) {
 
 function combinedH2H(h2h, keyH, keyA) {
   const a = keyH, b = keyA;
-  const ab = h2h[a + ">" + b] || { n: 0, hw: 0, hs: 0, as: 0 };
-  const ba = h2h[b + ">" + a] || { n: 0, hw: 0, hs: 0, as: 0 };
+  const ab = h2h[a + ">" + b] || emptyH2H();
+  const ba = h2h[b + ">" + a] || emptyH2H();
   const n = ab.n + ba.n;
   const homeWins = ab.hw + (ba.n - ba.hw);
   const setsH = (ab.hs || 0) + (ba.as || 0);
   const setsA = (ab.as || 0) + (ba.hs || 0);
-  return { n, home: homeWins, away: n - homeWins, setsH, setsA };
+  const hW3 = (ab.hW3 || 0) + (ba.aW3 || 0);
+  const hW2 = (ab.hW2 || 0) + (ba.aW2 || 0);
+  const hW1 = (ab.hW1 || 0) + (ba.aW1 || 0);
+  const aW3 = (ab.aW3 || 0) + (ba.hW3 || 0);
+  const aW2 = (ab.aW2 || 0) + (ba.hW2 || 0);
+  const aW1 = (ab.aW1 || 0) + (ba.hW1 || 0);
+  const hPts = 3 * hW3 + 2 * hW2 + 1 * hW1;
+  const aPts = 3 * aW3 + 2 * aW2 + 1 * aW1;
+  return {
+    n, home: homeWins, away: n - homeWins, setsH, setsA,
+    hW3, hW2, hW1, aW3, aW2, aW1, hPts, aPts,
+  };
 }
 
 export function forecastTT(pack, g) {
@@ -310,24 +352,31 @@ export function forecastTT(pack, g) {
   const foundA = findPlayer(pack.players || {}, g.away, blank);
   const H = foundH.rec, A = foundA.rec;
   const parts = [];
-  parts.push({ p: 1 / (1 + 10 ** ((A.elo - H.elo) / 400)), w: 1 });
+
+  const thin = Math.min(H.n || 0, A.n || 0) < 8;
+  parts.push({
+    p: 1 / (1 + 10 ** (((A.elo || 1500) - (H.elo || 1500)) / 400)),
+    w: thin ? 0.2 : 0.8,
+  });
 
   const h2hRec = combinedH2H(pack.h2h || {}, foundH.key, foundA.key);
-  if (h2hRec.n >= 2) {
+  if (h2hRec.n >= 1) {
     const sets = (h2hRec.setsH || 0) + (h2hRec.setsA || 0);
-    const hp = sets >= 4
-      ? (h2hRec.setsH + 1) / (sets + 2)
-      : (h2hRec.home + 1) / (h2hRec.n + 2);
-    parts.push({ p: hp, w: 1 + Math.min(4, (sets || h2hRec.n) / 3) });
+    const pat = (h2hRec.hPts || 0) + (h2hRec.aPts || 0);
+    let hp;
+    if (pat >= 2) hp = (h2hRec.hPts + 1) / (pat + 2);
+    else if (sets >= 4) hp = (h2hRec.setsH + 1) / (sets + 2);
+    else hp = (h2hRec.home + 1) / (h2hRec.n + 2);
+    parts.push({ p: hp, w: 1.5 + Math.min(5, h2hRec.n) });
   }
 
   const formH = formVsField(H.rec, foundA.key);
   const formA = formVsField(A.rec, foundH.key);
   if (formH && formA && formH.p + formA.p > 0) {
-    parts.push({ p: formH.p / (formH.p + formA.p), w: 0.6 });
+    parts.push({ p: formH.p / (formH.p + formA.p), w: 0.9 });
   }
 
-  const T = String(g.tourn || "").trim();
+  const T = tournKey(g.tourn);
   if (T) {
     const ht = H.tourn[T], at = A.tourn[T];
     if (ht && at && ht.n >= 3 && at.n >= 3) {
@@ -394,7 +443,7 @@ export function fitTT(games) {
     A.rec.push({ t: g.start || 0, won: !hw, vs: nameKey(g.home), sw: g.res.away, sl: g.res.home });
     if (H.rec.length > 80) H.rec.shift();
     if (A.rec.length > 80) A.rec.shift();
-    const T = String(g.tourn || "").trim();
+    const T = tournKey(g.tourn);
     if (T) {
       const ht = H.tourn[T] || (H.tourn[T] = { n: 0, w: 0 });
       const at = A.tourn[T] || (A.tourn[T] = { n: 0, w: 0 });
@@ -402,11 +451,15 @@ export function fitTT(games) {
       if (hw) ht.w++; else at.w++;
     }
     const hk = nameKey(g.home) + ">" + nameKey(g.away);
-    const row = h2h[hk] || (h2h[hk] = { n: 0, hw: 0, hs: 0, as: 0 });
+    const row = h2h[hk] || (h2h[hk] = emptyH2H());
     row.n++;
     if (hw) row.hw++;
     row.hs += Number(g.res.home) || 0;
     row.as += Number(g.res.away) || 0;
+    bumpPattern(row, hw, patternPts(
+      hw ? g.res.home : g.res.away,
+      hw ? g.res.away : g.res.home
+    ));
   }
   const ha = homeN >= 30 ? Math.min(0.08, Math.max(-0.08, homeW / homeN - 0.5)) : 0;
   const backtest = {
@@ -441,56 +494,63 @@ function shape(r) {
 
 async function loadSettledForFit() {
   await ensureTT();
-  const rows = await sql`
-    SELECT match_id, home, away, tourn, start_at, r_home, r_away
-    FROM tt_games
-    WHERE r_home IS NOT NULL AND r_away IS NOT NULL
-    ORDER BY start_at DESC NULLS LAST
-    LIMIT 50000`;
-  const games = rows.map((r) => ({
-    id: r.match_id,
-    home: r.home, away: r.away, tourn: r.tourn || "",
-    start: r.start_at ? Number(r.start_at) : 0,
-    res: { home: r.r_home, away: r.r_away },
-  }));
-  games.sort((a, b) => (a.start || 0) - (b.start || 0));
   const seen = new Map();
-  for (const g of games) {
-    const pair = [nameKey(g.home), nameKey(g.away)].sort().join("|");
-    const k = pair + "|" + Math.round((g.start || 0) / 900000);
-    const prev = seen.get(k);
-    if (!prev) seen.set(k, g);
-    else if (!/^(sofa:|s24:)/.test(String(g.id || ""))) seen.set(k, g);
+  function take(rows) {
+    for (const r of rows) {
+      const g = {
+        id: r.match_id,
+        home: r.home, away: r.away, tourn: r.tourn || "",
+        start: r.start_at ? Number(r.start_at) : 0,
+        res: { home: r.r_home, away: r.r_away },
+      };
+      const pair = [nameKey(g.home), nameKey(g.away)].sort().join("|");
+      const k = pair + "|" + Math.round((g.start || 0) / 900000);
+      const prev = seen.get(k);
+      if (!prev) seen.set(k, g);
+      else if (!/^(sofa:|s24:)/.test(String(g.id || ""))) seen.set(k, g);
+    }
   }
-  return [...seen.values()];
+  try {
+    const nulls = await sql`
+      SELECT match_id, home, away, tourn, start_at, r_home, r_away
+      FROM tt_games
+      WHERE r_home IS NOT NULL AND r_away IS NOT NULL AND start_at IS NULL
+      LIMIT 5000`;
+    take(nulls);
+  } catch { /* ignore */ }
+  let afterStart = 0, afterId = "";
+  for (let i = 0; i < 40; i++) {
+    const rows = await sql`
+      SELECT match_id, home, away, tourn, start_at, r_home, r_away
+      FROM tt_games
+      WHERE r_home IS NOT NULL AND r_away IS NOT NULL AND start_at IS NOT NULL
+        AND (start_at > ${afterStart} OR (start_at = ${afterStart} AND match_id > ${afterId}))
+      ORDER BY start_at ASC, match_id ASC
+      LIMIT 12000`;
+    if (!rows.length) break;
+    take(rows);
+    afterStart = Number(rows[rows.length - 1].start_at);
+    afterId = String(rows[rows.length - 1].match_id);
+    if (rows.length < 12000) break;
+  }
+  return [...seen.values()].sort((a, b) => (a.start || 0) - (b.start || 0));
 }
 
 function attachForecast(games, pack) {
   for (const g of games) {
     const f = forecastTT(pack, g);
-    // The model seeds every player at 1500 Elo, so on a thin pile it says 50/50
-    // for everyone — which is nonsense when the book price already knows who is
-    // stronger (1.29 vs 3.30 is not a coin flip). Anchor on the de-vigged book
-    // and only let the model pull away from it as we actually see these two play.
     const book = g.win ? winPctBook(g.win.home, g.win.away) : null;
     const h2hN = f.h2hRec ? f.h2hRec.n : 0;
-    const evidence = Math.min(f.nH, f.nA) + 2 * h2hN; // h2h meetings count double
-    let pHome = f.pHome;
-    if (book) {
-      const wModel = evidence / (evidence + 12); // 0 → all book; ½ at ~12 games
-      pHome = wModel * f.pHome + (1 - wModel) * book.home;
-    }
-    pHome = Math.min(0.97, Math.max(0.03, pHome));
-    // pct = the headline Vantage number: our read, leaning on the book only while
-    // the pairing is thin. ours = the pure model read, shown for comparison — but
-    // only when there's enough history for it to mean something (no fake 50/50).
-    g.pct = { home: Math.round(pHome * 100), away: Math.round((1 - pHome) * 100) };
+    const hasForm = !!(f.formH && f.formA);
+    const evidence = (f.nH || 0) + (f.nA || 0) + 3 * h2hN + (hasForm ? 6 : 0);
+    // Our number is the model only. SportyBet's price is shown beside it, never mixed in.
+    const pHome = Math.min(0.97, Math.max(0.03, f.pHome));
+    const ours = { home: Math.round(pHome * 100), away: Math.round((1 - pHome) * 100) };
+    g.pct = evidence >= 1 ? ours : null;
+    g.ours = evidence >= 1 ? ours : null;
     g.book = book ? { home: Math.round(book.home * 100), away: Math.round(book.away * 100) } : null;
-    g.ours = evidence >= 3
-      ? { home: Math.round(f.pHome * 100), away: Math.round((1 - f.pHome) * 100) }
-      : null;
     g.nH = f.nH; g.nA = f.nA;
-    g.h2hRec = f.h2hRec || { n: 0, home: 0, away: 0 };
+    g.h2hRec = f.h2hRec || emptyH2H();
     g.formH = f.formH; g.formA = f.formA;
   }
   return games;
@@ -501,6 +561,7 @@ function attachForecast(games, pack) {
 // we fit once, stash the pack in tt_model, and rebuild it only when it goes
 // stale. Input is the most recent 50k settled games.
 const PACK_STALE_MS = 90 * 1000;
+const EMPTY_PACK = { players: {}, h2h: {}, ha: 0, nGames: 0, backtest: null };
 let _pack = null;         // { builtAt, data }
 let _packTable = false;
 
@@ -522,7 +583,7 @@ function trimPack(raw) {
     players[k] = {
       n: p.n, w: p.w, last: p.last,
       elo: Math.round(p.elo * 10) / 10,
-      rec: (p.rec || []).slice(-40).map((x) => ({ won: x.won, vs: x.vs, sw: x.sw, sl: x.sl })),
+      rec: (p.rec || []).slice(-50).map((x) => ({ won: x.won, vs: x.vs, sw: x.sw, sl: x.sl })),
       tourn: p.tourn,
     };
   }
@@ -547,24 +608,19 @@ async function buildAndSavePack() {
   return data;
 }
 
-// Return a usable pack: cached if fresh, reloaded if another instance rebuilt it,
-// rebuilt if missing or stale.
+// Return the stored pack. Never fit on a card load — that is what made TT hang.
 async function ensureModelPack() {
   await ensurePackTable();
-  let meta = [];
-  try { meta = await sql`SELECT built_at FROM tt_model WHERE k = 'pack'`; } catch { meta = []; }
-  const row = meta[0];
-  const age = row ? Date.now() - new Date(row.built_at).getTime() : Infinity;
-  if (!row || age > PACK_STALE_MS) return await buildAndSavePack();
-  const builtAt = new Date(row.built_at).toISOString();
-  if (_pack && _pack.builtAt === builtAt) return _pack.data;
-  const full = await sql`SELECT pack FROM tt_model WHERE k = 'pack'`;
+  if (_pack && _pack.data) return _pack.data;
+  let full = [];
+  try { full = await sql`SELECT pack, built_at FROM tt_model WHERE k = 'pack'`; } catch { full = []; }
+  if (!full[0] || !full[0].pack) return EMPTY_PACK;
   try {
     const data = JSON.parse(full[0].pack);
-    _pack = { builtAt, data };
+    _pack = { builtAt: new Date(full[0].built_at).toISOString(), data };
     return data;
   } catch {
-    return await buildAndSavePack();
+    return EMPTY_PACK;
   }
 }
 
@@ -594,7 +650,7 @@ export async function listUpcomingTT(limit = 400) {
   const games = rows.map(shape).filter((g) => g.upcoming);
   let pack;
   try { pack = await ensureModelPack(); }
-  catch { pack = fitTT(await loadSettledForFit()); } // never break the card
+  catch { pack = EMPTY_PACK; }
   return attachForecast(games, pack);
 }
 

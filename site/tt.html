@@ -222,6 +222,11 @@
     if (h.n && (h.setsH || h.setsA)) {
       row("H2H sets", String(h.setsH || 0), String(h.setsA || 0), h.setsH > h.setsA, h.setsA > h.setsH);
     }
+    if (h.n && (h.hW3 || h.hW2 || h.hW1 || h.aW3 || h.aW2 || h.aW1)) {
+      row("3–0 wins", String(h.hW3 || 0), String(h.aW3 || 0), (h.hW3 || 0) > (h.aW3 || 0), (h.aW3 || 0) > (h.hW3 || 0));
+      row("3–1 wins", String(h.hW2 || 0), String(h.aW2 || 0), (h.hW2 || 0) > (h.aW2 || 0), (h.aW2 || 0) > (h.hW2 || 0));
+      row("3–2 wins", String(h.hW1 || 0), String(h.aW1 || 0), (h.hW1 || 0) > (h.aW1 || 0), (h.aW1 || 0) > (h.hW1 || 0));
+    }
     row(
       "Last 50",
       fh ? fh.w + "W · " + fh.l + "L" : "—",
@@ -231,7 +236,9 @@
     );
     if (fh && fa && (fh.sw || fa.sw)) {
       row("Sets", fh.sw + "–" + fh.sl, fa.sw + "–" + fa.sl, fh.sw - fh.sl > fa.sw - fa.sl, fa.sw - fa.sl > fh.sw - fh.sl);
-      row("3–0 wins", String(fh.straight || 0), String(fa.straight || 0), fh.straight > fa.straight, fa.straight > fh.straight);
+      row("3–0 wins (form)", String(fh.straight || 0), String(fa.straight || 0), fh.straight > fa.straight, fa.straight > fh.straight);
+      if ((fh.mid || fa.mid)) row("3–1 wins (form)", String(fh.mid || 0), String(fa.mid || 0), fh.mid > fa.mid, fa.mid > fh.mid);
+      if ((fh.close || fa.close)) row("3–2 wins (form)", String(fh.close || 0), String(fa.close || 0), fh.close > fa.close, fa.close > fh.close);
     }
     t.appendChild(body);
     return t;
