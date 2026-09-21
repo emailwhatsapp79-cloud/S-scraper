@@ -210,7 +210,9 @@
       tr.appendChild(cell("td", b, hiB ? "hi" : ""));
       body.appendChild(tr);
     }
-    var ours = g.ours, book = g.book;
+    // One "our" number everywhere: the same confidence-weighted read shown on the
+    // bar and the winner cells, so the card never shows two figures for one thing.
+    var ours = g.pct || g.ours, book = g.book;
     if (ours) row("Our win %", ours.home + "%", ours.away + "%", ours.home > ours.away, ours.away > ours.home);
     if (book) row("Book win %", book.home + "%", book.away + "%", book.home > book.away, book.away > book.home);
     var nH = g.nH || 0, nA = g.nA || 0;
