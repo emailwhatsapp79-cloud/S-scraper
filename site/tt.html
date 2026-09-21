@@ -251,8 +251,8 @@
     top.appendChild(V.el("span", "tt-tourn", g.tourn || "Table tennis"));
     // No banked history for either player (a pool our data source doesn't cover)
     // — say so, so the book-based % doesn't look like a broken model.
-    if ((g.nH || 0) < 3 && (g.nA || 0) < 3) {
-      top.appendChild(V.el("span", "tt-tag", g.book ? "book odds · no history" : "no data yet"));
+    if (!g.pct && !g.ours) {
+      top.appendChild(V.el("span", "tt-tag", g.book ? "book odds · thin history" : "no data yet"));
     }
     top.appendChild(whenEl(g));
     box.appendChild(top);

@@ -161,7 +161,7 @@
     if (h.dcN) line += " Double-chance tries " + h.dcN + ", hit " + pct(h.dcHit) + ", ROI " + pct(h.dcRoi) + ".";
     el.textContent = p.edge
       ? line + " Hold-out beat the prices."
-      : line + " No pattern that beats the price on games it had not seen. It stays quiet until that changes.";
+      : line + " No pattern that beats the price on games it had not seen. Picks stay off until that changes.";
     if (box) box.textContent = "";
   }).catch(function (e) {
     document.getElementById("verdict").innerHTML = '<span class="err">' + e.message + "</span>";

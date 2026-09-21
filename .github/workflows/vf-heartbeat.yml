@@ -1,0 +1,23 @@
+# Banks every vFootball game every 10 minutes. Needs repo secret FILL_KEY
+# (same value as Vercel GATE_SECRET). Run: Settings → Secrets → FILL_KEY.
+name: vf-heartbeat
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Bank vFootball
+        env:
+          KEY: ${{ secrets.FILL_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEY" ]; then
+            echo "FILL_KEY secret missing — add it in repo Settings → Secrets"
+            exit 1
+          fi
+          curl -fsS --max-time 55 -H "x-fill-key: $KEY" \
+            "https://vfootball-screener.vercel.app/api/poll?vf=1"

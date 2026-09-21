@@ -130,7 +130,7 @@ export async function bulkInsert(rows) {
 }
 
 function fillKey() {
-  return process.env.GATE_SECRET || "3ed841c2806431522acc2d288f64f1fc275800b5c9ad19fc";
+  return process.env.GATE_SECRET || process.env.CRON_SECRET || "";
 }
 function proxyOrigins() {
   const out = [];

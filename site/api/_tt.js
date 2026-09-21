@@ -559,8 +559,9 @@ function attachForecast(games, pack) {
     // Our number is the model only. SportyBet's price is shown beside it, never mixed in.
     const pHome = Math.min(0.97, Math.max(0.03, f.pHome));
     const ours = { home: Math.round(pHome * 100), away: Math.round((1 - pHome) * 100) };
-    g.pct = evidence >= 1 ? ours : null;
-    g.ours = evidence >= 1 ? ours : null;
+    const thin = ((f.nH || 0) < 8 || (f.nA || 0) < 8) && h2hN < 2;
+    g.pct = !thin && evidence >= 1 ? ours : null;
+    g.ours = !thin && evidence >= 1 ? ours : null;
     g.book = book ? { home: Math.round(book.home * 100), away: Math.round(book.away * 100) } : null;
     g.nH = f.nH; g.nA = f.nA;
     g.h2hRec = f.h2hRec || emptyH2H();

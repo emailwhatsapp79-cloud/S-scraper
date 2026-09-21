@@ -1,18 +1,17 @@
 // Night tick: booked slips + a TT history chunk so the pile grows with the
 // tab closed. POST with x-fill-key banks a dump of finished games
 // (ON CONFLICT match_id — already-there rows are not duplicated).
-import { cors } from "./_db.js";
+import { logErr } from "./_db.js";
+import { requireFill } from "./_gate.js";
 import { refreshSlips } from "./_slips.js";
 import { pullScores24, bulkInsert } from "./_s24.js";
 import { countsTT, rebuildPack } from "./_tt.js";
-
-const KEY = process.env.GATE_SECRET || "3ed841c2806431522acc2d288f64f1fc275800b5c9ad19fc";
+import { touchHealth } from "./_health.js";
 
 export default async function handler(req, res) {
-  cors(res);
-  if (req.method === "OPTIONS") return res.status(204).end();
+  if (requireFill(req, res)) return;
 
-  if (req.method === "POST" && (req.headers["x-fill-key"] || "") === KEY) {
+  if (req.method === "POST") {
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
     const rows = Array.isArray(body.rows) ? body.rows : [];
     const clean = [];
@@ -41,7 +40,7 @@ export default async function handler(req, res) {
       try { pack = await rebuildPack(); } catch (e) { pack = { error: String(e?.message || e) }; }
     }
     let counts = { total: 0, settled: 0 };
-    try { counts = await countsTT(); } catch { /* ignore */ }
+    try { counts = await countsTT(); } catch (e) { logErr("nudge.post.counts", e); }
     res.setHeader("Cache-Control", "no-store");
     return res.status(200).json({
       ok: true, took: cap.length, saved,
@@ -61,9 +60,10 @@ export default async function handler(req, res) {
       players: 0, deadlineMs: 20000,
     });
   } catch (e) { s24 = { error: String(e?.message || e) }; }
-  try { counts = await countsTT(); } catch { /* ignore */ }
+  try { counts = await countsTT(); } catch (e) { logErr("nudge.counts", e); }
   let pack = null;
-  try { pack = await rebuildPack(); } catch (e) { pack = { error: String(e?.message || e) }; }
+  try { pack = await rebuildPack(); } catch (e) { logErr("nudge.pack", e); pack = { error: String(e?.message || e) }; }
+  await touchHealth("nudge", { settled: counts.settled, s24: s24 && !s24.error, pack: pack && !pack.error });
   res.setHeader("Cache-Control", "no-store");
   return res.status(200).json({
     ok: !slips?.error,

@@ -3,9 +3,11 @@
 // card + a batch of its per-event odds/results, then bank a chunk of scores24
 // history. Bounded so the whole thing stays under the 30s function limit.
 import { guard } from "./_gate.js";
+import { logErr } from "./_db.js";
 import { fetchTTCard, normalise, storeTT, enrichSettleTT, countsTT, rebuildPack } from "./_tt.js";
 import { pullScores24 } from "./_s24.js";
 import { pullSetka, pullSetkaDays } from "./_setka.js";
+import { touchHealth } from "./_health.js";
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
@@ -14,7 +16,7 @@ export default async function handler(req, res) {
     let pack = null;
     try { pack = await rebuildPack(); } catch (e) { pack = { error: String(e?.message || e) }; }
     let counts = { total: 0, settled: 0 };
-    try { counts = await countsTT(); } catch { /* ignore */ }
+    try { counts = await countsTT(); } catch (e) { logErr("tt-fill.counts", e); }
     res.setHeader("Cache-Control", "no-store");
     return res.status(200).json({
       ok: !pack?.error,
@@ -35,7 +37,7 @@ export default async function handler(req, res) {
       });
     } catch (e) { sweep = { error: String(e?.message || e) }; }
     let counts = { total: 0, settled: 0 };
-    try { counts = await countsTT(); } catch { /* ignore */ }
+    try { counts = await countsTT(); } catch (e) { logErr("tt-fill.counts", e); }
     res.setHeader("Cache-Control", "no-store");
     return res.status(200).json({
       ok: !sweep?.error, tookMs: Date.now() - started, sweep,
@@ -57,7 +59,7 @@ export default async function handler(req, res) {
       setkaNames = games.filter((g) => /setka/i.test(g.tourn || ""))
         .flatMap((g) => [g.home, g.away]).filter(Boolean);
     } catch (e) { cardErr = String(e?.message || e); }
-    try { enriched = (await enrichSettleTT(12)).touched; } catch { /* keep going */ }
+    try { enriched = (await enrichSettleTT(12)).touched; } catch (e) { logErr("tt-fill.enrich", e); }
     // Card players' Setka history (fast, name-driven). The broad sweep runs in
     // its own ?setka=1 mode and the daily poll.
     try { setka = await pullSetka(setkaNames, { players: 4, tournaments: 6, deadlineMs: 9000 }); }
@@ -78,7 +80,8 @@ export default async function handler(req, res) {
   }
 
   let counts = { total: 0, settled: 0 };
-  try { counts = await countsTT(); } catch { /* ignore */ }
+  try { counts = await countsTT(); } catch (e) { logErr("tt-fill.counts", e); }
+  await touchHealth("tt", { stored: counts.total, settled: counts.settled, card: !!card, setka: !!(setka && setka.saved) });
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
     ok: !s24?.error,

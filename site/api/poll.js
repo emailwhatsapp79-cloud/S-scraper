@@ -1,14 +1,16 @@
 // Cron target: pull the card and save it without shipping 400 games back.
-import { cors, sql } from "./_db.js";
+import { logErr } from "./_db.js";
 import { store } from "./_store.js";
 import { fetchCard, fetchLive, normalise } from "./_card.js";
 import { refreshSlips } from "./_slips.js";
-import { recordPicks, recordStoredPicks, settlePicks } from "./_screen.js";
+import { recordPicks, settlePicks } from "./_screen.js";
 import { settleGames, settleFromEvents, countsVF } from "./_results.js";
 import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT, rebuildPack } from "./_tt.js";
 import { pullScores24 } from "./_s24.js";
 import { pullSetka, pullSetkaDays } from "./_setka.js";
 import { rebuildVF } from "./_vf_model.js";
+import { requireFill } from "./_gate.js";
+import { touchHealth } from "./_health.js";
 // Sofascore history is disabled: its API 403s every server request, so it banked
 // nothing and only wasted poll time. scores24 + the official Setka feed cover it.
 
@@ -39,31 +41,32 @@ async function vfHeartbeat() {
         if (g) extra.push(g);
       }
       if (extra.length) await store(extra);
-    } catch { /* keep settling */ }
+    } catch (e) { logErr("vf.live", e); }
   }
   if (Date.now() < budget - 4000) {
     try { settled = await settleGames(60); }
-    catch (e) { settled = { error: String(e?.message || e) }; }
+    catch (e) { logErr("vf.settle", e); settled = { error: String(e?.message || e) }; }
   }
   let pack = null;
   if (Date.now() < budget - 2000) {
     try {
       const p = await rebuildVF();
       pack = { nGames: p.nGames, edge: p.edge, holdout: p.holdout, builtAt: p.builtAt };
-    } catch (e) { pack = { error: String(e?.message || e) }; }
+    } catch (e) { logErr("vf.pack", e); pack = { error: String(e?.message || e) }; }
   }
   let counts = { total: 0, settled: 0 };
-  try { counts = await countsVF(); } catch { /* ignore */ }
-  return {
+  try { counts = await countsVF(); } catch (e) { logErr("vf.counts", e); }
+  const out = {
     ok: !cardErr, tookMs: Date.now() - started,
     saved, liveN, liveEnded, settled, pack,
     stored: counts.total, banked: counts.settled, cardErr,
   };
+  await touchHealth("vf", { saved, liveN, liveEnded, settled: settled && settled.settled, stored: counts.total, banked: counts.settled });
+  return out;
 }
 
 export default async function handler(req, res) {
-  cors(res);
-  if (req.method === "OPTIONS") return res.status(204).end();
+  if (requireFill(req, res)) return;
 
   const url = new URL(req.url, "http://x");
   if (url.searchParams.get("vf") === "1") {
@@ -92,11 +95,7 @@ export default async function handler(req, res) {
     picked = await recordPicks(games);
     settled = await settlePicks(25);
     gamesSettled = (await settleGames(25)).settled;
-  } catch (e) { pickError = String(e?.message || e); }
-  try {
-    await sql`DROP TABLE IF EXISTS finder_preds`;
-    await sql`DELETE FROM vault WHERE k = 'finder'`;
-  } catch { /* leftover Finder rows */ }
+  } catch (e) { logErr("poll.picks", e); pickError = String(e?.message || e); }
 
   let tt = null;
   try {
@@ -120,8 +119,12 @@ export default async function handler(req, res) {
     try { trained = await rebuildPack(); }
     catch (e) { trained = { error: String(e?.message || e) }; }
     tt = { saved: ttSaved, touched: ttTouched, s24, setka, setkaSweep, trained };
-  } catch (e) { tt = { error: String(e?.message || e) }; }
+  } catch (e) { logErr("poll.tt", e); tt = { error: String(e?.message || e) }; }
 
+  await touchHealth("poll", {
+    saved, picked, settled, gamesSettled,
+    tt: tt && !tt.error, tookMs: Date.now() - started,
+  });
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
     ok: !saveError,

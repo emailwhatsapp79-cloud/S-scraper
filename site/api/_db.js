@@ -4,6 +4,10 @@ import { isUpcoming } from "./_shape.js";
 
 export const sql = neon(process.env.DATABASE_URL);
 
+export function logErr(where, e) {
+  console.error("[vfs]", where, e && (e.stack || e.message || e));
+}
+
 function parseCs(raw) {
   if (!raw) return null;
   if (typeof raw === "object") return raw;
@@ -43,6 +47,6 @@ export function rowToGame(r) {
 export function cors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "content-type,x-push-token");
+  res.setHeader("Access-Control-Allow-Headers", "content-type,x-push-token,x-fill-key,authorization");
   res.setHeader("Access-Control-Max-Age", "86400");
 }

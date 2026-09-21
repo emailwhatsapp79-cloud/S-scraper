@@ -1,6 +1,6 @@
 // Page reader. Hits SportyBet at most once every couple of minutes;
 // otherwise the stored remaining-day card is returned immediately.
-import { sql, rowToGame } from "./_db.js";
+import { sql, rowToGame, logErr } from "./_db.js";
 import { store } from "./_store.js";
 import { recordPicks } from "./_screen.js";
 import { fetchCard, normalise } from "./_card.js";
@@ -104,7 +104,7 @@ export default async function handler(req, res) {
     catch (e) { saveError = String(e?.message || e); }
   }
 
-  try { await recordPicks(games); } catch { /* never fail a read over a pick */ }
+  try { await recordPicks(games); } catch (e) { logErr("games.picks", e); }
 
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({

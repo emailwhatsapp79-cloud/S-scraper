@@ -1,6 +1,6 @@
 // Saving what a read saw. Keeps a running record with no collector anywhere:
 // every visit to the site records the games the feeds were showing at the time.
-import { sql } from "./_db.js";
+import { sql, logErr } from "./_db.js";
 import { leagueBucket } from "./_shape.js";
 
 const FIELDS = 17;
@@ -77,7 +77,7 @@ export async function pruneUnseen(fresh) {
           AND (event_id IS NULL OR NOT (event_id = ANY(${eventIds})))
         RETURNING game_id`;
       n += r.length;
-    } catch { /* don't fail a read over a prune */ }
+    } catch (e) { logErr("prune " + b, e); }
   }
   return n;
 }

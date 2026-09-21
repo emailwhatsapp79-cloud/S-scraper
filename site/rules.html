@@ -77,6 +77,7 @@
     </div>
   </div>
   <p class="note" id="phone-note"></p>
+  <p class="note" id="health-line">Checking fills…</p>
 
   <h2 style="font-size:16px;margin:28px 0 8px">Profile</h2>
   <p class="lede" style="margin-bottom:8px">Change the lock code. Six digits. Current one first, then the new one twice.</p>
@@ -145,6 +146,27 @@
   }
   paintPhone();
   window.addEventListener("vfs-ready", paintPhone);
+
+  fetch("/api/settings").then(function (r) { return r.json(); }).then(function (d) {
+    var el = document.getElementById("health-line");
+    if (!el || !d || !d.ok) return;
+    function ago(iso) {
+      if (!iso) return "never";
+      var ms = Date.now() - new Date(iso).getTime();
+      if (!isFinite(ms) || ms < 0) return "just now";
+      if (ms < 60000) return "just now";
+      if (ms < 3600000) return Math.round(ms / 60000) + " min ago";
+      if (ms < 86400000) return Math.round(ms / 3600000) + "h ago";
+      return Math.round(ms / 86400000) + "d ago";
+    }
+    var vf = d.vf || {}, tt = d.tt || {}, h = d.health || {};
+    var last = (h.vf && h.vf.at) || (h.poll && h.poll.at) || (h.nudge && h.nudge.at);
+    el.textContent = "vFootball " + Number(vf.settled || 0).toLocaleString() + " settled · TT " +
+      Number(tt.settled || 0).toLocaleString() + " settled · last fill " + ago(last);
+  }).catch(function () {
+    var el = document.getElementById("health-line");
+    if (el) el.textContent = "Could not read fill status.";
+  });
 
   pingBtn.addEventListener("click", function () {
     var on = pingBtn.getAttribute("aria-checked") !== "true";
