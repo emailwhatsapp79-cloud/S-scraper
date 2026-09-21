@@ -446,7 +446,7 @@ async function loadSettledForFit() {
     FROM tt_games
     WHERE r_home IS NOT NULL AND r_away IS NOT NULL
     ORDER BY start_at DESC NULLS LAST
-    LIMIT 25000`;
+    LIMIT 50000`;
   const games = rows.map((r) => ({
     id: r.match_id,
     home: r.home, away: r.away, tourn: r.tourn || "",
@@ -497,10 +497,9 @@ function attachForecast(games, pack) {
 }
 
 // ── Ratings pack cache ──────────────────────────────────────────────────────
-// Fitting 25k games on every card load cost ~12s and grew with the pile. Instead
+// Fitting tens of thousands of games on every card load was too slow. Instead
 // we fit once, stash the pack in tt_model, and rebuild it only when it goes
-// stale. The fit input is capped at the most recent 25k games, so a rebuild
-// stays bounded (~10s) no matter how deep the banked history grows.
+// stale. Input is the most recent 50k settled games.
 const PACK_STALE_MS = 90 * 1000;
 let _pack = null;         // { builtAt, data }
 let _packTable = false;
