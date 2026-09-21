@@ -400,18 +400,15 @@ export function forecastTT(pack, g) {
   };
 }
 
-export function fitTT(games) {
-  const players = {};
-  const h2h = {};
-  let homeN = 0, homeW = 0;
+export function fitTT(games, into) {
+  const players = into?.players || {};
+  const h2h = into?.h2h || {};
+  let homeN = into?.homeN || 0, homeW = into?.homeW || 0;
   const P = (name) => {
     const k = nameKey(name);
     return players[k] || (players[k] = { n: 0, w: 0, elo: 1500, last: 0, rec: [], tourn: {} });
   };
-  // Walk-forward check: grade each game against the rating we held BEFORE it,
-  // but only once both players have some history (a fresh 1500 vs 1500 is not a
-  // real prediction). This is honest self-scoring — did our number beat a coin?
-  const bt = { n: 0, hit: 0, brier: 0, bins: Array.from({ length: 5 }, () => ({ n: 0, w: 0 })) };
+  const bt = into?.bt || { n: 0, hit: 0, brier: 0, bins: Array.from({ length: 5 }, () => ({ n: 0, w: 0 })) };
   const settled = (games || [])
     .filter((g) => g.res && g.res.home != null && g.res.away != null)
     .sort((a, b) => (a.start || 0) - (b.start || 0));
@@ -474,7 +471,7 @@ export function fitTT(games) {
       return n ? w / n : null;
     })(),
   };
-  return { players, h2h, ha, homeN, backtest };
+  return { players, h2h, ha, homeN, homeW, bt, backtest };
 }
 
 function shape(r) {
@@ -492,7 +489,7 @@ function shape(r) {
   };
 }
 
-async function loadSettledForFit() {
+async function loadSettledSlice(afterStart, afterId, limit) {
   await ensureTT();
   const seen = new Map();
   function take(rows) {
@@ -510,30 +507,34 @@ async function loadSettledForFit() {
       else if (!/^(sofa:|s24:)/.test(String(g.id || ""))) seen.set(k, g);
     }
   }
-  try {
-    const nulls = await sql`
-      SELECT match_id, home, away, tourn, start_at, r_home, r_away
-      FROM tt_games
-      WHERE r_home IS NOT NULL AND r_away IS NOT NULL AND start_at IS NULL
-      LIMIT 5000`;
-    take(nulls);
-  } catch { /* ignore */ }
+  const rows = await sql`
+    SELECT match_id, home, away, tourn, start_at, r_home, r_away
+    FROM tt_games
+    WHERE r_home IS NOT NULL AND r_away IS NOT NULL AND start_at IS NOT NULL
+      AND (start_at > ${afterStart} OR (start_at = ${afterStart} AND match_id > ${afterId}))
+    ORDER BY start_at ASC, match_id ASC
+    LIMIT ${limit}`;
+  take(rows);
+  const games = [...seen.values()].sort((a, b) => (a.start || 0) - (b.start || 0));
+  const last = rows.length ? rows[rows.length - 1] : null;
+  return {
+    games,
+    afterStart: last ? Number(last.start_at) : afterStart,
+    afterId: last ? String(last.match_id) : afterId,
+    more: rows.length >= limit,
+  };
+}
+
+async function loadSettledForFit() {
+  const all = [];
   let afterStart = 0, afterId = "";
-  for (let i = 0; i < 40; i++) {
-    const rows = await sql`
-      SELECT match_id, home, away, tourn, start_at, r_home, r_away
-      FROM tt_games
-      WHERE r_home IS NOT NULL AND r_away IS NOT NULL AND start_at IS NOT NULL
-        AND (start_at > ${afterStart} OR (start_at = ${afterStart} AND match_id > ${afterId}))
-      ORDER BY start_at ASC, match_id ASC
-      LIMIT 12000`;
-    if (!rows.length) break;
-    take(rows);
-    afterStart = Number(rows[rows.length - 1].start_at);
-    afterId = String(rows[rows.length - 1].match_id);
-    if (rows.length < 12000) break;
+  for (let i = 0; i < 20; i++) {
+    const part = await loadSettledSlice(afterStart, afterId, 12000);
+    all.push(...part.games);
+    afterStart = part.afterStart; afterId = part.afterId;
+    if (!part.more) break;
   }
-  return [...seen.values()].sort((a, b) => (a.start || 0) - (b.start || 0));
+  return all.sort((a, b) => (a.start || 0) - (b.start || 0));
 }
 
 function attachForecast(games, pack) {
@@ -596,14 +597,57 @@ function trimPack(raw) {
 
 async function buildAndSavePack() {
   await ensurePackTable();
-  const raw = fitTT(await loadSettledForFit());
+  let into = null, afterStart = 0, afterId = "";
+  try {
+    const st = await sql`SELECT pack FROM tt_model WHERE k = ${"fit"}`;
+    if (st[0] && st[0].pack) {
+      const s = JSON.parse(st[0].pack);
+      afterStart = Number(s.afterStart) || 0;
+      afterId = String(s.afterId || "");
+      into = {
+        players: s.players || {},
+        h2h: s.h2h || {},
+        homeN: s.homeN || 0,
+        homeW: s.homeW || 0,
+        bt: s.bt || null,
+      };
+    }
+  } catch { into = null; }
+
+  const slice = await loadSettledSlice(afterStart, afterId, 22000);
+  if (!slice.games.length) {
+    const cur = await ensureModelPack();
+    if (cur && cur.nGames) { cur.more = false; return cur; }
+    const again = await loadSettledSlice(0, "", 22000);
+    if (!again.games.length) return EMPTY_PACK;
+    return await persistPack(fitTT(again.games, null), again);
+  }
+  const raw = fitTT(slice.games, into);
+  return await persistPack(raw, slice);
+}
+
+async function persistPack(raw, slice) {
   const data = trimPack(raw);
   const iso = new Date().toISOString();
   data.builtAt = iso;
+  data.more = !!slice.more;
   const json = JSON.stringify(data);
+  const fit = JSON.stringify({
+    afterStart: slice.afterStart,
+    afterId: slice.afterId,
+    more: !!slice.more,
+    players: data.players,
+    h2h: data.h2h,
+    homeN: raw.homeN,
+    homeW: raw.homeW,
+    bt: raw.bt,
+  });
   await sql`
     INSERT INTO tt_model (k, pack, built_at) VALUES ('pack', ${json}, ${iso})
     ON CONFLICT (k) DO UPDATE SET pack = ${json}, built_at = ${iso}`;
+  await sql`
+    INSERT INTO tt_model (k, pack, built_at) VALUES (${"fit"}, ${fit}, ${iso})
+    ON CONFLICT (k) DO UPDATE SET pack = ${fit}, built_at = ${iso}`;
   _pack = { builtAt: iso, data };
   return data;
 }
