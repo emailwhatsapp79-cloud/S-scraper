@@ -1,9 +1,9 @@
-# Banks every vFootball game every 10 minutes. Needs repo secret FILL_KEY
-# (same value as Vercel GATE_SECRET). Run: Settings → Secrets → FILL_KEY.
+# Manual only. GitHub would not let us write FILL_KEY, so a 10-min cron
+# just emails "failed" every run. The live 10-min bank is the Grok ping
+# (and Vercel daily cron). Add repo secret FILL_KEY (= Vercel GATE_SECRET)
+# then you can turn schedule back on.
 name: vf-heartbeat
 on:
-  schedule:
-    - cron: "*/10 * * * *"
   workflow_dispatch:
 jobs:
   ping:
@@ -16,7 +16,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "$KEY" ]; then
-            echo "FILL_KEY secret missing — add it in repo Settings → Secrets"
+            echo "FILL_KEY secret missing — add it in repo Settings → Secrets and Actions"
             exit 1
           fi
           curl -fsS --max-time 55 -H "x-fill-key: $KEY" \
