@@ -132,15 +132,18 @@ async function bulkInsert(rows) {
 function fillKey() {
   return process.env.GATE_SECRET || "3ed841c2806431522acc2d288f64f1fc275800b5c9ad19fc";
 }
-function proxyOrigin() {
-  const host = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
-  return host ? "https://" + host : "";
+function proxyOrigins() {
+  const out = [];
+  const prod = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  const here = process.env.VERCEL_URL;
+  if (prod) out.push("https://" + prod);
+  if (here) out.push("https://" + here);
+  return [...new Set(out)];
 }
 
 async function fetchS24(target, accept) {
-  const origin = proxyOrigin();
   const errors = [];
-  if (origin) {
+  for (const origin of proxyOrigins()) {
     try {
       const u = target.includes("/rapi/")
         ? origin + "/api/s24-proxy?kind=rapi&u=" + encodeURIComponent(target)
@@ -304,24 +307,22 @@ async function fromRapi(byLast, pages, first, days) {
     updated TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
   const slugs = await listLeagues(from, to);
-  const deadline = Date.now() + 20000;
-  const parts = await Promise.all(
-    slugs.map((slug) => pullLeague(slug, byLast, pages, first, from, to, deadline)),
-  );
-  const rows = [];
-  const seen = new Set();
-  const errors = [];
-  let hasMore = false;
-  for (const p of parts) {
-    if (p.hasMore) hasMore = true;
-    errors.push(...p.errors);
-    for (const r of p.rows) {
-      if (seen.has(r.id)) continue;
-      seen.add(r.id);
-      rows.push(r);
-    }
-  }
-  return { rows, errors, hasMore };
+  const turn = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${"rr"}`;
+  let i = Number(turn[0] && turn[0].cursor) || 0;
+  if (!Number.isFinite(i) || i < 0) i = 0;
+  const slug = slugs[i % slugs.length];
+  await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${"rr"}, ${String(i + 1)})
+    ON CONFLICT (k) DO UPDATE SET cursor = ${String(i + 1)}, updated = now()`;
+  const deadline = Date.now() + 22000;
+  const part = await pullLeague(slug, byLast, pages, first, from, to, deadline);
+  const done = await sql`SELECT k FROM tt_s24_state WHERE k LIKE ${"y2|%"} AND cursor = ${"DONE"}`;
+  const allDone = done.length >= slugs.length && !part.hasMore;
+  return {
+    rows: part.rows,
+    errors: part.errors || [],
+    hasMore: !allDone || part.hasMore,
+    slug,
+  };
 }
 
 function teamSlugs(name) {
@@ -427,7 +428,7 @@ export async function pullScores24(names, opts = {}) {
   if (all.length < 80 || opts.more) {
     try {
       const extra = await fromRapi(byLast, pages, first, days);
-      notes.push("rapi " + extra.rows.length + (extra.hasMore ? " more…" : " done"));
+      notes.push((extra.slug || "rapi") + " " + extra.rows.length + (extra.hasMore ? " more…" : " done"));
       if (extra.hasMore) hasMore = true;
       if (extra.errors.length) notes.push(extra.errors.join("; "));
       for (const r of extra.rows) {

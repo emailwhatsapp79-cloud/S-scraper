@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   let s24 = null;
   try {
     s24 = await pullScores24([], {
-      skipHtml: true, more: true, pages: 2, first: 50, days: 400,
+      skipHtml: false, more: true, pages: 5, first: 50, days: 400,
       players: 0,
     });
   }
