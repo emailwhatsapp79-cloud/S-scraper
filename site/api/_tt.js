@@ -248,7 +248,7 @@ export async function enrichSettleTT(limit = 80) {
   return { touched };
 }
 
-function winPctBook(hOdds, aOdds) {
+export function winPctBook(hOdds, aOdds) {
   const h = Number(hOdds), a = Number(aOdds);
   if (!isFinite(h) || !isFinite(a) || h <= 0 || a <= 0) return null;
   const ih = 1 / h, ia = 1 / a, s = ih + ia;
@@ -699,15 +699,19 @@ async function ensureModelPack() {
 }
 
 // Poll/cron can force a refresh so the pack stays warm even with no visitors.
+// rebuildPack now drives the online trainer (each call trains the next chunk of
+// untrained games). Name kept so the poll/fill wiring doesn't have to change.
 export async function rebuildPack() {
-  try { return await buildAndSavePack(); }
-  catch (e) { return { error: String(e?.message || e) }; }
+  try {
+    const { trainBatch } = await import("./_ratings.js");
+    return await trainBatch(2500, 12000);
+  } catch (e) { return { error: String(e?.message || e) }; }
 }
 
 export async function getModelMeta() {
   try {
-    const d = await ensureModelPack();
-    return { builtAt: d.builtAt || null, nGames: d.nGames || 0, backtest: d.backtest || null };
+    const { ratingsMeta } = await import("./_ratings.js");
+    return await ratingsMeta();
   } catch { return null; }
 }
 
@@ -722,10 +726,16 @@ export async function listUpcomingTT(limit = 400) {
     ORDER BY start_at ASC NULLS LAST
     LIMIT ${limit}`;
   const games = rows.map(shape).filter((g) => g.upcoming);
-  let pack;
-  try { pack = await ensureModelPack(); }
-  catch { pack = EMPTY_PACK; }
-  return attachForecast(games, pack);
+  // Score the card off the online rating store (per-player, no big pack). Fall
+  // back to the legacy pack only if the store errors, so the card never breaks.
+  try {
+    const { forecastCard } = await import("./_ratings.js");
+    return await forecastCard(games);
+  } catch {
+    let pack;
+    try { pack = await ensureModelPack(); } catch { pack = EMPTY_PACK; }
+    return attachForecast(games, pack);
+  }
 }
 
 // Recently PLAYED matches from anywhere in the pile (SportyBet or the history
