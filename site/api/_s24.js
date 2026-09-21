@@ -309,7 +309,7 @@ async function pullLatest(slug, byLast, first, from, to) {
   return { rows, errors };
 }
 
-async function fromRapi(byLast, pages, first, days) {
+async function fromRapi(byLast, pages, first, days, deadlineMs) {
   const now = Date.now();
   const from = stamp(now - days * 24 * 3600 * 1000);
   const to = stamp(now + 2 * 3600 * 1000);
@@ -319,7 +319,7 @@ async function fromRapi(byLast, pages, first, days) {
     updated TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
   const slugs = CORE;
-  const deadline = Date.now() + 18000;
+  const deadline = Date.now() + (deadlineMs || 18000);
 
   // Recent finished from every cup, then a deep-history walk on EVERY cup in
   // parallel (used to be one rotating cup per pass — this fills ~5x faster while
@@ -455,7 +455,7 @@ export async function pullScores24(names, opts = {}) {
 
   if (all.length < 80 || opts.more) {
     try {
-      const extra = await fromRapi(byLast, pages, first, days);
+      const extra = await fromRapi(byLast, pages, first, days, opts.deadlineMs);
       notes.push((extra.slug || "rapi") + " " + extra.rows.length + (extra.hasMore ? " more…" : " done"));
       if (extra.hasMore) hasMore = true;
       if (extra.errors.length) notes.push(extra.errors.join("; "));

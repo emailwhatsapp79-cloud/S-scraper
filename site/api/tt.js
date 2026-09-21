@@ -1,52 +1,26 @@
-// Table-tennis reader. Reads SportyBet's upcoming TT card, banks it, fills a
-// bounded batch of odds/results, and returns the upcoming list. Gated like the
-// rest of the app. Nothing here shares state with the football endpoints.
+// Table-tennis card — serve only. Reads the banked pile from the DB (upcoming
+// games with our ratings, recent results, the model self-check) and returns it
+// fast. All the slow ingestion — pulling SportyBet's card and its per-event odds
+// — lives in /api/tt-fill (the page's background loop) and the daily poll, so a
+// card load never waits on SportyBet's servers. Gated like the rest of the app.
 import { guard } from "./_gate.js";
-import { fetchTTCard, normalise, storeTT, enrichSettleTT, listUpcomingTT, listRecentResultsTT, countsTT, getModelMeta } from "./_tt.js";
+import { listUpcomingTT, listRecentResultsTT, countsTT, getModelMeta } from "./_tt.js";
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
   const started = Date.now();
-  const ph = {};
-  const mark = (k, t0) => { ph[k] = Date.now() - t0; };
-  let saved = 0, saveError = null, feedErrors = null, enriched = 0;
 
-  let t = Date.now();
-  try {
-    const { events, errors } = await fetchTTCard();
-    feedErrors = errors && errors.length ? errors : null;
-    const games = events.map(normalise);
-    try { saved = await storeTT(games); }
-    catch (e) { saveError = String(e?.message || e); }
-  } catch (e) {
-    feedErrors = [String(e?.message || e)];
-  }
-  mark("card", t);
-
-  t = Date.now();
-  try { enriched = (await enrichSettleTT(25)).touched; } catch { /* still serve */ }
-  mark("enrich", t);
-
-  let games = [], results = [], counts = { total: 0, settled: 0 }, model = null;
-  t = Date.now();
-  try { games = await listUpcomingTT(400); } catch (e) { saveError = saveError || String(e?.message || e); }
-  mark("upcoming", t);
-  t = Date.now();
+  let games = [], results = [], counts = { total: 0, settled: 0 }, model = null, error = null;
+  try { games = await listUpcomingTT(400); } catch (e) { error = String(e?.message || e); }
   try { results = await listRecentResultsTT(60); } catch { /* ignore */ }
-  mark("results", t);
-  t = Date.now();
   try { counts = await countsTT(); } catch { /* ignore */ }
-  mark("counts", t);
-  t = Date.now();
   try { model = await getModelMeta(); } catch { /* ignore */ }
-  mark("model", t);
 
   res.setHeader("Cache-Control", "no-store");
   res.status(200).json({
     ok: true,
     tookMs: Date.now() - started,
-    phases: ph,
-    saved, enriched, saveError, feedErrors,
+    error,
     stored: counts.total,
     settled: counts.settled,
     count: games.length,
