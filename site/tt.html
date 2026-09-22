@@ -102,7 +102,7 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("tt");
-  var LAST = null, LEAGUE = "All", MODE = "up", MIN60 = false;
+  var LAST = null, LEAGUE = "All", MODE = "up", MIN60 = false, SHORT = false;
 
   function odds(v) { return (v == null || !isFinite(Number(v))) ? "—" : Number(v).toFixed(2); }
 
@@ -317,19 +317,29 @@
   function hotPick(g) {
     return holdoutOk() && beatPrice(g);
   }
+  function favPrice(g) {
+    var p = g.pct || g.ours, w = g.win;
+    if (!p || !w) return null;
+    var ourH = Number(p.home) >= Number(p.away);
+    var price = ourH ? Number(w.home) : Number(w.away);
+    return isFinite(price) && price > 1 ? price : null;
+  }
+  function shortPick(g) {
+    var pr = favPrice(g);
+    return pr != null && pr <= 1.50 && hotPick(g);
+  }
 
   function filtered(list) {
     var out = LEAGUE === "All" ? list.slice() : list.filter(function (g) { return (g.tourn || "Other") === LEAGUE; });
-    if (MODE === "up" && MIN60) {
-      out = out.filter(hotPick);
-    }
+    if (MODE === "up" && SHORT) out = out.filter(shortPick);
+    else if (MODE === "up" && MIN60) out = out.filter(hotPick);
     return out;
   }
 
   function tourns(games) {
-    var pool = (MODE === "up" && MIN60)
-      ? games.filter(hotPick)
-      : games;
+    var pool = games;
+    if (MODE === "up" && SHORT) pool = games.filter(shortPick);
+    else if (MODE === "up" && MIN60) pool = games.filter(hotPick);
     var counts = { All: pool.length };
     pool.forEach(function (g) { var k = g.tourn || "Other"; counts[k] = (counts[k] || 0) + 1; });
     var names = Object.keys(counts).filter(function (k) { return k !== "All"; })
@@ -338,11 +348,25 @@
     box.textContent = "";
     if (MODE === "up") {
       var n60 = games.filter(hotPick).length;
-      var hot = V.el("button", "chip" + (MIN60 ? " on" : ""), "60%+ " + n60);
+      var hot = V.el("button", "chip" + (MIN60 && !SHORT ? " on" : ""), "60%+ " + n60);
       hot.type = "button";
-      hot.setAttribute("aria-pressed", MIN60 ? "true" : "false");
-      hot.addEventListener("click", function () { MIN60 = !MIN60; render(); });
+      hot.setAttribute("aria-pressed", MIN60 && !SHORT ? "true" : "false");
+      hot.addEventListener("click", function () {
+        MIN60 = !MIN60;
+        if (!MIN60) SHORT = false;
+        render();
+      });
       box.appendChild(hot);
+      var nShort = games.filter(shortPick).length;
+      var sh = V.el("button", "chip" + (SHORT ? " on" : ""), "≤1.50 " + nShort);
+      sh.type = "button";
+      sh.setAttribute("aria-pressed", SHORT ? "true" : "false");
+      sh.addEventListener("click", function () {
+        SHORT = !SHORT;
+        if (SHORT) MIN60 = true;
+        render();
+      });
+      box.appendChild(sh);
     }
     ["All"].concat(names).forEach(function (name) {
       var b = V.el("button", "chip" + (LEAGUE === name ? " on" : ""), name + " " + (counts[name] || 0));
@@ -360,7 +384,11 @@
     if (!list.length) {
       out.appendChild(V.el("div", "empty", MODE === "res"
         ? "No results banked yet — they fill in as matches finish."
-        : (MIN60
+        : (SHORT
+          ? (holdoutOk()
+            ? "None at 60%+ with the favourite at 1.50 or shorter."
+            : "≤1.50 is off until the last 2 weeks actually hit. See the line above.")
+          : (MIN60
           ? (holdoutOk()
             ? "None beating the book by 5%+ at 60% right now."
             : "60%+ is off until the last 2 weeks actually hit. See the line above.")
