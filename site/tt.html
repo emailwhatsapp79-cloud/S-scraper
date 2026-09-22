@@ -298,18 +298,24 @@
     return Math.max(isFinite(a) ? a : 0, isFinite(b) ? b : 0);
   }
 
-  // 60%+ is a stake filter. Don't fade a 30% book just because H2H is loud.
-  function hotPick(g) {
-    var w = ourWin(g);
-    if (w == null || w < 60) return false;
-    var p = g.pct || g.ours;
-    if (!p) return false;
+  // 60%+ is a stake filter. Needs a real edge vs the book, and the last
+  // 2 weeks of finished games have to have hit — otherwise the chip is empty.
+  function holdoutOk() {
+    var h = LAST && LAST.model && LAST.model.holdout;
+    return !!(h && h.proven);
+  }
+  function beatPrice(g) {
+    var p = g.pct || g.ours, b = g.book;
+    if (!p || !b) return false;
     var ourH = Number(p.home) >= Number(p.away);
-    var b = g.book;
-    if (!b) return ((g.h2hRec && g.h2hRec.n) || 0) >= 8;
     var bookH = Number(b.home) >= Number(b.away);
     if (ourH !== bookH) return false;
-    return Math.max(Number(b.home) || 0, Number(b.away) || 0) >= 52;
+    var ours = ourH ? Number(p.home) : Number(p.away);
+    var book = ourH ? Number(b.home) : Number(b.away);
+    return ours >= 60 && (ours - book) >= 5;
+  }
+  function hotPick(g) {
+    return holdoutOk() && beatPrice(g);
   }
 
   function filtered(list) {
@@ -355,7 +361,9 @@
       out.appendChild(V.el("div", "empty", MODE === "res"
         ? "No results banked yet — they fill in as matches finish."
         : (MIN60
-          ? "None at 60%+ on this card right now."
+          ? (holdoutOk()
+            ? "None beating the book by 5%+ at 60% right now."
+            : "60%+ is off until the last 2 weeks actually hit. See the line above.")
           : "No upcoming table tennis on the card right now.")));
     } else if (MODE === "res") {
       list.forEach(function (g) { out.appendChild(resultRow(g)); });
@@ -407,13 +415,18 @@
   function pctOf(x) { return (x == null || !isFinite(x)) ? "—" : Math.round(x * 100) + "%"; }
   function backtest(m) {
     var el = document.getElementById("bt-note");
+    var h = m && m.holdout;
     var b = m && m.backtest;
-    if (!b || !b.n) { el.textContent = ""; return; }
-    // Honest self-score: replay history, grade each pick against the rating we
-    // held BEFORE the match. No book to compare on the old pile (no odds banked).
-    var line = "Model self-check · " + comma(b.n) + " graded · picks the winner " + pctOf(b.hit);
-    if (b.strongN) line += " · when it says 70%+, right " + pctOf(b.strongHit) + " (" + comma(b.strongN) + ")";
-    el.textContent = line;
+    var parts = [];
+    if (h && h.beat) {
+      var bn = h.beat.n || 0, bh = h.beat.hits || 0;
+      var pct = bn ? Math.round((h.beat.hit || 0) * 100) + "%" : "—";
+      parts.push("Last " + (h.days || 14) + " days · beat-the-book " + bh + "/" + bn + " hit " + pct
+        + (h.proven ? " · 60%+ on" : " · 60%+ stays off"));
+    } else if (b && b.n) {
+      parts.push("Scoring last 2 weeks…");
+    }
+    el.textContent = parts.join(" · ");
   }
 
   var fillN = 0;

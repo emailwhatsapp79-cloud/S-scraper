@@ -714,8 +714,12 @@ async function ensureModelPack() {
 // untrained games). Name kept so the poll/fill wiring doesn't have to change.
 export async function rebuildPack() {
   try {
-    const { trainBatch } = await import("./_ratings.js");
-    return await trainBatch(2500, 12000);
+    const { trainBatch, scoreHoldout } = await import("./_ratings.js");
+    const trained = await trainBatch(2500, 12000);
+    let holdout = null;
+    try { holdout = await scoreHoldout(14); }
+    catch (e) { holdout = { error: String(e?.message || e) }; }
+    return { ...trained, holdout };
   } catch (e) { return { error: String(e?.message || e) }; }
 }
 

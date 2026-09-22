@@ -265,6 +265,11 @@ export async function ratingsMeta() {
   const meta = await loadMeta();
   const bt = meta.bt || {};
   const c = await sql`SELECT count(*)::int AS players FROM tt_ratings`;
+  let holdout = null;
+  try {
+    const h = await sql`SELECT data FROM tt_rating_meta WHERE k = 'holdout'`;
+    if (h[0] && h[0].data) holdout = JSON.parse(h[0].data);
+  } catch { holdout = null; }
   return {
     players: c[0] ? c[0].players : 0,
     nGames: meta.homeN || 0,
@@ -272,5 +277,91 @@ export async function ratingsMeta() {
       n: bt.n, hit: bt.hit / bt.n, brier: bt.brier / bt.n,
       strongN: bt.strongN, strongHit: bt.strongN ? bt.strongW / bt.strongN : null,
     } : null,
+    holdout,
   };
+}
+
+function wilsonLo(w, n) {
+  if (!n) return 0;
+  const z = 1.96, z2 = z * z, p = w / n;
+  const den = 1 + z2 / n;
+  const centre = p + z2 / (2 * n);
+  const marg = z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n);
+  return (centre - marg) / den;
+}
+
+/** Last N days of finished SportyBet games with odds. Score them with the
+ *  current model. "Beat the book" = our favourite ≥60% AND ≥5pp above the
+ *  book's % on that same side. Proven only if that bucket actually hits. */
+export async function scoreHoldout(days = 14, opts = {}) {
+  await ensure();
+  if (!opts.force) {
+    try {
+      const prev = await sql`SELECT data FROM tt_rating_meta WHERE k = 'holdout'`;
+      const cur = prev[0] && prev[0].data ? JSON.parse(prev[0].data) : null;
+      if (cur && cur.at && Date.now() - Date.parse(cur.at) < 6 * 3600 * 1000) return cur;
+    } catch { /* score */ }
+  }
+  const cutoff = Date.now() - days * 86400000;
+  const rows = await sql`
+    SELECT home, away, tourn, start_at, r_home, r_away, win_home, win_away
+    FROM tt_games
+    WHERE r_home IS NOT NULL AND r_away IS NOT NULL
+      AND win_home IS NOT NULL AND win_away IS NOT NULL
+      AND start_at >= ${cutoff}
+      AND match_id NOT LIKE ${"s24:%"}
+      AND match_id NOT LIKE ${"sofa:%"}
+    ORDER BY start_at ASC
+    LIMIT 2000`;
+  const games = rows.map((r) => ({
+    home: r.home, away: r.away, tourn: r.tourn || "",
+    start: r.start_at ? Number(r.start_at) : 0,
+    win: { home: Number(r.win_home), away: Number(r.win_away) },
+    res: { home: Number(r.r_home), away: Number(r.r_away) },
+  })).filter((g) => g.res.home !== g.res.away && g.win.home > 1 && g.win.away > 1);
+
+  const scored = games.length ? await forecastCard(games) : [];
+  let n = 0, hits = 0;
+  const beat = { n: 0, hits: 0, edge: 0 };
+  const copy = { n: 0, hits: 0 };
+  for (const g of scored) {
+    const ours = g.pct || g.ours, book = g.book;
+    if (!ours || !book) continue;
+    const wonHome = g.res.home > g.res.away;
+    const ourH = ours.home >= ours.away;
+    const bookH = book.home >= book.away;
+    const oursP = ourH ? ours.home : ours.away;
+    const bookP = ourH ? book.home : book.away;
+    const hit = ourH ? wonHome : !wonHome;
+    n++; if (hit) hits++;
+    if (ourH === bookH && oursP >= 60) {
+      const edge = oursP - bookP;
+      if (edge >= 5) {
+        beat.n++; if (hit) beat.hits++; beat.edge += edge;
+      } else {
+        copy.n++; if (hit) copy.hits++;
+      }
+    }
+  }
+  const out = {
+    days,
+    at: new Date().toISOString(),
+    n,
+    hit: n ? hits / n : null,
+    beat: {
+      n: beat.n, hits: beat.hits,
+      hit: beat.n ? beat.hits / beat.n : null,
+      wilson: wilsonLo(beat.hits, beat.n),
+      edge: beat.n ? beat.edge / beat.n : null,
+    },
+    copy: {
+      n: copy.n, hits: copy.hits,
+      hit: copy.n ? copy.hits / copy.n : null,
+    },
+  };
+  out.proven = out.beat.n >= 20 && out.beat.hit >= 0.55 && out.beat.wilson >= 0.50;
+  await sql`
+    INSERT INTO tt_rating_meta (k, data) VALUES ('holdout', ${JSON.stringify(out)})
+    ON CONFLICT (k) DO UPDATE SET data = ${JSON.stringify(out)}`;
+  return out;
 }
