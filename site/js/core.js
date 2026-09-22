@@ -159,6 +159,117 @@
     return attachRate(p, g, r);
   }
 
+  // Ready-to-book follows the slips you actually tap, not "shortest favourite
+  // wins". Your VF books sit at 1.20–1.30 1X/X2 across England/Spain/Italy/
+  // Germany/France. A Chelsea 1.60 vs a 5.00 is the trap those packs used to
+  // dump on top — the 1.60 still loses the match often enough to kill an acca.
+  var STYLE_DC_LO = 1.20;
+  var STYLE_DC_HI = 1.30;
+  var STYLE_DC_AIM = 1.25;
+  var TRAP_FAV = 1.65;
+  var TRAP_DOG = 5.00;
+
+  function stylePick(g) {
+    var ft = (g && g.ft) || {};
+    var fh = n(ft.home), fd = n(ft.draw), fa = n(ft.away);
+    if (fh == null || fd == null || fa == null) return null;
+    var raw = g.dc || {
+      home_draw: combine(fh, fd),
+      draw_away: combine(fd, fa)
+    };
+    var hd = n(raw.home_draw), da = n(raw.draw_away);
+    if (!(hd > 1) || !(da > 1)) return null;
+    var favO = fh <= fa ? fh : fa;
+    var dogO = fh <= fa ? fa : fh;
+    if (favO <= TRAP_FAV && dogO >= TRAP_DOG) return null;
+    var cands = [];
+    if (hd >= STYLE_DC_LO && hd <= STYLE_DC_HI) {
+      cands.push({ sel: "1X", price: hd, label: "Home or Draw" });
+    }
+    if (da >= STYLE_DC_LO && da <= STYLE_DC_HI) {
+      cands.push({ sel: "X2", price: da, label: "Draw or Away" });
+    }
+    if (!cands.length) return null;
+    cands.sort(function (a, b) {
+      return Math.abs(a.price - STYLE_DC_AIM) - Math.abs(b.price - STYLE_DC_AIM);
+    });
+    var c = cands[0];
+    var p = makePick(g, c.sel, c.price, c.label);
+    return attachRate(p, g);
+  }
+
+  var USED_KEY = "vfs_used_legs";
+
+  function loadUsed() {
+    try {
+      var rows = JSON.parse(localStorage.getItem(USED_KEY) || "[]") || [];
+      var now = Date.now();
+      return rows.filter(function (r) {
+        if (!r || !r.id) return false;
+        var ko = Number(r.kickoff) || 0;
+        return !ko || ko > now - 2 * 3600000;
+      });
+    } catch (e) { return []; }
+  }
+
+  function saveUsed(rows) {
+    try { localStorage.setItem(USED_KEY, JSON.stringify(rows || [])); } catch (e) {}
+    return rows;
+  }
+
+  function markUsed(legs) {
+    var rows = loadUsed();
+    (legs || []).forEach(function (l) {
+      var id = l && (l.id || l.gameId);
+      if (!id) return;
+      if (rows.some(function (r) { return r.id === id; })) return;
+      rows.push({
+        id: id,
+        eventId: l.eventId || null,
+        kickoff: l.kickoff || 0
+      });
+    });
+    saveUsed(rows);
+    return usedMap(rows);
+  }
+
+  function usedMap(rows) {
+    var t = {};
+    (rows || loadUsed()).forEach(function (r) {
+      if (r.id) t[r.id] = 1;
+      if (r.eventId) t[r.eventId] = 1;
+    });
+    loadBook().forEach(function (l) {
+      if (l.id) t[l.id] = 1;
+      if (l.eventId) t[l.eventId] = 1;
+    });
+    return t;
+  }
+
+  function mergeUsedFromSlips(slips) {
+    var extra = [];
+    (slips || []).forEach(function (s) {
+      if (s.status !== "open" && s.status !== "live") return;
+      (s.legs || []).forEach(function (l) {
+        extra.push({
+          id: l.gameId || l.id,
+          eventId: l.eventId || null,
+          kickoff: l.kickoff || 0
+        });
+      });
+    });
+    if (extra.length) markUsed(extra);
+    return usedMap();
+  }
+
+  function isUsed(g, taken) {
+    taken = taken || usedMap();
+    if (!g) return false;
+    if (g.id && taken[g.id]) return true;
+    if (g.eventId && taken[g.eventId]) return true;
+    return false;
+  }
+
   // Book-implied chances for the pick we actually book (1X / X2) and for the
   // favourite winning the match. Home 1.80 is ~50–55% to WIN — that is why
   // those cut if you treat them as locks. Double chance is the ~75–82% number.
@@ -255,45 +366,65 @@
     return 100;
   }
 
-  // Favourite-DC legs ranked by chance the 1X/X2 lands (not 1.80-vs-5 gap).
-  // Still one kick-off slot, no team twice, at least `gapMin` minutes apart.
+  // Packs mix leagues and 1X/X2 the way the booked slips do. Kick-off order,
+  // not shortest favourite. One slot, no team twice, at least `gapMin` apart.
   function spreadPack(games, n, opts) {
     opts = opts || {};
     n = Number(n) || 0;
     var gapMin = opts.gapMin != null ? opts.gapMin : 6;
     var soonMin = opts.soonMin != null ? opts.soonMin : 3;
-    var taken = opts.taken || {};
+    var taken = opts.taken || usedMap();
     var now = Date.now();
     var pool = [];
     (games || []).forEach(function (g) {
       var ko = Number(g.kickoff) || 0;
       if (!ko || ko < now + soonMin * 60000) return;
-      if (taken[g.id] || (g.eventId && taken[g.eventId])) return;
-      var p = favPick(g);
+      if (isUsed(g, taken)) return;
+      var p = stylePick(g);
       if (p) pool.push(p);
     });
-    pool.sort(function (a, b) {
-      var ds = (b.score || 0) - (a.score || 0);
-      if (ds) return ds;
-      return a.price - b.price;
-    });
+
+    function clash(out, p, gap) {
+      var ko = Number(p.kickoff);
+      return out.some(function (x) {
+        return Math.abs(Number(x.kickoff) - ko) < Math.max(SLOT_MS, gap * 60000);
+      });
+    }
 
     function fill(gap, reuseTeam) {
       var out = [];
       var teams = {};
-      pool.forEach(function (p) {
-        if (out.length >= n) return;
-        var ko = Number(p.kickoff);
-        var clash = out.some(function (x) {
-          return Math.abs(Number(x.kickoff) - ko) < Math.max(SLOT_MS, gap * 60000);
+      var leagues = {};
+      var sides = { "1X": 0, "X2": 0 };
+      var left = pool.slice();
+      while (out.length < n && left.length) {
+        left.sort(function (a, b) {
+          var la = leagues[leagueKey(a)] || 0;
+          var lb = leagues[leagueKey(b)] || 0;
+          if (la !== lb) return la - lb;
+          var sa = sides[a.selection] || 0;
+          var sb = sides[b.selection] || 0;
+          if (sa !== sb) return sa - sb;
+          return byKick(a, b);
         });
-        if (clash) return;
-        var h = teamKey(p.home), a = teamKey(p.away);
-        if (!reuseTeam && (teams[h] || teams[a])) return;
-        out.push(p);
-        teams[h] = 1;
-        teams[a] = 1;
-      });
+        var hit = -1;
+        for (var i = 0; i < left.length; i++) {
+          var p = left[i];
+          if (clash(out, p, gap)) continue;
+          var h = teamKey(p.home), aw = teamKey(p.away);
+          if (!reuseTeam && (teams[h] || teams[aw])) continue;
+          hit = i;
+          break;
+        }
+        if (hit < 0) break;
+        var pick = left.splice(hit, 1)[0];
+        out.push(pick);
+        teams[teamKey(pick.home)] = 1;
+        teams[teamKey(pick.away)] = 1;
+        var lk = leagueKey(pick);
+        leagues[lk] = (leagues[lk] || 0) + 1;
+        sides[pick.selection] = (sides[pick.selection] || 0) + 1;
+      }
       out.sort(byKick);
       return out;
     }
@@ -305,17 +436,19 @@
     return got.slice(0, n);
   }
 
-  // SHOW favourite-DC games that kick off within two minutes of each other.
+  // Style-band games that kick off within two minutes of each other.
   // Packs take one from a cluster and skip the rest — this is what not to stack.
   function sameSlotClusters(games, opts) {
     opts = opts || {};
     var soonMin = opts.soonMin != null ? opts.soonMin : 4;
+    var taken = opts.taken || usedMap();
     var now = Date.now();
     var pool = [];
     (games || []).forEach(function (g) {
       var ko = Number(g.kickoff) || 0;
       if (!ko || ko < now + soonMin * 60000) return;
-      var p = favPick(g);
+      if (isUsed(g, taken)) return;
+      var p = stylePick(g);
       if (p) pool.push(p);
     });
     pool.sort(byKick);
@@ -354,6 +487,7 @@
       })
     }).then(function (r) { return r.json(); }).then(function (d) {
       if (!d.ok) throw new Error(d.error || "Could not book");
+      markUsed(legs);
       return d.slip;
     });
   }
@@ -1547,9 +1681,10 @@
   w.VFS = {
     cfg: cfg, defaults: DEFAULTS, labels: LABELS, save: save,
     hydrate: hydrate, enablePings: enablePings, noticeSlips: noticeSlips,
-    screen: screen, makePick: makePick, favPick: favPick, spreadPack: spreadPack, sameSlotClusters: sameSlotClusters, acca: acca,
+    screen: screen, makePick: makePick, favPick: favPick, stylePick: stylePick, spreadPack: spreadPack, sameSlotClusters: sameSlotClusters, acca: acca,
     rateGame: rateGame, packHit: packHit, stakeOf: stakeOf, bookLegs: bookLegs,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
+    usedMap: usedMap, markUsed: markUsed, mergeUsedFromSlips: mergeUsedFromSlips, isUsed: isUsed,
     rebetSlip: rebetSlip,
     card: card, compactRow: compactRow,
     until: until, clock: clock, dayLabel: dayLabel, byKick: byKick,

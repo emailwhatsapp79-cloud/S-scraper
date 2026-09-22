@@ -13,11 +13,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/app.css?v=rate4">
+<link rel="stylesheet" href="/css/app.css?v=mix5">
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Upcoming vFootball only. Ready slips skip same-kick-off stacks. Each leg is rated by how often <em>Home or Draw / Draw or Away</em> lands — not by home 1.80 vs away 5.00. A 1.80 still only wins the match about half the time. Tap Book.</p>
+  <p class="lede">Upcoming vFootball. Ready slips mix leagues the way you book — 1X and X2 in the 1.20–1.30 band, not the shortest favourite. Chelsea at 1.60 vs a 5.00 is skipped; those cut. Book a 5 or a 10 and those games drop off so the next set can come up.</p>
 
   <section id="packs" class="packs" hidden></section>
 
@@ -32,14 +32,13 @@
   </div>
   <p class="note" id="note"></p>
 </main>
-<script src="/js/core.js?v=rate4"></script>
+<script src="/js/core.js?v=mix5"></script>
 <script>
 (function () {
   var V = window.VFS;
   V.injectChrome("matches", '<button class="ghost" id="refresh" type="button">Refresh</button>');
   var league = "All";
   var last = null;
-  var booked = {};
 
   function idsOf(legs) {
     var t = {};
@@ -54,14 +53,13 @@
     var card = V.el("div", "slip pack");
     var h = V.el("div", "slip-h");
     var hit = V.packHit(legs);
-    h.appendChild(V.el("span", "badge open", n + "-leg · lands " + hit.pct + "%"));
+    h.appendChild(V.el("span", "badge open", n + "-leg · " + hit.pct + "%"));
     var odds = V.acca(legs.map(function (l) { return l.price; }));
     var stake = V.stakeOf();
     h.appendChild(V.el("span", "tot", odds.toFixed(2) + " → " + V.naira(Math.round(stake * odds * 100) / 100)));
     card.appendChild(h);
     card.appendChild(V.el("p", "note",
-      "Rated on the double chance, not the 1.80 home. A 1.80 still wins the match ~half the time. Combined " +
-      hit.pct + "% is the book’s own 1X/X2 × each other — not a lock."));
+      "Mixed leagues, 1X and X2, around 1.25 — the band you book. Not ranked by shortest favourite. Booked legs leave this list."));
     legs.forEach(function (l) {
       var row = V.el("div", "leg wait");
       var left = V.el("div", "leg-teams");
@@ -83,31 +81,24 @@
       }
       row.appendChild(mid);
       var pill = V.el("div", "wait-pill" + (l.grade ? " g-" + l.grade : ""),
-        (l.pct != null ? l.pct + "%" : V.leagueKey(l)));
+        V.leagueKey(l));
       row.appendChild(pill);
       card.appendChild(row);
     });
 
     var go = V.el("button", "primary", "Book " + n);
     go.type = "button";
-    if (booked[n]) {
-      go.disabled = true;
-      go.classList.add("done");
-      go.textContent = booked[n];
-    }
     go.addEventListener("click", function () {
       if (go.disabled) return;
       go.disabled = true;
       go.textContent = "Booking…";
       V.bookLegs(legs, stake).then(function (slip) {
-        var label = slip.shareCode ? ("Booked · " + slip.shareCode) : "Booked";
-        booked[n] = label;
-        go.classList.add("done");
-        go.textContent = label;
+        V.markUsed(legs);
         V.paintSlip();
-        if (slip.shareCode && navigator.clipboard && navigator.clipboard.writeText) {
+        if (slip && slip.shareCode && navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(slip.shareCode).catch(function () {});
         }
+        render();
       }).catch(function (e) {
         go.disabled = false;
         go.textContent = e.message || "Could not book";
@@ -120,9 +111,14 @@
   function renderPacks(games) {
     var box = document.getElementById("packs");
     box.textContent = "";
-    var five = V.spreadPack(games, 5, { gapMin: 8, soonMin: 4 });
-    var ten = V.spreadPack(games, 10, { gapMin: 6, soonMin: 4, taken: idsOf(five) });
-    if (ten.length < 10) ten = V.spreadPack(games, 10, { gapMin: 6, soonMin: 4 });
+    var taken = V.usedMap();
+    var five = V.spreadPack(games, 5, { gapMin: 8, soonMin: 4, taken: taken });
+    var tenTaken = {};
+    Object.keys(taken).forEach(function (k) { tenTaken[k] = taken[k]; });
+    var fiveIds = idsOf(five);
+    Object.keys(fiveIds).forEach(function (k) { tenTaken[k] = 1; });
+    var ten = V.spreadPack(games, 10, { gapMin: 6, soonMin: 4, taken: tenTaken });
+    if (ten.length < 10) ten = V.spreadPack(games, 10, { gapMin: 6, soonMin: 4, taken: taken });
     if (!five.length && ten.length < 5) {
       box.hidden = true;
       return;
@@ -139,7 +135,7 @@
         : "The 10 is a different set from the 5. Booking both is two slips."));
     }
     if (typeof V.sameSlotClusters === "function") {
-      var clusters = V.sameSlotClusters(games, { soonMin: 4 });
+      var clusters = V.sameSlotClusters(games, { soonMin: 4, taken: taken });
       if (clusters.length) {
         var skip = V.el("div", "skip-slots");
         skip.appendChild(V.el("h3", "", "Same-slot stacks — packs take one, skip the rest"));
@@ -174,9 +170,11 @@
   function render() {
     if (!last) return;
     var games = last.games || [];
+    var used = V.usedMap();
     renderPacks(games);
     var hits = [];
     games.forEach(function (g) {
+      if (V.isUsed(g, used)) return;
       if (league !== "All" && V.leagueKey(g) !== league) return;
       var r;
       try { r = V.screen(g); } catch (e) { return; }
@@ -191,6 +189,7 @@
     document.getElementById("stats").hidden = false;
     var matchedAll = [];
     games.forEach(function (g) {
+      if (V.isUsed(g, used)) return;
       try { if (V.screen(g).verdict === "show") matchedAll.push(g); } catch (e) {}
     });
     chips(matchedAll);
@@ -235,6 +234,10 @@
 
   document.getElementById("refresh").addEventListener("click", function () { load(false, true); });
   window.addEventListener("vfs-ready", function () { if (last) render(); });
+  V.fetchSlips(true).then(function (d) {
+    V.mergeUsedFromSlips(d.slips || []);
+    if (last) render();
+  }).catch(function () {});
   load(false, false);
   setInterval(function () { load(true, false); }, 180000);
 })();
