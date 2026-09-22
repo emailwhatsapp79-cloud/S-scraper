@@ -17,7 +17,10 @@
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Upcoming vFootball only. Tap a full-time price — Home, Away, Home or Draw, Draw or Away — to put it on the betslip. Half time is shown, not booked.</p>
+  <p class="lede">Upcoming vFootball only. Ready slips below already skip same-kick-off stacks — favourite double-chance, one kick-off each, no team twice. Tap Book. Or tap a price on a match to build your own.</p>
+
+  <section id="packs" class="packs" hidden></section>
+
   <div class="stats" id="stats" hidden>
     <div class="stat"><b id="s-scan">—</b><span>Scanned</span></div>
     <div class="stat go"><b id="s-hit">—</b><span>Matched</span></div>
@@ -29,13 +32,118 @@
   </div>
   <p class="note" id="note"></p>
 </main>
-<script src="/js/core.js"></script>
+<script src="/js/core.js?v=spread3"></script>
 <script>
 (function () {
   var V = window.VFS;
   V.injectChrome("matches", '<button class="ghost" id="refresh" type="button">Refresh</button>');
   var league = "All";
   var last = null;
+  var booked = {};
+
+  function idsOf(legs) {
+    var t = {};
+    (legs || []).forEach(function (l) {
+      if (l.id) t[l.id] = 1;
+      if (l.eventId) t[l.eventId] = 1;
+    });
+    return t;
+  }
+
+  function packCard(n, legs) {
+    var card = V.el("div", "slip pack");
+    var h = V.el("div", "slip-h");
+    h.appendChild(V.el("span", "badge open", n + "-leg spread"));
+    var odds = V.acca(legs.map(function (l) { return l.price; }));
+    var stake = V.stakeOf();
+    h.appendChild(V.el("span", "tot", odds.toFixed(2) + " → " + V.naira(Math.round(stake * odds * 100) / 100)));
+    card.appendChild(h);
+    card.appendChild(V.el("p", "note", "Favourite DC · ≥2 min apart · no team twice · skips same-slot stacks."));
+    legs.forEach(function (l) {
+      var row = V.el("div", "leg wait");
+      var left = V.el("div", "leg-teams");
+      left.appendChild(V.teamsBlock(l.home, l.away));
+      left.appendChild(V.el("div", "sel", l.label + " @ " + Number(l.price).toFixed(2)));
+      row.appendChild(left);
+      var mid = V.el("div", "leg-mid");
+      mid.appendChild(V.el("div", "kick", V.clock(l.kickoff)));
+      var t = V.until(l.kickoff);
+      if (t.text) {
+        var ph = V.el("div", "phase", t.text);
+        ph.setAttribute("data-kick", l.kickoff || "");
+        mid.appendChild(ph);
+      }
+      row.appendChild(mid);
+      row.appendChild(V.el("div", "wait-pill", V.leagueKey(l)));
+      card.appendChild(row);
+    });
+
+    var go = V.el("button", "primary", "Book " + n);
+    go.type = "button";
+    if (booked[n]) {
+      go.disabled = true;
+      go.classList.add("done");
+      go.textContent = booked[n];
+    }
+    go.addEventListener("click", function () {
+      if (go.disabled) return;
+      go.disabled = true;
+      go.textContent = "Booking…";
+      V.bookLegs(legs, stake).then(function (slip) {
+        var label = slip.shareCode ? ("Booked · " + slip.shareCode) : "Booked";
+        booked[n] = label;
+        go.classList.add("done");
+        go.textContent = label;
+        V.paintSlip();
+        if (slip.shareCode && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(slip.shareCode).catch(function () {});
+        }
+      }).catch(function (e) {
+        go.disabled = false;
+        go.textContent = e.message || "Could not book";
+      });
+    });
+    card.appendChild(go);
+    return card;
+  }
+
+  function renderPacks(games) {
+    var box = document.getElementById("packs");
+    box.textContent = "";
+    var five = V.spreadPack(games, 5, { gapMin: 8, soonMin: 4 });
+    var ten = V.spreadPack(games, 10, { gapMin: 6, soonMin: 4, taken: idsOf(five) });
+    if (ten.length < 10) ten = V.spreadPack(games, 10, { gapMin: 6, soonMin: 4 });
+    if (!five.length && ten.length < 5) {
+      box.hidden = true;
+      return;
+    }
+    var title = V.el("h2", "slips-h", "Ready to book");
+    box.appendChild(title);
+    if (five.length === 5) box.appendChild(packCard(5, five));
+    if (ten.length === 10) box.appendChild(packCard(10, ten));
+    else if (ten.length >= 7) box.appendChild(packCard(ten.length, ten));
+    if (five.length === 5 && ten.length === 10) {
+      var overlap = five.some(function (a) { return ten.some(function (b) { return a.id === b.id; }); });
+      box.appendChild(V.el("p", "note", overlap
+        ? "The 10 includes the 5. Book one, not both, or you double those legs."
+        : "The 10 is a different set from the 5. Booking both is two slips."));
+    }
+    if (typeof V.sameSlotClusters === "function") {
+      var clusters = V.sameSlotClusters(games, { soonMin: 4 });
+      if (clusters.length) {
+        var skip = V.el("div", "skip-slots");
+        skip.appendChild(V.el("h3", "", "Same-slot stacks — packs take one, skip the rest"));
+        clusters.forEach(function (c) {
+          var line = V.clock(c[0].kickoff) + "  " + c.map(function (x) {
+            return x.home + "–" + x.away;
+          }).join(" · ");
+          skip.appendChild(V.el("p", "", line));
+        });
+        box.appendChild(skip);
+      }
+    }
+    box.hidden = !box.children.length;
+  }
 
   function chips(matched) {
     var counts = { All: matched.length };
@@ -56,6 +164,7 @@
   function render() {
     if (!last) return;
     var games = last.games || [];
+    renderPacks(games);
     var hits = [];
     games.forEach(function (g) {
       if (league !== "All" && V.leagueKey(g) !== league) return;

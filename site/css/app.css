@@ -122,6 +122,34 @@ p { text-wrap: pretty }
 }
 .chip.on { background: var(--go); color: var(--go-ink); box-shadow: none }
 
+.packs { margin: 0 0 18px }
+.pack { border-left: 3px solid var(--go) }
+.pack .primary { margin-top: 12px }
+.pack .note { margin: 0 0 6px }
+.primary.done { background: var(--go-dim); color: var(--go) }
+.skip-slots {
+  background: var(--card);
+  box-shadow: var(--shadow);
+  border-radius: var(--r);
+  padding: 12px 14px;
+  margin: 4px 0 14px;
+}
+.skip-slots h3 {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  font-weight: 650;
+  color: var(--dim);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+.skip-slots p {
+  margin: 0 0 5px;
+  font: 500 12.5px/1.45 var(--mono);
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.skip-slots p:last-child { margin-bottom: 0 }
+
 .toolbar { display: flex; gap: 8px; margin-bottom: 14px }
 .search {
   flex: 1;

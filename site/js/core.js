@@ -148,6 +148,146 @@
     return loadBook().filter(function (l) { return l.id === id; })[0] || null;
   }
 
+  function favPick(g, r) {
+    r = r || screen(g);
+    if (!r || r.verdict !== "show" || !r.dc) return null;
+    var sel = r.fav === "home" ? "1X" : "X2";
+    var price = r.fav === "home" ? r.dc.home_draw : r.dc.draw_away;
+    var label = r.fav === "home" ? "Home or Draw" : "Draw or Away";
+    if (!(price > 1)) return null;
+    var p = makePick(g, sel, price, label);
+    p.ftFav = g.ft ? g.ft[r.fav] : null;
+    return p;
+  }
+
+  function teamKey(s) { return String(s || "").toUpperCase().trim(); }
+
+  var SLOT_MS = 120000;
+
+  function stakeOf() {
+    try {
+      var s = parseFloat(localStorage.getItem("vfs_stake"));
+      if (isFinite(s) && s > 0) return s;
+    } catch (e) {}
+    return 100;
+  }
+
+  // Favourite-DC legs, one kick-off slot, no team twice, at least `gapMin` minutes apart.
+  function spreadPack(games, n, opts) {
+    opts = opts || {};
+    n = Number(n) || 0;
+    var gapMin = opts.gapMin != null ? opts.gapMin : 6;
+    var soonMin = opts.soonMin != null ? opts.soonMin : 3;
+    var taken = opts.taken || {};
+    var now = Date.now();
+    var pool = [];
+    (games || []).forEach(function (g) {
+      var ko = Number(g.kickoff) || 0;
+      if (!ko || ko < now + soonMin * 60000) return;
+      if (taken[g.id] || (g.eventId && taken[g.eventId])) return;
+      var p = favPick(g);
+      if (p) pool.push(p);
+    });
+    pool.sort(function (a, b) {
+      var d = byKick(a, b);
+      if (d) return d;
+      return a.price - b.price;
+    });
+
+    function fill(gap, reuseTeam) {
+      var out = [];
+      var teams = {};
+      var last = 0;
+      // Within a same-time cluster, keep the shortest DC (most likely to land).
+      var i = 0;
+      while (i < pool.length && out.length < n) {
+        var p = pool[i];
+        var ko = Number(p.kickoff);
+        var cluster = [p];
+        var j = i + 1;
+        while (j < pool.length && Math.abs(Number(pool[j].kickoff) - ko) < SLOT_MS) {
+          cluster.push(pool[j]); j++;
+        }
+        i = j;
+        cluster.sort(function (a, b) { return a.price - b.price; });
+        var pick = null;
+        cluster.forEach(function (c) {
+          if (pick) return;
+          if (last && Number(c.kickoff) - last < gap * 60000) return;
+          if (out.some(function (x) { return Math.abs(Number(x.kickoff) - Number(c.kickoff)) < SLOT_MS; })) return;
+          var h = teamKey(c.home), a = teamKey(c.away);
+          if (!reuseTeam && (teams[h] || teams[a])) return;
+          pick = c;
+        });
+        if (!pick) continue;
+        out.push(pick);
+        teams[teamKey(pick.home)] = 1;
+        teams[teamKey(pick.away)] = 1;
+        last = Number(pick.kickoff);
+      }
+      return out;
+    }
+
+    var got = fill(gapMin, false);
+    if (got.length < n) got = fill(4, false);
+    if (got.length < n) got = fill(2, false);
+    if (got.length < n) got = fill(2, true);
+    return got.slice(0, n);
+  }
+
+  // SHOW favourite-DC games that kick off within two minutes of each other.
+  // Packs take one from a cluster and skip the rest — this is what not to stack.
+  function sameSlotClusters(games, opts) {
+    opts = opts || {};
+    var soonMin = opts.soonMin != null ? opts.soonMin : 4;
+    var now = Date.now();
+    var pool = [];
+    (games || []).forEach(function (g) {
+      var ko = Number(g.kickoff) || 0;
+      if (!ko || ko < now + soonMin * 60000) return;
+      var p = favPick(g);
+      if (p) pool.push(p);
+    });
+    pool.sort(byKick);
+    var out = [];
+    var i = 0;
+    while (i < pool.length) {
+      var ko = Number(pool[i].kickoff);
+      var cluster = [pool[i]];
+      var j = i + 1;
+      while (j < pool.length && Math.abs(Number(pool[j].kickoff) - ko) < SLOT_MS) {
+        cluster.push(pool[j]); j++;
+      }
+      i = j;
+      if (cluster.length >= 2) out.push(cluster);
+    }
+    return out;
+  }
+
+  function bookLegs(legs, stake) {
+    var n = Number(stake);
+    if (!(n > 0)) n = stakeOf();
+    return fetch("/api/slips", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        stake: n,
+        legs: (legs || []).map(function (l) {
+          return {
+            gameId: l.id || l.gameId,
+            eventId: l.eventId,
+            selection: l.selection,
+            home: l.home, away: l.away, league: l.league,
+            price: l.price, kickoff: l.kickoff
+          };
+        })
+      })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || "Could not book");
+      return d.slip;
+    });
+  }
+
   function acca(prices) {
     var n = 1;
     prices.forEach(function (p) { n *= Number(p); });
@@ -1330,7 +1470,8 @@
   w.VFS = {
     cfg: cfg, defaults: DEFAULTS, labels: LABELS, save: save,
     hydrate: hydrate, enablePings: enablePings, noticeSlips: noticeSlips,
-    screen: screen, makePick: makePick, acca: acca,
+    screen: screen, makePick: makePick, favPick: favPick, spreadPack: spreadPack, sameSlotClusters: sameSlotClusters, acca: acca,
+    stakeOf: stakeOf, bookLegs: bookLegs,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
     rebetSlip: rebetSlip,
     card: card, compactRow: compactRow,
