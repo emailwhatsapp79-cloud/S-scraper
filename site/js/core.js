@@ -644,7 +644,9 @@
       var on = pick && pick.picked === sel;
       var can = pick && sel && p[1] != null;
       var cell = el("div", "cell" + (p[2] === favKey ? " fav" : "") + (can ? " tap" : "") + (on ? " on" : ""));
-      cell.appendChild(el("b", null, p[1] == null ? "—" : Number(p[1]).toFixed(2)));
+      var price = el("b", null, p[1] == null ? "—" : Number(p[1]).toFixed(2));
+      if (p[4]) price.appendChild(el("em", "pct", p[4]));
+      cell.appendChild(price);
       cell.appendChild(el("span", null, p[0]));
       if (can) {
         cell.setAttribute("role", "button");
@@ -682,7 +684,6 @@
     var row = el("div", "row1");
     if (opts.n) row.appendChild(el("span", "idx", String(opts.n)));
     var rt = rateGame(g, r);
-    if (rt) row.appendChild(el("span", "grade " + rt.grade, rt.pct + "%"));
     row.appendChild(el("span", "gid", g.id));
     var who = el("div", "who");
     who.appendChild(teamsBlock(g.home, g.away));
@@ -692,11 +693,6 @@
     tm.setAttribute("data-kick", g.kickoff || "");
     meta.appendChild(tm);
     if (g.league) meta.appendChild(el("span", null, g.league));
-    if (rt) {
-      meta.appendChild(el("span", "rate-line",
-        (rt.fav === "home" ? "1X" : "X2") + " lands " + rt.pct + "% · " +
-        (rt.fav === "home" ? "home" : "away") + " wins " + rt.winPct + "%"));
-    }
     if (r.verdict === "hold") {
       var htHold = (r.checks || []).filter(function (c) { return c.name.indexOf("ht_") === 0; });
       var htFailed = htHold.some(function (c) { return !c.ok && !c.skip; });
@@ -716,15 +712,19 @@
           if (opts.onPick) opts.onPick();
         }
       } : null;
+      var winH = rt && rt.fav === "home" ? rt.winPct + "%" : "";
+      var winA = rt && rt.fav === "away" ? rt.winPct + "%" : "";
+      var land1x = rt && rt.fav === "home" ? rt.pct + "%" : "";
+      var landX2 = rt && rt.fav === "away" ? rt.pct + "%" : "";
       box.appendChild(market("Full time", [
-        ["Home", g.ft.home, "home", "1"],
+        ["Home", g.ft.home, "home", "1", winH],
         ["Draw", g.ft.draw, "draw", "X"],
-        ["Away", g.ft.away, "away", "2"]
+        ["Away", g.ft.away, "away", "2", winA]
       ], r.fav, tap));
       box.appendChild(market("Two chances" + (g.dc ? "" : " · worked out"), [
-        ["Home or Draw", r.dc && r.dc.home_draw, "home", "1X"],
+        ["Home or Draw", r.dc && r.dc.home_draw, "home", "1X", land1x],
         ["Home or Away", r.dc && r.dc.home_away, "", "12"],
-        ["Draw or Away", r.dc && r.dc.draw_away, "away", "X2"]
+        ["Draw or Away", r.dc && r.dc.draw_away, "away", "X2", landX2]
       ], r.fav, tap));
       box.appendChild(market("Half time", [
         ["Home", g.ht ? g.ht.home : null, "home"],

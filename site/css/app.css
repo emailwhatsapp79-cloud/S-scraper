@@ -266,17 +266,29 @@ p { text-wrap: pretty }
   background: var(--bg);
   box-shadow: var(--shadow);
   border-radius: var(--r3);
-  padding: 8px 4px 7px;
+  padding: 8px 6px 7px;
   text-align: center;
+  position: relative;
 }
-.cell b { display: block; font-family: var(--mono); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums }
+.cell b { display: block; font-family: var(--mono); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap }
+.cell b .pct {
+  margin-left: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  font-style: normal;
+  letter-spacing: .03em;
+  color: var(--faint);
+  vertical-align: 1px;
+}
 .cell span { font-size: 10.5px; color: var(--dim); display: block; margin-top: 2px }
 .cell.fav { box-shadow: 0 0 0 1px var(--go) }
 .cell.fav b { color: var(--go) }
+.cell.fav b .pct { color: var(--go); opacity: .78 }
 .cell.tap { cursor: pointer; min-height: 44px; display: flex; flex-direction: column; justify-content: center; }
 .cell.tap:active { transform: scale(0.97) }
 .cell.on { background: var(--go); box-shadow: none }
-.cell.on b, .cell.on span { color: var(--go-ink) }
+.cell.on b, .cell.on span, .cell.on b .pct { color: var(--go-ink) }
+.cell.on b .pct { opacity: .7 }
 
 .checks { margin-top: 12px; display: grid; gap: 6px }
 .check { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; color: var(--dim) }
