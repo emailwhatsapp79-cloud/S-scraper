@@ -126,7 +126,33 @@ p { text-wrap: pretty }
 .pack { border-left: 3px solid var(--go) }
 .pack .primary { margin-top: 12px }
 .pack .note { margin: 0 0 6px }
+.pack .rate {
+  margin-top: 3px;
+  font: 500 12px/1.35 var(--mono);
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+.wait-pill.g-high { color: var(--go) }
+.wait-pill.g-mid { color: var(--hold) }
+.wait-pill.g-low { color: var(--bad) }
 .primary.done { background: var(--go-dim); color: var(--go) }
+.grade {
+  flex: 0 0 auto;
+  min-width: 40px;
+  height: 22px;
+  margin-top: 2px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0 7px;
+  border-radius: 999px;
+  font: 700 10px/1 var(--mono);
+  letter-spacing: .04em;
+  font-variant-numeric: tabular-nums;
+}
+.grade.high { background: var(--go-dim); color: var(--go) }
+.grade.mid { background: var(--hold-dim); color: var(--hold) }
+.grade.low { background: rgba(226, 93, 106, 0.14); color: var(--bad) }
+.rate-line { font-family: var(--mono); font-variant-numeric: tabular-nums }
 .skip-slots {
   background: var(--card);
   box-shadow: var(--shadow);

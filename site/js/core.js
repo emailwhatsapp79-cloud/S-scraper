@@ -156,8 +156,91 @@
     var label = r.fav === "home" ? "Home or Draw" : "Draw or Away";
     if (!(price > 1)) return null;
     var p = makePick(g, sel, price, label);
-    p.ftFav = g.ft ? g.ft[r.fav] : null;
+    return attachRate(p, g, r);
+  }
+
+  // Book-implied chances for the pick we actually book (1X / X2) and for the
+  // favourite winning the match. Home 1.80 is ~50–55% to WIN — that is why
+  // those cut if you treat them as locks. Double chance is the ~75–82% number.
+  // History on this screen: 162/203 SHOW games, 79.8% DC hit, break-even 80%.
+  var SCREEN_HIT = 0.798;
+
+  function rateGame(g, r) {
+    r = r || (g ? screen(g) : null);
+    var ft = (g && g.ft) || {};
+    var fh = n(ft.home), fd = n(ft.draw), fa = n(ft.away);
+    if (fh == null || fd == null || fa == null) return null;
+    var fav = (r && r.fav) || (fh <= fa ? "home" : "away");
+    var favOdds = fav === "home" ? fh : fa;
+    var dogOdds = fav === "home" ? fa : fh;
+    var ih = 1 / fh, idd = 1 / fd, ia = 1 / fa;
+    var sum = ih + idd + ia;
+    var pH = ih / sum, pD = idd / sum, pA = ia / sum;
+    var pWin = fav === "home" ? pH : pA;
+    var pDog = fav === "home" ? pA : pH;
+    var pDC = pWin + pD;
+    var dcPrice = r && r.dc ? (fav === "home" ? n(r.dc.home_draw) : n(r.dc.draw_away)) : null;
+    var implied = dcPrice > 1 ? 1 / dcPrice : pDC;
+    // Grade the double-chance, not the 1.80-vs-5 gap. On 203 graded SHOWs,
+    // pDC ≥ 0.79 landed 87%; the mid band was the one that cut.
+    var grade = "low";
+    if (pDC >= 0.79) grade = "high";
+    else if (pDC >= 0.77) grade = "mid";
+    var juice = implied - pDC;
+    var score = pDC * 100 - (juice > 0 ? juice * 40 : 0);
+    return {
+      fav: fav,
+      favOdds: favOdds,
+      dogOdds: dogOdds,
+      drawOdds: fd,
+      pWin: pWin,
+      pDog: pDog,
+      pDraw: pD,
+      pDC: pDC,
+      implied: implied,
+      juice: juice,
+      grade: grade,
+      score: score,
+      pct: Math.round(pDC * 100),
+      winPct: Math.round(pWin * 100),
+      dogPct: Math.round(pDog * 100)
+    };
+  }
+
+  function attachRate(p, g, r) {
+    var rt = rateGame(g, r);
+    if (!rt) {
+      p.ftFav = g && g.ft && r ? g.ft[r.fav] : null;
+      return p;
+    }
+    p.ftFav = rt.favOdds;
+    p.ftDog = rt.dogOdds;
+    p.ftDraw = rt.drawOdds;
+    p.pDC = rt.pDC;
+    p.pWin = rt.pWin;
+    p.pDog = rt.pDog;
+    p.grade = rt.grade;
+    p.score = rt.score;
+    p.pct = rt.pct;
+    p.winPct = rt.winPct;
+    p.dogPct = rt.dogPct;
     return p;
+  }
+
+  function packHit(legs) {
+    var book = 1, i;
+    for (i = 0; i < (legs || []).length; i++) {
+      var p = legs[i].pDC;
+      if (!(p > 0 && p < 1)) p = legs[i].price > 1 ? 1 / legs[i].price : 0;
+      book *= p;
+    }
+    var n = (legs || []).length;
+    return {
+      book: book,
+      screen: Math.pow(SCREEN_HIT, n),
+      n: n,
+      pct: Math.round(book * 100)
+    };
   }
 
   function teamKey(s) { return String(s || "").toUpperCase().trim(); }
@@ -172,7 +255,8 @@
     return 100;
   }
 
-  // Favourite-DC legs, one kick-off slot, no team twice, at least `gapMin` minutes apart.
+  // Favourite-DC legs ranked by chance the 1X/X2 lands (not 1.80-vs-5 gap).
+  // Still one kick-off slot, no team twice, at least `gapMin` minutes apart.
   function spreadPack(games, n, opts) {
     opts = opts || {};
     n = Number(n) || 0;
@@ -189,42 +273,28 @@
       if (p) pool.push(p);
     });
     pool.sort(function (a, b) {
-      var d = byKick(a, b);
-      if (d) return d;
+      var ds = (b.score || 0) - (a.score || 0);
+      if (ds) return ds;
       return a.price - b.price;
     });
 
     function fill(gap, reuseTeam) {
       var out = [];
       var teams = {};
-      var last = 0;
-      // Within a same-time cluster, keep the shortest DC (most likely to land).
-      var i = 0;
-      while (i < pool.length && out.length < n) {
-        var p = pool[i];
+      pool.forEach(function (p) {
+        if (out.length >= n) return;
         var ko = Number(p.kickoff);
-        var cluster = [p];
-        var j = i + 1;
-        while (j < pool.length && Math.abs(Number(pool[j].kickoff) - ko) < SLOT_MS) {
-          cluster.push(pool[j]); j++;
-        }
-        i = j;
-        cluster.sort(function (a, b) { return a.price - b.price; });
-        var pick = null;
-        cluster.forEach(function (c) {
-          if (pick) return;
-          if (last && Number(c.kickoff) - last < gap * 60000) return;
-          if (out.some(function (x) { return Math.abs(Number(x.kickoff) - Number(c.kickoff)) < SLOT_MS; })) return;
-          var h = teamKey(c.home), a = teamKey(c.away);
-          if (!reuseTeam && (teams[h] || teams[a])) return;
-          pick = c;
+        var clash = out.some(function (x) {
+          return Math.abs(Number(x.kickoff) - ko) < Math.max(SLOT_MS, gap * 60000);
         });
-        if (!pick) continue;
-        out.push(pick);
-        teams[teamKey(pick.home)] = 1;
-        teams[teamKey(pick.away)] = 1;
-        last = Number(pick.kickoff);
-      }
+        if (clash) return;
+        var h = teamKey(p.home), a = teamKey(p.away);
+        if (!reuseTeam && (teams[h] || teams[a])) return;
+        out.push(p);
+        teams[h] = 1;
+        teams[a] = 1;
+      });
+      out.sort(byKick);
       return out;
     }
 
@@ -477,6 +547,8 @@
     var box = el("div", "game" + (r.verdict === "show" ? " match" : r.verdict === "hold" ? " hold" : "") + (picked ? " picked" : ""));
     var row = el("div", "row1");
     if (opts.n) row.appendChild(el("span", "idx", String(opts.n)));
+    var rt = rateGame(g, r);
+    if (rt) row.appendChild(el("span", "grade " + rt.grade, rt.pct + "%"));
     row.appendChild(el("span", "gid", g.id));
     var who = el("div", "who");
     who.appendChild(teamsBlock(g.home, g.away));
@@ -486,6 +558,11 @@
     tm.setAttribute("data-kick", g.kickoff || "");
     meta.appendChild(tm);
     if (g.league) meta.appendChild(el("span", null, g.league));
+    if (rt) {
+      meta.appendChild(el("span", "rate-line",
+        (rt.fav === "home" ? "1X" : "X2") + " lands " + rt.pct + "% · " +
+        (rt.fav === "home" ? "home" : "away") + " wins " + rt.winPct + "%"));
+    }
     if (r.verdict === "hold") {
       var htHold = (r.checks || []).filter(function (c) { return c.name.indexOf("ht_") === 0; });
       var htFailed = htHold.some(function (c) { return !c.ok && !c.skip; });
@@ -1471,7 +1548,7 @@
     cfg: cfg, defaults: DEFAULTS, labels: LABELS, save: save,
     hydrate: hydrate, enablePings: enablePings, noticeSlips: noticeSlips,
     screen: screen, makePick: makePick, favPick: favPick, spreadPack: spreadPack, sameSlotClusters: sameSlotClusters, acca: acca,
-    stakeOf: stakeOf, bookLegs: bookLegs,
+    rateGame: rateGame, packHit: packHit, stakeOf: stakeOf, bookLegs: bookLegs,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
     rebetSlip: rebetSlip,
     card: card, compactRow: compactRow,

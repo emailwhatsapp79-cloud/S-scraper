@@ -13,11 +13,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/css/app.css?v=rate4">
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Upcoming vFootball only. Ready slips below already skip same-kick-off stacks — favourite double-chance, one kick-off each, no team twice. Tap Book. Or tap a price on a match to build your own.</p>
+  <p class="lede">Upcoming vFootball only. Ready slips skip same-kick-off stacks. Each leg is rated by how often <em>Home or Draw / Draw or Away</em> lands — not by home 1.80 vs away 5.00. A 1.80 still only wins the match about half the time. Tap Book.</p>
 
   <section id="packs" class="packs" hidden></section>
 
@@ -32,7 +32,7 @@
   </div>
   <p class="note" id="note"></p>
 </main>
-<script src="/js/core.js?v=spread3"></script>
+<script src="/js/core.js?v=rate4"></script>
 <script>
 (function () {
   var V = window.VFS;
@@ -53,17 +53,25 @@
   function packCard(n, legs) {
     var card = V.el("div", "slip pack");
     var h = V.el("div", "slip-h");
-    h.appendChild(V.el("span", "badge open", n + "-leg spread"));
+    var hit = V.packHit(legs);
+    h.appendChild(V.el("span", "badge open", n + "-leg · lands " + hit.pct + "%"));
     var odds = V.acca(legs.map(function (l) { return l.price; }));
     var stake = V.stakeOf();
     h.appendChild(V.el("span", "tot", odds.toFixed(2) + " → " + V.naira(Math.round(stake * odds * 100) / 100)));
     card.appendChild(h);
-    card.appendChild(V.el("p", "note", "Favourite DC · ≥2 min apart · no team twice · skips same-slot stacks."));
+    card.appendChild(V.el("p", "note",
+      "Rated on the double chance, not the 1.80 home. A 1.80 still wins the match ~half the time. Combined " +
+      hit.pct + "% is the book’s own 1X/X2 × each other — not a lock."));
     legs.forEach(function (l) {
       var row = V.el("div", "leg wait");
       var left = V.el("div", "leg-teams");
       left.appendChild(V.teamsBlock(l.home, l.away));
-      left.appendChild(V.el("div", "sel", l.label + " @ " + Number(l.price).toFixed(2)));
+      var sel = V.el("div", "sel", l.label + " @ " + Number(l.price).toFixed(2));
+      left.appendChild(sel);
+      var rate = (l.pct != null ? (l.pct + "% lands") : "") +
+        (l.winPct != null ? (" · fav wins " + l.winPct + "%") : "") +
+        (l.dogPct != null ? (" · dog " + l.dogPct + "%") : "");
+      if (rate) left.appendChild(V.el("div", "rate", rate));
       row.appendChild(left);
       var mid = V.el("div", "leg-mid");
       mid.appendChild(V.el("div", "kick", V.clock(l.kickoff)));
@@ -74,7 +82,9 @@
         mid.appendChild(ph);
       }
       row.appendChild(mid);
-      row.appendChild(V.el("div", "wait-pill", V.leagueKey(l)));
+      var pill = V.el("div", "wait-pill" + (l.grade ? " g-" + l.grade : ""),
+        (l.pct != null ? l.pct + "%" : V.leagueKey(l)));
+      row.appendChild(pill);
       card.appendChild(row);
     });
 
