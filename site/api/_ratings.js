@@ -141,11 +141,11 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
     H.n++; A.n++; if (hw) H.w++; else A.w++;
     if (st > H.last) H.last = st;
     if (st > A.last) A.last = st;
-    H.rec.push({ t: st, won: hw, vs: kA, sw: rh, sl: ra });
-    A.rec.push({ t: st, won: !hw, vs: kH, sw: ra, sl: rh });
+    const T = tournKey(g.tourn);
+    H.rec.push({ t: st, won: hw, vs: kA, sw: rh, sl: ra, tourn: T || "" });
+    A.rec.push({ t: st, won: !hw, vs: kH, sw: ra, sl: rh, tourn: T || "" });
     if (H.rec.length > REC_CAP) H.rec.shift();
     if (A.rec.length > REC_CAP) A.rec.shift();
-    const T = tournKey(g.tourn);
     if (T) {
       const ht = H.tourn[T] || (H.tourn[T] = { n: 0, w: 0 });
       const at = A.tourn[T] || (A.tourn[T] = { n: 0, w: 0 });
@@ -185,10 +185,15 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
 
 // Build a tiny pack (only the players on the card) and derive their head-to-head
 // from the stored recent record, then reuse the existing forecast + field shape.
-function h2hFromRec(rec, oppKey) {
+function h2hFromRec(rec, oppKey, start, tourn) {
+  const T = tournKey(tourn);
   const row = { n: 0, hw: 0, hs: 0, as: 0, hW3: 0, hW2: 0, hW1: 0, aW3: 0, aW2: 0, aW1: 0 };
   for (const x of rec || []) {
     if (x.vs !== oppKey) continue;
+    const t = Number(x.t) || 0;
+    const now = Number(start) || Date.now();
+    if (t && t < now - 120 * 86400000) continue;
+    if (T && x.tourn && tournKey(x.tourn) !== T) continue;
     const sw = Number(x.sw), sl = Number(x.sl);
     row.n++; if (x.won) row.hw++;
     row.hs += isFinite(sw) ? sw : 0; row.as += isFinite(sl) ? sl : 0;
@@ -208,17 +213,23 @@ async function loadCardPlayers(games) {
     const rows = await sql`SELECT * FROM tt_ratings WHERE name_key = ANY(${keyList})`;
     for (const r of rows) { const p = parsePlayer(r); players[p.key] = p; }
   }
-  // surname fallback for the few card players with no exact row (fuzzy names)
+  // Surname-only fuzzy used to attach the most-played "Kowalczyk" to a
+  // different Marcin. Only fill a miss when exactly one row has every token.
   const misses = keyList.filter((k) => !players[k]).slice(0, 40);
   for (const k of misses) {
-    const long = k.split("|").filter((t) => t.length >= 4).sort((a, b) => b.length - a.length)[0];
-    if (!long) continue;
+    const toks = k.split("|").filter((t) => t.length >= 3);
+    if (toks.length < 2) continue;
+    const long = toks.slice().sort((a, b) => b.length - a.length)[0];
     try {
-      // Deterministic order (most-played first) so the same candidates resolve
-      // every time — otherwise a fuzzy-matched player's % flickers between loads.
       const cand = await sql`SELECT * FROM tt_ratings WHERE name_key LIKE ${"%" + long + "%"}
         ORDER BY n DESC, name_key ASC LIMIT 8`;
-      for (const r of cand) if (!players[r.name_key]) players[r.name_key] = parsePlayer(r);
+      const hit = cand.filter((r) => {
+        const set = new Set(String(r.name_key || "").split("|"));
+        return toks.every((t) => set.has(t));
+      });
+      if (hit.length === 1 && !players[hit[0].name_key]) {
+        players[hit[0].name_key] = parsePlayer(hit[0]);
+      }
     } catch { /* skip */ }
   }
   return players;
@@ -237,7 +248,7 @@ export async function forecastCard(games) {
   for (const g of games) {
     const kH = nameKey(g.home), kA = nameKey(g.away);
     const H = players[kH];
-    if (H && H.rec) h2h[kH + ">" + kA] = h2hFromRec(H.rec, kA);
+    if (H && H.rec) h2h[kH + ">" + kA] = h2hFromRec(H.rec, kA, g.start, g.tourn);
   }
   const pack = { players, h2h, ha };
 
@@ -299,7 +310,7 @@ export async function scoreHoldout(days = 14, opts = {}) {
     try {
       const prev = await sql`SELECT data FROM tt_rating_meta WHERE k = 'holdout'`;
       const cur = prev[0] && prev[0].data ? JSON.parse(prev[0].data) : null;
-      if (cur && cur.at && Date.now() - Date.parse(cur.at) < 6 * 3600 * 1000) return cur;
+      if (cur && cur.v === 2 && cur.at && Date.now() - Date.parse(cur.at) < 6 * 3600 * 1000) return cur;
     } catch { /* score */ }
   }
   const cutoff = Date.now() - days * 86400000;
@@ -344,6 +355,7 @@ export async function scoreHoldout(days = 14, opts = {}) {
     }
   }
   const out = {
+    v: 2,
     days,
     at: new Date().toISOString(),
     n,

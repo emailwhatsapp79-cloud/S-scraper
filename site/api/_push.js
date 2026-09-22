@@ -37,6 +37,17 @@ async function dropSub(endpoint) {
   await sql`DELETE FROM push_subs WHERE endpoint = ${endpoint}`;
 }
 
+export async function dropAllSubs() {
+  await ensure();
+  await sql`DELETE FROM push_subs`;
+}
+
+export async function dropSubPublic(endpoint) {
+  await ensure();
+  if (endpoint) await dropSub(endpoint);
+  else await sql`DELETE FROM push_subs`;
+}
+
 async function claimed(k) {
   await ensure();
   const rows = await sql`
@@ -78,7 +89,9 @@ export async function notifyBooked(slips) {
     const { loadPrefs } = await import("./_vault.js");
     const p = await loadPrefs();
     if (p.pings === false) return { sent: 0 };
-  } catch { /* send */ }
+  } catch {
+    return { sent: 0 };
+  }
   const now = Date.now();
   let sent = 0;
   for (const sp of slips) {

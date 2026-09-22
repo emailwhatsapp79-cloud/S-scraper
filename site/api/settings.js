@@ -47,6 +47,12 @@ export default async function handler(req, res) {
   if (typeof body.bio === "boolean") patch.bio = body.bio;
   if (body.lockMin != null) patch.lockMin = clampLockMin(body.lockMin);
   const p = Object.keys(patch).length ? await savePrefs(patch) : await loadPrefs();
+  if (patch.pings === false) {
+    try {
+      const { dropAllSubs } = await import("./_push.js");
+      await dropAllSubs();
+    } catch (e) { logErr("settings.dropPush", e); }
+  }
   if (patch.lockMin != null) {
     const ms = await setGateCookie(res, true);
     return res.status(200).json({ ok: true, ...publicPrefs(p), lockMins: LOCK_MINS, remainingMs: ms });

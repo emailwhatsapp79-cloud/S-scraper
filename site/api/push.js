@@ -1,5 +1,5 @@
 import { guard } from "./_gate.js";
-import { saveSub, VAPID_PUBLIC } from "./_push.js";
+import { saveSub, dropSubPublic, VAPID_PUBLIC } from "./_push.js";
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
@@ -11,6 +11,10 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ ok: false, error: "GET or POST" });
   const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
   try {
+    if (body.off) {
+      await dropSubPublic(body.endpoint || "");
+      return res.status(200).json({ ok: true, off: true });
+    }
     await saveSub(body);
     return res.status(200).json({ ok: true });
   } catch (e) {

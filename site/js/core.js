@@ -855,7 +855,7 @@
       } else {
         save();
       }
-      if (d.pings === false) device.pings = false;
+      device.pings = d.pings !== false;
       if (d.bio === false) device.bio = false;
       if (d.lockMin) device.lockMin = Number(d.lockMin) || 30;
       try {
@@ -912,6 +912,7 @@
   }
 
   function watchPings() {
+    if (device.pings === false) return;
     if (!("Notification" in window) || Notification.permission !== "granted") return;
     var seen = pingSeen();
     var now = Date.now();
@@ -927,6 +928,7 @@
   }
 
   function noticeSlips(slips) {
+    if (device.pings === false) return;
     if (!slips || !slips.length) return;
     var seen = pingSeen();
     slips.forEach(function (sp) {
@@ -985,6 +987,24 @@
     if (lm >= 30) device.lockMin = lm;
   } catch (e) {}
 
+  function killPush() {
+    if (!navigator.serviceWorker) return Promise.resolve();
+    return navigator.serviceWorker.ready.then(function (reg) {
+      if (!reg.pushManager) return;
+      return reg.pushManager.getSubscription().then(function (sub) {
+        var endpoint = sub && sub.endpoint;
+        var gone = sub ? sub.unsubscribe() : Promise.resolve();
+        return gone.then(function () {
+          return fetch("/api/push", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ off: true, endpoint: endpoint || "" })
+          });
+        });
+      });
+    }).catch(function () {});
+  }
+
   function saveDevice(patch) {
     if (!patch) return Promise.resolve(device);
     if (typeof patch.pings === "boolean") device.pings = patch.pings;
@@ -995,10 +1015,13 @@
       localStorage.setItem("vfs_bio", device.bio ? "1" : "0");
       localStorage.setItem("vfs_lock_min", String(device.lockMin));
     } catch (e) {}
-    return fetch("/api/settings", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(patch)
+    var extra = patch.pings === false ? killPush() : Promise.resolve();
+    return extra.then(function () {
+      return fetch("/api/settings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch)
+      });
     }).then(function (r) { return r.json(); }).then(function (d) {
       if (d && d.remainingMs) scheduleLock(d.remainingMs);
       return d;

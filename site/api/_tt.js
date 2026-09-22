@@ -280,8 +280,19 @@ function bumpPattern(row, homeWon, pts) {
   else if (pts === 1) { if (homeWon) row.hW1++; else row.aW1++; }
 }
 
-function formVsField(rec, excludeKey) {
-  const list = (rec || []).filter((x) => x.vs !== excludeKey).slice(-50);
+function recentEnough(x, start, days) {
+  const t = Number(x && x.t) || 0;
+  if (!t) return false;
+  const now = Number(start) || Date.now();
+  return t >= now - days * 86400000;
+}
+
+function formVsField(rec, excludeKey, start, tourn) {
+  const T = tournKey(tourn);
+  let list = (rec || []).filter((x) => x.vs !== excludeKey && recentEnough(x, start, 90));
+  const same = T ? list.filter((x) => x.tourn && tournKey(x.tourn) === T) : [];
+  if (same.length >= 8) list = same;
+  list = list.slice(-50);
   if (list.length < 3) return null;
   const w = list.filter((x) => x.won).length;
   let sw = 0, sl = 0, straight = 0, mid = 0, close = 0, pts = 0, opp = 0;
@@ -310,17 +321,12 @@ function findPlayer(players, name, blank) {
   const k = nameKey(name);
   if (players[k]) return { rec: players[k], key: k };
   const toks = k.split("|").filter(Boolean);
-  if (!toks.length) return { rec: blank, key: k };
+  if (toks.length < 2) return { rec: blank, key: k };
   const hits = Object.keys(players).filter((pk) => {
     const set = new Set(pk.split("|"));
     return toks.every((t) => set.has(t));
   });
   if (hits.length === 1) return { rec: players[hits[0]], key: hits[0] };
-  const long = toks.filter((t) => t.length >= 4);
-  if (long.length) {
-    const byLast = Object.keys(players).filter((pk) => long.every((t) => pk.split("|").includes(t)));
-    if (byLast.length === 1) return { rec: players[byLast[0]], key: byLast[0] };
-  }
   return { rec: blank, key: k };
 }
 
@@ -369,8 +375,8 @@ export function forecastTT(pack, g) {
     parts.push({ p: hp, w: 0.3 * Math.min(1, h2hRec.n / 12) });
   }
 
-  const formH = formVsField(H.rec, foundA.key);
-  const formA = formVsField(A.rec, foundH.key);
+  const formH = formVsField(H.rec, foundA.key, g.start, g.tourn);
+  const formA = formVsField(A.rec, foundH.key, g.start, g.tourn);
   if (formH && formA && formH.n >= 15 && formA.n >= 15 && formH.p + formA.p > 0) {
     parts.push({ p: formH.p / (formH.p + formA.p), w: 0.25 });
   }
@@ -446,11 +452,11 @@ export function fitTT(games, into) {
     if (hw) H.w++; else A.w++;
     homeN++; if (hw) homeW++;
     H.last = g.start || 0; A.last = g.start || 0;
-    H.rec.push({ t: g.start || 0, won: hw, vs: nameKey(g.away), sw: g.res.home, sl: g.res.away });
-    A.rec.push({ t: g.start || 0, won: !hw, vs: nameKey(g.home), sw: g.res.away, sl: g.res.home });
+    const T = tournKey(g.tourn);
+    H.rec.push({ t: g.start || 0, won: hw, vs: nameKey(g.away), sw: g.res.home, sl: g.res.away, tourn: T || "" });
+    A.rec.push({ t: g.start || 0, won: !hw, vs: nameKey(g.home), sw: g.res.away, sl: g.res.home, tourn: T || "" });
     if (H.rec.length > 80) H.rec.shift();
     if (A.rec.length > 80) A.rec.shift();
-    const T = tournKey(g.tourn);
     if (T) {
       const ht = H.tourn[T] || (H.tourn[T] = { n: 0, w: 0 });
       const at = A.tourn[T] || (A.tourn[T] = { n: 0, w: 0 });
