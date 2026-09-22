@@ -298,35 +298,25 @@
     return Math.max(isFinite(a) ? a : 0, isFinite(b) ? b : 0);
   }
 
-  // 60%+ is a stake filter. Needs a real edge vs the book, and the last
-  // 2 weeks of finished games have to have hit — otherwise the chip is empty.
-  function holdoutOk() {
-    var h = LAST && LAST.model && LAST.model.holdout;
-    return !!(h && h.proven);
-  }
-  function beatPrice(g) {
-    var p = g.pct || g.ours, b = g.book;
-    if (!p || !b) return false;
-    var ourH = Number(p.home) >= Number(p.away);
-    var bookH = Number(b.home) >= Number(b.away);
-    if (ourH !== bookH) return false;
-    var ours = ourH ? Number(p.home) : Number(p.away);
-    var book = ourH ? Number(b.home) : Number(b.away);
-    return ours >= 60 && (ours - book) >= 5;
+  // 60%+ = our number is 60 or more on the favourite.
+  // ≤1.50 = that, and SportyBet prices that favourite at 1.50 or shorter.
+  function ourSide(g) {
+    var p = g.pct || g.ours;
+    if (!p) return null;
+    return Number(p.home) >= Number(p.away) ? "H" : "A";
   }
   function hotPick(g) {
-    return holdoutOk() && beatPrice(g);
+    return ourWin(g) != null && ourWin(g) >= 60;
   }
   function favPrice(g) {
-    var p = g.pct || g.ours, w = g.win;
-    if (!p || !w) return null;
-    var ourH = Number(p.home) >= Number(p.away);
-    var price = ourH ? Number(w.home) : Number(w.away);
+    var w = g.win, side = ourSide(g);
+    if (!w || !side) return null;
+    var price = side === "H" ? Number(w.home) : Number(w.away);
     return isFinite(price) && price > 1 ? price : null;
   }
   function shortPick(g) {
     var pr = favPrice(g);
-    return pr != null && pr <= 1.50 && hotPick(g);
+    return hotPick(g) && pr != null && pr <= 1.50;
   }
 
   function filtered(list) {
@@ -385,13 +375,9 @@
       out.appendChild(V.el("div", "empty", MODE === "res"
         ? "No results banked yet — they fill in as matches finish."
         : (SHORT
-          ? (holdoutOk()
-            ? "None at 60%+ with the favourite at 1.50 or shorter."
-            : "≤1.50 is off until the last 2 weeks actually hit. See the line above.")
+          ? "None at 60%+ with the favourite at 1.50 or shorter."
           : (MIN60
-          ? (holdoutOk()
-            ? "None beating the book by 5%+ at 60% right now."
-            : "60%+ is off until the last 2 weeks actually hit. See the line above.")
+          ? "None at 60%+ on this card right now."
           : "No upcoming table tennis on the card right now."))));
     } else if (MODE === "res") {
       list.forEach(function (g) { out.appendChild(resultRow(g)); });
