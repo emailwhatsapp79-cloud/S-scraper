@@ -13,7 +13,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/app.css?v=lay7">
+<link rel="stylesheet" href="/css/app.css?v=tone8">
 </head>
 <body>
 <main class="wrap">
@@ -32,7 +32,7 @@
   </div>
   <p class="note" id="note"></p>
 </main>
-<script src="/js/core.js?v=lay7"></script>
+<script src="/js/core.js?v=tone8"></script>
 <script>
 (function () {
   var V = window.VFS;
@@ -52,24 +52,19 @@
   function packCard(n, legs) {
     var card = V.el("div", "slip pack");
     var h = V.el("div", "slip-h");
-    var hit = V.packHit(legs);
-    h.appendChild(V.el("span", "badge open", n + "-leg · " + hit.pct + "%"));
+    h.appendChild(V.el("span", "badge open", n + "-leg"));
     var odds = V.acca(legs.map(function (l) { return l.price; }));
     var stake = V.stakeOf();
     h.appendChild(V.el("span", "tot", odds.toFixed(2) + " → " + V.naira(Math.round(stake * odds * 100) / 100)));
     card.appendChild(h);
     card.appendChild(V.el("p", "note",
-      "Mixed leagues, 1X and X2, around 1.25 — the band you book. Not ranked by shortest favourite. Booked legs leave this list."));
+      "Mixed leagues, 1X and X2, 1.20–1.30. A 1.27 is not the weak one. Booked legs leave this list."));
     legs.forEach(function (l) {
       var row = V.el("div", "leg wait");
       var left = V.el("div", "leg-teams");
       left.appendChild(V.teamsBlock(l.home, l.away));
       var sel = V.el("div", "sel", l.label + " @ " + Number(l.price).toFixed(2));
       left.appendChild(sel);
-      var rate = (l.pct != null ? (l.pct + "% lands") : "") +
-        (l.winPct != null ? (" · fav wins " + l.winPct + "%") : "") +
-        (l.dogPct != null ? (" · dog " + l.dogPct + "%") : "");
-      if (rate) left.appendChild(V.el("div", "rate", rate));
       row.appendChild(left);
       var mid = V.el("div", "leg-mid");
       mid.appendChild(V.el("div", "kick", V.clock(l.kickoff)));
@@ -80,8 +75,7 @@
         mid.appendChild(ph);
       }
       row.appendChild(mid);
-      var pill = V.el("div", "wait-pill" + (l.grade ? " g-" + l.grade : ""),
-        V.leagueKey(l));
+      var pill = V.el("div", "wait-pill", V.leagueKey(l));
       row.appendChild(pill);
       card.appendChild(row);
     });

@@ -683,7 +683,6 @@
     var box = el("div", "game" + (r.verdict === "show" ? " match" : r.verdict === "hold" ? " hold" : "") + (picked ? " picked" : ""));
     var row = el("div", "row1");
     if (opts.n) row.appendChild(el("span", "idx", String(opts.n)));
-    var rt = rateGame(g, r);
     row.appendChild(el("span", "gid", g.id));
     var who = el("div", "who");
     who.appendChild(teamsBlock(g.home, g.away));
@@ -712,19 +711,15 @@
           if (opts.onPick) opts.onPick();
         }
       } : null;
-      var winH = rt && rt.fav === "home" ? rt.winPct + "%" : "";
-      var winA = rt && rt.fav === "away" ? rt.winPct + "%" : "";
-      var land1x = rt && rt.fav === "home" ? rt.pct + "%" : "";
-      var landX2 = rt && rt.fav === "away" ? rt.pct + "%" : "";
       box.appendChild(market("Full time", [
-        ["Home", g.ft.home, "home", "1", winH],
+        ["Home", g.ft.home, "home", "1"],
         ["Draw", g.ft.draw, "draw", "X"],
-        ["Away", g.ft.away, "away", "2", winA]
+        ["Away", g.ft.away, "away", "2"]
       ], r.fav, tap));
       box.appendChild(market("Two chances" + (g.dc ? "" : " · worked out"), [
-        ["Home or Draw", r.dc && r.dc.home_draw, "home", "1X", land1x],
+        ["Home or Draw", r.dc && r.dc.home_draw, "home", "1X"],
         ["Home or Away", r.dc && r.dc.home_away, "", "12"],
-        ["Draw or Away", r.dc && r.dc.draw_away, "away", "X2", landX2]
+        ["Draw or Away", r.dc && r.dc.draw_away, "away", "X2"]
       ], r.fav, tap));
       box.appendChild(market("Half time", [
         ["Home", g.ht ? g.ht.home : null, "home"],
