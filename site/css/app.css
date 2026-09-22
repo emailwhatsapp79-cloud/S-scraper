@@ -86,6 +86,32 @@ p { text-wrap: pretty }
 .wrap { max-width: 720px; margin: 0 auto; padding: 18px 16px 28px }
 .lede { color: var(--dim); font-size: 14.5px; line-height: 1.55; margin: 0 0 16px }
 
+.tabs {
+  position: sticky;
+  top: var(--header-h);
+  z-index: 15;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: -18px -16px 16px;
+  padding: 10px 16px 12px;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(14px);
+}
+.tab {
+  min-height: 42px;
+  background: var(--card);
+  color: var(--dim);
+  box-shadow: var(--shadow);
+  font-size: 13.5px;
+  font-weight: 650;
+}
+.tab.on {
+  background: var(--go);
+  color: var(--go-ink);
+  box-shadow: none;
+}
+
 .stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);

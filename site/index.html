@@ -13,32 +13,56 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/app.css?v=tone8">
+<link rel="stylesheet" href="/css/app.css?v=tabs9">
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Upcoming vFootball. Ready slips mix leagues the way you book — 1X and X2 in the 1.20–1.30 band, not the shortest favourite. Chelsea at 1.60 vs a 5.00 is skipped; those cut. Book a 5 or a 10 and those games drop off so the next set can come up.</p>
-
-  <section id="packs" class="packs" hidden></section>
-
-  <div class="stats" id="stats" hidden>
-    <div class="stat"><b id="s-scan">—</b><span>Scanned</span></div>
-    <div class="stat go"><b id="s-hit">—</b><span>Matched</span></div>
-    <div class="stat"><b id="s-next">—</b><span>Next kick-off</span></div>
+  <div class="tabs" role="tablist">
+    <button class="tab on" type="button" id="tab-book" data-tab="book">Ready to book</button>
+    <button class="tab" type="button" id="tab-match" data-tab="match">Matches</button>
   </div>
-  <div class="chips" id="chips"></div>
-  <div id="out">
-    <div class="skel"></div><div class="skel"></div><div class="skel"></div>
+
+  <section id="packs" class="packs" role="tabpanel">
+    <div class="skel"></div>
+  </section>
+
+  <div id="match-pane" hidden role="tabpanel">
+    <div class="stats" id="stats" hidden>
+      <div class="stat"><b id="s-scan">—</b><span>Scanned</span></div>
+      <div class="stat go"><b id="s-hit">—</b><span>Matched</span></div>
+      <div class="stat"><b id="s-next">—</b><span>Next kick-off</span></div>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div id="out">
+      <div class="skel"></div><div class="skel"></div><div class="skel"></div>
+    </div>
+    <p class="note" id="note"></p>
   </div>
-  <p class="note" id="note"></p>
 </main>
-<script src="/js/core.js?v=tone8"></script>
+<script src="/js/core.js?v=tabs9"></script>
 <script>
 (function () {
   var V = window.VFS;
   V.injectChrome("matches", '<button class="ghost" id="refresh" type="button">Refresh</button>');
   var league = "All";
   var last = null;
+  var tab = "book";
+
+  function showTab(name) {
+    tab = name === "match" ? "match" : "book";
+    document.getElementById("packs").hidden = tab !== "book";
+    document.getElementById("match-pane").hidden = tab !== "match";
+    document.getElementById("tab-book").classList.toggle("on", tab === "book");
+    document.getElementById("tab-match").classList.toggle("on", tab === "match");
+    try { sessionStorage.setItem("vfs_tab", tab); } catch (e) {}
+  }
+
+  document.getElementById("tab-book").addEventListener("click", function () { showTab("book"); });
+  document.getElementById("tab-match").addEventListener("click", function () { showTab("match"); });
+  try {
+    var saved = sessionStorage.getItem("vfs_tab");
+    if (saved === "match" || saved === "book") showTab(saved);
+  } catch (e) {}
 
   function idsOf(legs) {
     var t = {};
@@ -57,8 +81,6 @@
     var stake = V.stakeOf();
     h.appendChild(V.el("span", "tot", odds.toFixed(2) + " → " + V.naira(Math.round(stake * odds * 100) / 100)));
     card.appendChild(h);
-    card.appendChild(V.el("p", "note",
-      "Mixed leagues, 1X and X2, 1.20–1.30. A 1.27 is not the weak one. Booked legs leave this list."));
     legs.forEach(function (l) {
       var row = V.el("div", "leg wait");
       var left = V.el("div", "leg-teams");
@@ -114,35 +136,18 @@
     var ten = V.spreadPack(games, 10, { gapMin: 6, soonMin: 4, taken: tenTaken });
     if (ten.length < 10) ten = V.spreadPack(games, 10, { gapMin: 6, soonMin: 4, taken: taken });
     if (!five.length && ten.length < 5) {
-      box.hidden = true;
+      var empty = V.el("div", "empty");
+      empty.innerHTML = "<b>No 5 or 10 ready yet.</b><br>Open Matches, or wait for the next card.";
+      box.appendChild(empty);
       return;
     }
-    var title = V.el("h2", "slips-h", "Ready to book");
-    box.appendChild(title);
     if (five.length === 5) box.appendChild(packCard(5, five));
     if (ten.length === 10) box.appendChild(packCard(10, ten));
     else if (ten.length >= 7) box.appendChild(packCard(ten.length, ten));
     if (five.length === 5 && ten.length === 10) {
       var overlap = five.some(function (a) { return ten.some(function (b) { return a.id === b.id; }); });
-      box.appendChild(V.el("p", "note", overlap
-        ? "The 10 includes the 5. Book one, not both, or you double those legs."
-        : "The 10 is a different set from the 5. Booking both is two slips."));
+      if (overlap) box.appendChild(V.el("p", "note", "The 10 includes the 5. Book one."));
     }
-    if (typeof V.sameSlotClusters === "function") {
-      var clusters = V.sameSlotClusters(games, { soonMin: 4, taken: taken });
-      if (clusters.length) {
-        var skip = V.el("div", "skip-slots");
-        skip.appendChild(V.el("h3", "", "Same-slot stacks — packs take one, skip the rest"));
-        clusters.forEach(function (c) {
-          var line = V.clock(c[0].kickoff) + "  " + c.map(function (x) {
-            return x.home + "–" + x.away;
-          }).join(" · ");
-          skip.appendChild(V.el("p", "", line));
-        });
-        box.appendChild(skip);
-      }
-    }
-    box.hidden = !box.children.length;
   }
 
   function chips(matched) {
@@ -217,8 +222,11 @@
   function load(quiet, force) {
     var btn = document.getElementById("refresh");
     if (btn) btn.disabled = true;
-    if (!quiet) document.getElementById("out").innerHTML =
-      '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+    if (!quiet) {
+      var skel = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+      document.getElementById("out").innerHTML = skel;
+      if (!document.querySelector("#packs .pack")) document.getElementById("packs").innerHTML = skel;
+    }
     V.fetchGames(force).then(function (d) {
       last = d; render();
     }).catch(function (e) {
