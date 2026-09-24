@@ -201,6 +201,7 @@ export async function createSlip(stake, incoming, book) {
     const potential = round2(n * combined);
     const id = crypto.randomUUID();
     const share = await tryShare(legs);
+    if (share.shareError) throw new Error(share.shareError);
     await sql`
       INSERT INTO slips (id, stake, combined_odds, potential, status, share_code, share_url, share_error)
       VALUES (${id}, ${n}, ${combined}, ${potential}, 'open', ${share.shareCode}, ${share.shareUrl}, ${share.shareError})`;

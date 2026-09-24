@@ -50,25 +50,48 @@ export function toSelection(leg) {
   };
 }
 
+const FOOTBALL_HEADERS = {
+  Platform: "wap",
+  ClientId: "wap",
+  OperId: "8",
+};
+
+function shareHeaders(host, football) {
+  return {
+    "User-Agent": UA,
+    Accept: "application/json, text/plain, */*",
+    "Content-Type": "application/json;charset=UTF-8",
+    Origin: host,
+    Referer: `${host}/ng/`,
+    ...(football ? FOOTBALL_HEADERS : {}),
+  };
+}
+
 export async function shareSelections(legs, book) {
   const football = book === "football" || (legs || []).some((l) => l.sport === "fc" || l.source === "football");
   const host = football ? "https://www.football.com" : "https://www.sportybet.com";
   const selections = legs.map(toSelection);
+  const headers = shareHeaders(host, football);
   const r = await fetch(`${host}/api/ng/orders/share`, {
     method: "POST",
-    headers: {
-      "User-Agent": UA,
-      Accept: "application/json, text/plain, */*",
-      "Content-Type": "application/json;charset=UTF-8",
-      Origin: host,
-      Referer: `${host}/ng/`,
-    },
+    headers,
     body: JSON.stringify({ selections }),
   });
   const body = await r.json().catch(() => ({}));
   const code = body?.data?.shareCode;
   if (body?.bizCode !== 10000 || !code) {
     throw new Error(body?.message || body?.innerMsg || `${football ? "Football.com" : "SportyBet"} share HTTP ${r.status}`);
+  }
+  if (football) {
+    const loaded = await fetch(`${host}/api/ng/orders/share/${code}`, { headers }).then((res) => res.json()).catch(() => ({}));
+    if (loaded?.bizCode !== 10000) {
+      throw new Error(loaded?.message || loaded?.innerMsg || `Football.com will not load ${code}`);
+    }
+    const started = (loaded.data?.outcomes || []).find((o) => o.matchStatus && !/^not start/i.test(o.matchStatus));
+    if (started) {
+      const who = [started.homeTeamName, started.awayTeamName].filter(Boolean).join(" v ") || "A game";
+      throw new Error(`${code} is the same booking. ${who} is already ${started.matchStatus}, so Football.com will not load it. Same games always come back as the same code — pick a later set.`);
+    }
   }
   const url = String(body.data.shareURL || `${host}/ng/?shareCode=${code}`)
     .replace(/^http:\/\//, "https://");
