@@ -40,12 +40,16 @@ export async function ensureSlips() {
       ft_home INTEGER,
       ft_away INTEGER,
       won TEXT,
+      market_id TEXT,
+      outcome_id TEXT,
       PRIMARY KEY (slip_id, game_id)
     )`;
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_code TEXT`;
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_url TEXT`;
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_error TEXT`;
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS sport TEXT`;
+  await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS market_id TEXT`;
+  await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS outcome_id TEXT`;
   schemaReady = true;
 }
 
@@ -144,6 +148,8 @@ function shapeLeg(l) {
     ft: l.ft_home == null ? null : { home: l.ft_home, away: l.ft_away },
     won: l.won == null ? null : l.won === "yes",
     sport: l.sport || "fb",
+    marketId: l.market_id || null,
+    outcomeId: l.outcome_id || null,
   };
 }
 
@@ -195,6 +201,8 @@ export async function createSlip(stake, incoming, book) {
         selection: String(row.selection),
         label: row.label || LABELS[String(row.selection)] || String(row.selection),
         price,
+        marketId: row.marketId ? String(row.marketId) : null,
+        outcomeId: row.outcomeId ? String(row.outcomeId) : null,
       });
     }
     const combined = round2(legs.reduce((acc, l) => acc * l.price, 1));
@@ -210,10 +218,10 @@ export async function createSlip(stake, incoming, book) {
       await sql`
         INSERT INTO slip_legs (
           slip_id, pos, game_id, event_id, home, away, league, kickoff,
-          selection, selection_label, price, sport)
+          selection, selection_label, price, sport, market_id, outcome_id)
         VALUES (
           ${id}, ${i}, ${l.gameId}, ${l.eventId}, ${l.home}, ${l.away}, ${l.league}, ${l.kickoff},
-          ${l.selection}, ${l.label}, ${l.price}, ${"fc"})`;
+          ${l.selection}, ${l.label}, ${l.price}, ${"fc"}, ${l.marketId}, ${l.outcomeId})`;
     }
     const all = await listSlips();
     return all.find((s) => s.id === id);
@@ -289,7 +297,7 @@ export async function createSlip(stake, incoming, book) {
         selection, selection_label, price, sport)
       VALUES (
         ${id}, ${i}, ${l.gameId}, ${l.eventId}, ${l.home}, ${l.away}, ${l.league}, ${l.kickoff},
-        ${l.selection}, ${l.label}, ${l.price}, ${l.sport || "fb"})`;
+        ${l.selection}, ${l.label}, ${l.price}, ${l.sport || "fb"}, ${l.marketId || null}, ${l.outcomeId || null})`;
   }
 
   await refreshSlips();
@@ -309,6 +317,8 @@ export async function reshareSlip(slipId) {
     price: Number(l.price),
     league: l.league,
     sport: l.sport || "fb",
+    marketId: l.market_id || null,
+    outcomeId: l.outcome_id || null,
   }));
   const share = await tryShare(legs);
   await sql`
