@@ -84,16 +84,12 @@ export async function shareSelections(legs, book) {
   }
   if (football) {
     const loaded = await fetch(`${host}/api/ng/orders/share/${code}`, { headers }).then((res) => res.json()).catch(() => ({}));
-    if (loaded?.bizCode !== 10000) {
+    if (loaded?.bizCode !== 10000 || !(loaded.data?.outcomes || []).length) {
       throw new Error(loaded?.message || loaded?.innerMsg || `Football.com will not load ${code}`);
     }
-    const started = (loaded.data?.outcomes || []).find((o) => o.matchStatus && !/^not start/i.test(o.matchStatus));
-    if (started) {
-      const who = [started.homeTeamName, started.awayTeamName].filter(Boolean).join(" v ") || "A game";
-      throw new Error(`${code} is the same booking. ${who} is already ${started.matchStatus}, so Football.com will not load it. Same games always come back as the same code — pick a later set.`);
-    }
   }
-  const url = String(body.data.shareURL || `${host}/ng/?shareCode=${code}`)
-    .replace(/^http:\/\//, "https://");
+  const url = football
+    ? `https://www.football.com/ng/m?shareCode=${code}`
+    : String(body.data.shareURL || `${host}/ng/?shareCode=${code}`).replace(/^http:\/\//, "https://");
   return { shareCode: code, shareUrl: url };
 }

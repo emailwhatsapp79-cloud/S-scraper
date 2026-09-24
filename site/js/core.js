@@ -1592,9 +1592,11 @@
       });
       crow.appendChild(copy);
       code.appendChild(crow);
-      if (sp.shareUrl) {
+      if (sp.shareUrl || football) {
         var link = document.createElement("a");
-        link.href = String(sp.shareUrl).replace(/^http:\/\//, "https://");
+        link.href = football
+          ? "https://www.football.com/ng/m?shareCode=" + encodeURIComponent(sp.shareCode)
+          : String(sp.shareUrl).replace(/^http:\/\//, "https://");
         link.textContent = "Open on " + bookName;
         link.target = "_blank";
         link.rel = "noopener";
