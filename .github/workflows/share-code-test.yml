@@ -1,0 +1,22 @@
+name: Share code round-trip test
+
+on:
+  push:
+    branches:
+      - claude/sportybet-odds-filter-6qzoh6
+    paths:
+      - scripts/test-share-codes.mjs
+      - .github/workflows/share-code-test.yml
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Test SportyBet and Football.com booking/share codes
+        run: node scripts/test-share-codes.mjs
