@@ -141,7 +141,9 @@
       selection: selection,
       label: label,
       price: Number(price),
-      source: g.source || ""
+      source: g.source || "",
+      marketId: g.selectionRefs && g.selectionRefs[selection] ? g.selectionRefs[selection].marketId : null,
+      outcomeId: g.selectionRefs && g.selectionRefs[selection] ? g.selectionRefs[selection].outcomeId : null
     };
   }
 
@@ -485,7 +487,9 @@
             home: l.home, away: l.away, league: l.league,
             price: l.price, kickoff: l.kickoff,
             label: l.label || "",
-            source: l.source || ""
+            source: l.source || "",
+            marketId: l.marketId || null,
+            outcomeId: l.outcomeId || null
           };
         })
       })
