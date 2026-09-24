@@ -28,6 +28,12 @@ function isTT(leg) {
 
 export function toSelection(leg) {
   const sel = String(leg.selection || "");
+  const football = leg.sport === "fc" || leg.source === "football";
+  if (football) {
+    if (!leg.eventId) throw new Error(String(leg.home || "") + " v " + String(leg.away || "") + " is missing an event id — refresh Football.com first");
+    if (!leg.marketId || !leg.outcomeId) throw new Error(String(leg.home || "") + " v " + String(leg.away || "") + " is missing Football.com market/outcome IDs — refresh Football.com and re-add the pick");
+    return { eventId: String(leg.eventId), marketId: String(leg.marketId), outcomeId: String(leg.outcomeId), odds: String(leg.price) };
+  }
   let map = isTT(leg) ? TT_OUTCOMES[sel] : OUTCOMES[sel];
   if (!map && !isTT(leg)) {
     const m = sel.match(/^(\d+):(\d+)$/);
