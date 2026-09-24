@@ -1596,11 +1596,12 @@
       });
       crow.appendChild(copy);
       code.appendChild(crow);
-      if (sp.shareUrl || football) {
+      if (sp.shareUrl || sp.shareCode) {
         var link = document.createElement("a");
-        link.href = football
-          ? "https://www.football.com/ng/m?shareCode=" + encodeURIComponent(sp.shareCode)
-          : String(sp.shareUrl).replace(/^http:\/\//, "https://");
+        var host = football ? "https://www.football.com" : "https://www.sportybet.com";
+        link.href = sp.shareUrl
+          ? String(sp.shareUrl).replace(/^http:\/\//, "https://")
+          : host + "/ng/?shareCode=" + encodeURIComponent(sp.shareCode);
         link.textContent = "Open on " + bookName;
         link.target = "_blank";
         link.rel = "noopener";

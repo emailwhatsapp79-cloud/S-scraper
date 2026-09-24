@@ -29,31 +29,29 @@ function isTT(leg) {
 export function toSelection(leg) {
   const sel = String(leg.selection || "");
   const football = leg.sport === "fc" || leg.source === "football";
-  if (football) {
-    if (!leg.eventId) throw new Error(String(leg.home || "") + " v " + String(leg.away || "") + " is missing an event id — refresh Football.com first");
-    if (!leg.marketId || !leg.outcomeId) throw new Error(String(leg.home || "") + " v " + String(leg.away || "") + " is missing Football.com market/outcome IDs — refresh Football.com and re-add the pick");
-    return { eventId: String(leg.eventId), marketId: String(leg.marketId), outcomeId: String(leg.outcomeId), odds: String(leg.price) };
+  if (!leg.eventId) {
+    throw new Error(`${leg.home} v ${leg.away} is missing an event id — refresh ${football ? "Football.com" : "Matches"} first`);
   }
-  let map = isTT(leg) ? TT_OUTCOMES[sel] : OUTCOMES[sel];
-  if (!map && !isTT(leg)) {
-    const m = sel.match(/^(\d+):(\d+)$/);
-    if (m) {
-      const h = Number(m[1]), a = Number(m[2]);
-      if (h >= 0 && h <= 4 && a >= 0 && a <= 4) {
-        map = { marketId: "45", outcomeId: String(274 + 2 * (a * 5 + h)) };
+  // Prefer the ids carried on the leg, but fall back to the standard mapping.
+  // Football.com serves the SAME vFootball, so its market/outcome ids match
+  // SportyBet's — no football-specific ids needed, and a missing id is never fatal.
+  let marketId = leg.marketId ? String(leg.marketId) : null;
+  let outcomeId = leg.outcomeId ? String(leg.outcomeId) : null;
+  if (!marketId || !outcomeId) {
+    let map = isTT(leg) ? TT_OUTCOMES[sel] : OUTCOMES[sel];
+    if (!map && !isTT(leg)) {
+      const m = sel.match(/^(\d+):(\d+)$/);
+      if (m) {
+        const h = Number(m[1]), a = Number(m[2]);
+        if (h >= 0 && h <= 4 && a >= 0 && a <= 4) {
+          map = { marketId: "45", outcomeId: String(274 + 2 * (a * 5 + h)) };
+        }
       }
     }
+    if (!map) throw new Error(`No booking slot for ${leg.selection}`);
+    marketId = map.marketId; outcomeId = map.outcomeId;
   }
-  if (!map) throw new Error(`SportyBet has no slot for ${leg.selection}`);
-  if (!leg.eventId) {
-    throw new Error(`${leg.home} v ${leg.away} is missing an event id — refresh Matches first`);
-  }
-  return {
-    eventId: leg.eventId,
-    marketId: map.marketId,
-    outcomeId: map.outcomeId,
-    odds: String(leg.price),
-  };
+  return { eventId: String(leg.eventId), marketId, outcomeId, odds: String(leg.price) };
 }
 
 const FOOTBALL_HEADERS = {
@@ -94,8 +92,6 @@ export async function shareSelections(legs, book) {
       throw new Error(loaded?.message || loaded?.innerMsg || `Football.com will not load ${code}`);
     }
   }
-  const url = football
-    ? `https://www.football.com/ng/m?shareCode=${code}`
-    : String(body.data.shareURL || `${host}/ng/?shareCode=${code}`).replace(/^http:\/\//, "https://");
+  const url = String(body.data.shareURL || `${host}/ng/?shareCode=${code}`).replace(/^http:\/\//, "https://");
   return { shareCode: code, shareUrl: url };
 }

@@ -208,8 +208,9 @@ export async function createSlip(stake, incoming, book) {
     const combined = round2(legs.reduce((acc, l) => acc * l.price, 1));
     const potential = round2(n * combined);
     const id = crypto.randomUUID();
+    // Share is best-effort (same as the SportyBet path): if the code fails we
+    // still save the slip and surface the error, rather than blocking the book.
     const share = await tryShare(legs);
-    if (share.shareError) throw new Error(share.shareError);
     await sql`
       INSERT INTO slips (id, stake, combined_odds, potential, status, share_code, share_url, share_error)
       VALUES (${id}, ${n}, ${combined}, ${potential}, 'open', ${share.shareCode}, ${share.shareUrl}, ${share.shareError})`;
