@@ -140,7 +140,8 @@
       kickoff: g.kickoff || null,
       selection: selection,
       label: label,
-      price: Number(price)
+      price: Number(price),
+      source: g.source || ""
     };
   }
 
@@ -475,13 +476,16 @@
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         stake: n,
+        book: (legs || []).some(function (l) { return l.source === "football"; }) ? "football" : "",
         legs: (legs || []).map(function (l) {
           return {
             gameId: l.id || l.gameId,
             eventId: l.eventId,
             selection: l.selection,
             home: l.home, away: l.away, league: l.league,
-            price: l.price, kickoff: l.kickoff
+            price: l.price, kickoff: l.kickoff,
+            label: l.label || "",
+            source: l.source || ""
           };
         })
       })
@@ -518,6 +522,28 @@
     var kept = legs.filter(function (l) { return l.id !== pick.id; });
     if (!prev || prev.selection !== pick.selection) kept.push(pick);
     return saveBook(kept);
+  }
+
+  var BOOK_FC = "vfs_book_fc";
+  function loadBookFc() {
+    try { return JSON.parse(localStorage.getItem(BOOK_FC) || "[]") || []; }
+    catch (e) { return []; }
+  }
+  function saveBookFc(legs) {
+    try { localStorage.setItem(BOOK_FC, JSON.stringify(legs)); } catch (e) {}
+    paintSlip();
+    try { window.dispatchEvent(new Event("vfs-book")); } catch (e) {}
+    return legs;
+  }
+  function inBookFc(id) {
+    return loadBookFc().some(function (l) { return l.id === id; });
+  }
+  function toggleBookFc(pick) {
+    var legs = loadBookFc();
+    var prev = legs.filter(function (l) { return l.id === pick.id; })[0];
+    var kept = legs.filter(function (l) { return l.id !== pick.id; });
+    if (!prev || prev.selection !== pick.selection) kept.push(pick);
+    return saveBookFc(kept);
   }
 
   function byKick(a, b) {
@@ -702,13 +728,16 @@
     row.appendChild(copyBtn(g.id));
     box.appendChild(row);
     if (!opts.compact) {
-      var picked = bookLeg(g.id);
+      var leg = g.source === "football"
+        ? loadBookFc().filter(function (l) { return l.id === g.id; })[0]
+        : bookLeg(g.id);
       var tap = opts.pickable ? {
         game: g,
-        picked: picked ? picked.selection : "",
+        picked: leg ? leg.selection : "",
         onPick: function (p) {
-          toggleBook(p);
-          if (opts.onPick) opts.onPick();
+          if (g.source === "football") toggleBookFc(p);
+          else toggleBook(p);
+          if (opts.onPick) opts.onPick(p);
         }
       } : null;
       box.appendChild(market("Full time", [
@@ -806,9 +835,12 @@
     });
   }
 
-  function fetchGames(force) {
-    return fetch("/api/games" + (force ? "?force=1" : "")).then(function (r) { return r.json(); }).then(function (d) {
-      if (!d.ok) throw new Error(d.error || "SportyBet did not answer");
+  function fetchGames(force, book) {
+    var q = [];
+    if (force) q.push("force=1");
+    if (book === "football") q.push("book=football");
+    return fetch("/api/games" + (q.length ? "?" + q.join("&") : "")).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) throw new Error(d.error || (book === "football" ? "Football.com did not answer" : "SportyBet did not answer"));
       d.games = dropClashes(d.games || []);
       return d;
     });
@@ -869,7 +901,7 @@
   setInterval(tick, 30000);
 
   function paintSlip() {
-    var n = loadBook().length;
+    var n = loadBook().length + loadBookFc().length;
     var badge = document.querySelector(".slip-tab .n");
     if (badge) badge.textContent = n ? String(n) : "";
     var tab = document.querySelector(".slip-tab");
@@ -1679,6 +1711,7 @@
     screen: screen, makePick: makePick, favPick: favPick, stylePick: stylePick, spreadPack: spreadPack, sameSlotClusters: sameSlotClusters, acca: acca,
     rateGame: rateGame, packHit: packHit, stakeOf: stakeOf, bookLegs: bookLegs,
     loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
+    loadBookFc: loadBookFc, saveBookFc: saveBookFc, toggleBookFc: toggleBookFc, inBookFc: inBookFc,
     usedMap: usedMap, markUsed: markUsed, mergeUsedFromSlips: mergeUsedFromSlips, isUsed: isUsed,
     rebetSlip: rebetSlip,
     card: card, compactRow: compactRow,

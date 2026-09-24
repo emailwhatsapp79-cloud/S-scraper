@@ -13,20 +13,16 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/app.css?v=fix10">
+<link rel="stylesheet" href="/css/app.css?v=fc11">
 </head>
 <body>
 <main class="wrap">
   <div class="tabs" role="tablist">
-    <button class="tab on" type="button" id="tab-book" data-tab="book">Ready to book</button>
+    <button class="tab on" type="button" id="tab-fc" data-tab="fc">Football.com</button>
     <button class="tab" type="button" id="tab-match" data-tab="match">Matches</button>
   </div>
 
-  <section id="packs" class="packs" role="tabpanel">
-    <div class="skel"></div>
-  </section>
-
-  <div id="match-pane" hidden role="tabpanel">
+  <div id="pane">
     <div class="stats" id="stats" hidden>
       <div class="stat"><b id="s-scan">—</b><span>Scanned</span></div>
       <div class="stat go"><b id="s-hit">—</b><span>Matched</span></div>
@@ -39,116 +35,34 @@
     <p class="note" id="note"></p>
   </div>
 </main>
-<script src="/js/core.js?v=fix10"></script>
+<script src="/js/core.js?v=fc11"></script>
 <script>
 (function () {
   var V = window.VFS;
   V.injectChrome("matches", '<button class="ghost" id="refresh" type="button">Refresh</button>');
-  var league = "All";
-  var last = null;
-  var tab = "book";
+  var league = { fc: "All", match: "All" };
+  var data = { fc: null, match: null };
+  var tab = "fc";
 
   function showTab(name) {
-    tab = name === "match" ? "match" : "book";
-    document.getElementById("packs").hidden = tab !== "book";
-    document.getElementById("match-pane").hidden = tab !== "match";
-    document.getElementById("tab-book").classList.toggle("on", tab === "book");
+    tab = name === "match" ? "match" : "fc";
+    document.getElementById("tab-fc").classList.toggle("on", tab === "fc");
     document.getElementById("tab-match").classList.toggle("on", tab === "match");
     try { sessionStorage.setItem("vfs_tab", tab); } catch (e) {}
+    if (!data[tab]) {
+      document.getElementById("out").innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+      load(false, false);
+    } else render();
   }
 
-  document.getElementById("tab-book").addEventListener("click", function () { showTab("book"); });
+  document.getElementById("tab-fc").addEventListener("click", function () { showTab("fc"); });
   document.getElementById("tab-match").addEventListener("click", function () { showTab("match"); });
   try {
     var saved = sessionStorage.getItem("vfs_tab");
-    if (saved === "match" || saved === "book") showTab(saved);
+    if (saved === "book") saved = "fc";
+    if (saved === "match" || saved === "fc") tab = saved;
   } catch (e) {}
-
-  function idsOf(legs) {
-    var t = {};
-    (legs || []).forEach(function (l) {
-      if (l.id) t[l.id] = 1;
-      if (l.eventId) t[l.eventId] = 1;
-    });
-    return t;
-  }
-
-  function packCard(n, legs) {
-    var card = V.el("div", "slip pack");
-    var h = V.el("div", "slip-h");
-    h.appendChild(V.el("span", "badge open", n + "-leg"));
-    var odds = V.acca(legs.map(function (l) { return l.price; }));
-    var stake = V.stakeOf();
-    h.appendChild(V.el("span", "tot", odds.toFixed(2) + " → " + V.naira(Math.round(stake * odds * 100) / 100)));
-    card.appendChild(h);
-    legs.forEach(function (l) {
-      var row = V.el("div", "leg wait");
-      var left = V.el("div", "leg-teams");
-      left.appendChild(V.teamsBlock(l.home, l.away));
-      var sel = V.el("div", "sel", l.label + " @ " + Number(l.price).toFixed(2));
-      left.appendChild(sel);
-      row.appendChild(left);
-      var mid = V.el("div", "leg-mid");
-      mid.appendChild(V.el("div", "kick", V.clock(l.kickoff)));
-      var t = V.until(l.kickoff);
-      if (t.text) {
-        var ph = V.el("div", "phase", t.text);
-        ph.setAttribute("data-kick", l.kickoff || "");
-        mid.appendChild(ph);
-      }
-      row.appendChild(mid);
-      var pill = V.el("div", "wait-pill", V.leagueKey(l));
-      row.appendChild(pill);
-      card.appendChild(row);
-    });
-
-    var go = V.el("button", "primary", "Book " + n);
-    go.type = "button";
-    go.addEventListener("click", function () {
-      if (go.disabled) return;
-      go.disabled = true;
-      go.textContent = "Booking…";
-      V.bookLegs(legs, stake).then(function (slip) {
-        V.markUsed(legs);
-        V.paintSlip();
-        if (slip && slip.shareCode && navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(slip.shareCode).catch(function () {});
-        }
-        render();
-      }).catch(function (e) {
-        go.disabled = false;
-        go.textContent = e.message || "Could not book";
-      });
-    });
-    card.appendChild(go);
-    return card;
-  }
-
-  function renderPacks(games) {
-    var box = document.getElementById("packs");
-    box.textContent = "";
-    var taken = V.usedMap();
-    var five = V.spreadPack(games, 5, { gapMin: 8, soonMin: 4, taken: taken });
-    var tenTaken = {};
-    Object.keys(taken).forEach(function (k) { tenTaken[k] = taken[k]; });
-    var fiveIds = idsOf(five);
-    Object.keys(fiveIds).forEach(function (k) { tenTaken[k] = 1; });
-    var ten = V.spreadPack(games, 10, { gapMin: 6, soonMin: 4, taken: tenTaken });
-    if (ten.length < 10) ten = V.spreadPack(games, 10, { gapMin: 6, soonMin: 4, taken: taken });
-    if (!five.length && ten.length < 5) {
-      var empty = V.el("div", "empty");
-      empty.innerHTML = "<b>No 5 or 10 ready yet.</b><br>Open Matches, or wait for the next card.";
-      box.appendChild(empty);
-      return;
-    }
-    if (five.length === 5) box.appendChild(packCard(5, five));
-    if (ten.length === 10) box.appendChild(packCard(10, ten));
-    else if (ten.length >= 7) box.appendChild(packCard(ten.length, ten));
-    if (five.length === 5 && ten.length === 10) {
-      var overlap = five.some(function (a) { return ten.some(function (b) { return a.id === b.id; }); });
-      if (overlap) box.appendChild(V.el("p", "note", "The 10 includes the 5. Book one."));
-    }
-  }
+  showTab(tab);
 
   function chips(matched) {
     var counts = { All: matched.length };
@@ -160,19 +74,21 @@
     box.textContent = "";
     ["All", "England", "Spain", "Italy", "Germany", "France"].forEach(function (name) {
       if (name !== "All" && !counts[name]) return;
-      var b = V.el("button", "chip" + (league === name ? " on" : ""), name + " " + (counts[name] || 0));
-      b.addEventListener("click", function () { league = name; render(); });
+      var b = V.el("button", "chip" + (league[tab] === name ? " on" : ""), name + " " + (counts[name] || 0));
+      b.addEventListener("click", function () { league[tab] = name; render(); });
       box.appendChild(b);
     });
   }
 
   function render() {
+    var last = data[tab];
     if (!last) return;
     var games = last.games || [];
-    renderPacks(games);
+    var which = league[tab];
+    var football = tab === "fc";
     var hits = [];
     games.forEach(function (g) {
-      if (league !== "All" && V.leagueKey(g) !== league) return;
+      if (which !== "All" && V.leagueKey(g) !== which) return;
       var r;
       try { r = V.screen(g); } catch (e) { return; }
       if (r.verdict === "show") hits.push([g, r]);
@@ -194,7 +110,7 @@
     out.textContent = "";
     if (!hits.length) {
       var empty = V.el("div", "empty");
-      empty.innerHTML = "<b>None of the upcoming games match this shape.</b><br>Open Card to browse the full list, or loosen the bands on Rules.";
+      empty.innerHTML = "<b>None of the upcoming games match this shape.</b><br>Same rules as SportyBet. Open Card for the full list, or loosen the bands on Rules.";
       out.appendChild(empty);
     } else {
       hits.forEach(function (p, i) {
@@ -202,15 +118,15 @@
           checks: true,
           pickable: true,
           n: i + 1,
-          picked: V.inBook(p[0].id),
+          picked: football ? V.inBookFc(p[0].id) : V.inBook(p[0].id),
           onPick: function () { render(); V.paintSlip(); }
         }));
       });
     }
     var n = document.getElementById("note");
-    n.textContent = (last.cached ? "From the last read · " : "") +
+    n.textContent = (football ? "Football.com · " : "SportyBet · ") +
+      (last.cached ? "From the last read · " : "") +
       (last.fromLiveFeeds || games.length) + " games · " + last.tookMs + "ms" +
-      (last.saveError ? " · save: " + last.saveError : "") +
       (last.feedErrors && last.feedErrors.length ? " · " + last.feedErrors.join("; ") : "");
     V.paintSlip();
     V.tick();
@@ -218,26 +134,20 @@
 
   function load(quiet, force) {
     var btn = document.getElementById("refresh");
+    var which = tab;
     if (btn) btn.disabled = true;
-    if (!quiet) {
-      var skel = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
-      document.getElementById("out").innerHTML = skel;
-      if (!document.querySelector("#packs .pack")) document.getElementById("packs").innerHTML = skel;
-    }
-    V.fetchGames(force).then(function (d) {
-      last = d; render();
+    if (!quiet) document.getElementById("out").innerHTML =
+      '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+    V.fetchGames(force, which === "fc" ? "football" : "").then(function (d) {
+      data[which] = d;
+      if (tab === which) render();
     }).catch(function (e) {
-      document.getElementById("out").innerHTML = '<p class="err">' + e.message + "</p>";
+      if (tab === which) document.getElementById("out").innerHTML = '<p class="err">' + e.message + "</p>";
     }).then(function () { if (btn) btn.disabled = false; });
   }
 
   document.getElementById("refresh").addEventListener("click", function () { load(false, true); });
-  window.addEventListener("vfs-ready", function () { if (last) render(); });
-  V.fetchSlips(true).then(function (d) {
-    V.mergeUsedFromSlips(d.slips || []);
-    if (last) render();
-  }).catch(function () {});
-  load(false, false);
+  window.addEventListener("vfs-ready", function () { if (data[tab]) render(); });
   setInterval(function () { load(true, false); }, 180000);
 })();
 </script>

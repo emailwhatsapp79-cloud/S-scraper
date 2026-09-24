@@ -3,7 +3,7 @@
 import { sql, rowToGame, logErr } from "./_db.js";
 import { store } from "./_store.js";
 import { recordPicks } from "./_screen.js";
-import { fetchCard, normalise } from "./_card.js";
+import { fetchCard, normalise, FOOTBALL_BASE } from "./_card.js";
 import { guard } from "./_gate.js";
 import { isUpcoming, dropClashes } from "./_shape.js";
 
@@ -49,6 +49,33 @@ export default async function handler(req, res) {
 
   const started = Date.now();
   const url = new URL(req.url, "http://x");
+  if (url.searchParams.get("book") === "football") {
+    const card = await fetchCard(FOOTBALL_BASE);
+    let games = [];
+    for (const ev of card.events || []) {
+      const g = normalise(ev);
+      if (g) {
+        g.source = "football";
+        games.push(g);
+      }
+    }
+    games = dropClashes(games).filter((g) => g.upcoming);
+    games.sort((a, b) => (Number(a.kickoff) || Infinity) - (Number(b.kickoff) || Infinity));
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).json({
+      ok: true,
+      book: "football",
+      cached: false,
+      fetchedAt: Date.now(),
+      tookMs: Date.now() - started,
+      fromLiveFeeds: games.length,
+      feedErrors: card.errors && card.errors.length ? card.errors : null,
+      count: games.length,
+      upcoming: games.length,
+      screenable: games.filter((g) => g.dc && g.ht).length,
+      games,
+    });
+  }
   const includeLive = url.searchParams.get("live") === "1";
   const force = url.searchParams.get("force") === "1";
   const cutoff = Date.now() - 2 * 60 * 1000;

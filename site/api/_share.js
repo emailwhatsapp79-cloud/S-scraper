@@ -50,25 +50,27 @@ export function toSelection(leg) {
   };
 }
 
-export async function shareSelections(legs) {
+export async function shareSelections(legs, book) {
+  const football = book === "football" || (legs || []).some((l) => l.sport === "fc" || l.source === "football");
+  const host = football ? "https://www.football.com" : "https://www.sportybet.com";
   const selections = legs.map(toSelection);
-  const r = await fetch(SHARE, {
+  const r = await fetch(`${host}/api/ng/orders/share`, {
     method: "POST",
     headers: {
       "User-Agent": UA,
       Accept: "application/json, text/plain, */*",
       "Content-Type": "application/json;charset=UTF-8",
-      Origin: "https://www.sportybet.com",
-      Referer: "https://www.sportybet.com/ng/",
+      Origin: host,
+      Referer: `${host}/ng/`,
     },
     body: JSON.stringify({ selections }),
   });
   const body = await r.json().catch(() => ({}));
   const code = body?.data?.shareCode;
   if (body?.bizCode !== 10000 || !code) {
-    throw new Error(body?.message || body?.innerMsg || `SportyBet share HTTP ${r.status}`);
+    throw new Error(body?.message || body?.innerMsg || `${football ? "Football.com" : "SportyBet"} share HTTP ${r.status}`);
   }
-  const url = String(body.data.shareURL || `https://www.sportybet.com/ng/?shareCode=${code}`)
+  const url = String(body.data.shareURL || `${host}/ng/?shareCode=${code}`)
     .replace(/^http:\/\//, "https://");
   return { shareCode: code, shareUrl: url };
 }

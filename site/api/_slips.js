@@ -1,6 +1,6 @@
 // Paper slips, plus a SportyBet share code when they will issue one.
 import { sql, rowToGame } from "./_db.js";
-import { fetchEvent, scoreOf } from "./_card.js";
+import { fetchEvent, scoreOf, FOOTBALL_BASE } from "./_card.js";
 import { shareSelections } from "./_share.js";
 import { notifyBooked } from "./_push.js";
 
@@ -149,7 +149,8 @@ function shapeLeg(l) {
 
 async function tryShare(legs) {
   try {
-    const got = await shareSelections(legs);
+    const football = (legs || []).some((l) => l.sport === "fc" || l.source === "football");
+    const got = await shareSelections(legs, football ? "football" : "sporty");
     return { shareCode: got.shareCode, shareUrl: got.shareUrl, shareError: null };
   } catch (e) {
     return { shareCode: null, shareUrl: null, shareError: String(e?.message || e) };
@@ -169,12 +170,53 @@ function ttRowToGame(r) {
   };
 }
 
-export async function createSlip(stake, incoming) {
+export async function createSlip(stake, incoming, book) {
   await ensureSlips();
   const raw = Array.isArray(incoming) ? incoming : [];
   if (!raw.length) throw new Error("Pick at least one game");
   const n = Number(stake);
   if (!isFinite(n) || n <= 0) throw new Error("Stake has to be a number above 0");
+
+  if (book === "football" || raw.every((l) => l && (l.source === "football" || l.sport === "fc"))) {
+    const legs = [];
+    for (const row of raw.slice(0, 12)) {
+      const price = Number(row.price);
+      if (!row.eventId || !row.home || !(price > 1) || !row.selection) {
+        throw new Error("Football.com leg is missing a price or event");
+      }
+      legs.push({
+        gameId: String(row.gameId || row.id || ""),
+        eventId: String(row.eventId),
+        home: row.home,
+        away: row.away || "",
+        league: row.league || "",
+        kickoff: row.kickoff || null,
+        sport: "fc",
+        selection: String(row.selection),
+        label: row.label || LABELS[String(row.selection)] || String(row.selection),
+        price,
+      });
+    }
+    const combined = round2(legs.reduce((acc, l) => acc * l.price, 1));
+    const potential = round2(n * combined);
+    const id = crypto.randomUUID();
+    const share = await tryShare(legs);
+    await sql`
+      INSERT INTO slips (id, stake, combined_odds, potential, status, share_code, share_url, share_error)
+      VALUES (${id}, ${n}, ${combined}, ${potential}, 'open', ${share.shareCode}, ${share.shareUrl}, ${share.shareError})`;
+    for (let i = 0; i < legs.length; i++) {
+      const l = legs[i];
+      await sql`
+        INSERT INTO slip_legs (
+          slip_id, pos, game_id, event_id, home, away, league, kickoff,
+          selection, selection_label, price, sport)
+        VALUES (
+          ${id}, ${i}, ${l.gameId}, ${l.eventId}, ${l.home}, ${l.away}, ${l.league}, ${l.kickoff},
+          ${l.selection}, ${l.label}, ${l.price}, ${"fc"})`;
+    }
+    const all = await listSlips();
+    return all.find((s) => s.id === id);
+  }
 
   const ids = [...new Set(raw.map((l) => String(l.gameId || l.id || "")).filter(Boolean))].slice(0, 12);
   const eventIds = [...new Set(raw.map((l) => String(l.eventId || "")).filter(Boolean))];
@@ -290,8 +332,9 @@ export async function refreshSlips() {
   let liveMap = new Map();
   const eventIds = [...new Set(legs.map((l) => l.event_id).filter(Boolean))];
   const snaps = await Promise.all(eventIds.map((id) => {
+    const fc = legs.some((l) => l.event_id === id && l.sport === "fc");
     const tt = legs.some((l) => l.event_id === id && l.sport === "tt");
-    return fetchEvent(id, tt ? { marketId: "186" } : {});
+    return fetchEvent(id, tt ? { marketId: "186" } : {}, fc ? FOOTBALL_BASE : undefined);
   }));
   for (const ev of snaps) {
     const snap = scoreOf(ev);

@@ -4,6 +4,7 @@
 import { WANTED, isUpcoming } from "./_shape.js";
 
 export const BASE = "https://www.sportybet.com/api/ng/factsCenter";
+export const FOOTBALL_BASE = "https://www.football.com/api/ng/factsCenter";
 export const SPORT = "sr:sport:202120001";
 const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36";
@@ -17,9 +18,9 @@ export const LEAGUES = [
   ["sv:league:5", "France"],
 ];
 
-async function getJson(path, params) {
+async function getJson(path, params, base = BASE) {
   const q = new URLSearchParams(params);
-  const r = await fetch(`${BASE}/${path}?${q}`, {
+  const r = await fetch(`${base}/${path}?${q}`, {
     headers: { "User-Agent": UA, Accept: "application/json" },
   });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
@@ -28,14 +29,14 @@ async function getJson(path, params) {
   return body.data;
 }
 
-async function fetchLeague([tid, fallback]) {
+async function fetchLeague([tid, fallback], base = BASE) {
   const found = [];
   const seen = new Set();
   for (let page = 1; page <= 6; page++) {
     const data = await getJson("pcUpcomingEvents", {
       sportId: SPORT, tournamentId: tid, marketId: MARKET_IDS,
       option: "2", timeline: "168", pageSize: "100", pageNum: String(page),
-    });
+    }, base);
     const batch = collectTournaments(data, fallback);
     let added = 0;
     for (const ev of batch) {
@@ -69,8 +70,8 @@ function collect(node, found = []) {
   return found;
 }
 
-export async function fetchCard() {
-  const results = await Promise.allSettled(LEAGUES.map(fetchLeague));
+export async function fetchCard(base = BASE) {
+  const results = await Promise.allSettled(LEAGUES.map((lg) => fetchLeague(lg, base)));
   const events = [];
   const errors = [];
   results.forEach((r) => {
@@ -92,10 +93,10 @@ export async function fetchLive() {
   return events;
 }
 
-export async function fetchEvent(eventId, extra = {}) {
+export async function fetchEvent(eventId, extra = {}, base = BASE) {
   if (!eventId) return null;
   try {
-    return await getJson("event", { eventId, marketId: MARKET_IDS, ...extra });
+    return await getJson("event", { eventId, marketId: MARKET_IDS, ...extra }, base);
   } catch {
     return null;
   }

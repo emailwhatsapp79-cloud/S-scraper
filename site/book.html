@@ -15,7 +15,7 @@
 </head>
 <body>
 <main class="wrap">
-  <p class="lede">Tap prices on Matches, then book here. SportyBet issues a share code — no login, no money moved. Paste that code in the app to load the slip.</p>
+  <p class="lede">Tap prices on Matches or Football.com, then book here. The code loads on that site only — SportyBet codes do not open on Football.com.</p>
 
   <section id="draft"></section>
   <h2 class="slips-h" id="slips-h">Live & open slips <span class="n" hidden></span></h2>
@@ -24,7 +24,7 @@
     <div class="skel"></div>
   </div>
 </main>
-<script src="/js/core.js"></script>
+<script src="/js/core.js?v=fc11"></script>
 <script>
 (function () {
   var V = window.VFS;
@@ -42,13 +42,20 @@
   function renderDraft() {
     var box = document.getElementById("draft");
     box.textContent = "";
-    var legs = V.loadBook();
-    if (!legs.length) {
+    var sporty = V.loadBook();
+    var foot = V.loadBookFc();
+    if (!sporty.length && !foot.length) {
       var empty = V.el("div", "empty");
-      empty.innerHTML = "<b>Slip is empty.</b><br>On Matches, tap Home, Away, Home or Draw or Draw or Away.";
+      empty.innerHTML = "<b>Slip is empty.</b><br>On Matches or Football.com, tap Home, Away, Home or Draw or Draw or Away.";
       box.appendChild(empty);
       return;
     }
+    if (sporty.length) paintSlip(box, sporty, "", "SportyBet", function (legs) { V.saveBook(legs); });
+    if (foot.length) paintSlip(box, foot, "football", "Football.com", function (legs) { V.saveBookFc(legs); });
+  }
+
+  function paintSlip(box, legs, book, name, save) {
+    box.appendChild(V.el("h2", "slips-h", name));
     var odds = V.acca(legs.map(function (l) { return l.price; }));
     var ret = Math.round(stake * odds * 100) / 100;
     legs.forEach(function (l, i) {
@@ -60,8 +67,7 @@
       row.appendChild(left);
       var rm = V.el("button", "rm", "Remove");
       rm.addEventListener("click", function () {
-        var next = V.loadBook().filter(function (_, j) { return j !== i; });
-        V.saveBook(next);
+        save(legs.filter(function (_, j) { return j !== i; }));
         renderDraft();
       });
       row.appendChild(rm);
@@ -90,7 +96,7 @@
     money.appendChild(a); money.appendChild(b);
     box.appendChild(money);
 
-    var go = V.el("button", "primary", "Book · get SportyBet code");
+    var go = V.el("button", "primary", "Book · get " + name + " code");
     go.addEventListener("click", function () {
       go.disabled = true;
       go.textContent = "Booking…";
@@ -99,13 +105,19 @@
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           stake: stake,
+          book: book,
           legs: legs.map(function (l) {
-            return { gameId: l.id, eventId: l.eventId, selection: l.selection, home: l.home, away: l.away, league: l.league, price: l.price, kickoff: l.kickoff };
+            return {
+              gameId: l.id, eventId: l.eventId, selection: l.selection,
+              home: l.home, away: l.away, league: l.league,
+              price: l.price, kickoff: l.kickoff, label: l.label || "",
+              source: book === "football" ? "football" : ""
+            };
           })
         })
       }).then(function (r) { return r.json(); }).then(function (d) {
         if (!d.ok) throw new Error(d.error || "Could not book");
-        V.saveBook([]);
+        save([]);
         renderDraft();
         loadSlips();
         if (d.slip && d.slip.shareCode) {
@@ -117,7 +129,7 @@
       });
     });
     box.appendChild(go);
-    box.appendChild(V.el("p", "note", "No login, no stake placed. Combined odds " + odds.toFixed(2) + " · " + legs.length + " legs. The code loads this slip on SportyBet."));
+    box.appendChild(V.el("p", "note", "No login, no stake placed. Combined odds " + odds.toFixed(2) + " · " + legs.length + " legs. The code loads this slip on " + name + "."));
   }
 
   function badge(status) {
