@@ -1571,8 +1571,11 @@
     card.appendChild(h);
 
     if (sp.shareCode) {
+      var football = /football\.com/i.test(String(sp.shareUrl || "")) ||
+        (sp.legs || []).some(function (l) { return l.sport === "fc"; });
+      var bookName = football ? "Football.com" : "SportyBet";
       var code = el("div", "codebox");
-      code.appendChild(el("div", "mkt-t", "SportyBet code"));
+      code.appendChild(el("div", "mkt-t", bookName + " code"));
       var crow = el("div", "row1");
       crow.appendChild(el("span", "gid", sp.shareCode));
       var copy = el("button", "copy", "Copy");
@@ -1592,7 +1595,7 @@
       if (sp.shareUrl) {
         var link = document.createElement("a");
         link.href = String(sp.shareUrl).replace(/^http:\/\//, "https://");
-        link.textContent = "Open on SportyBet";
+        link.textContent = "Open on " + bookName;
         link.target = "_blank";
         link.rel = "noopener";
         code.appendChild(link);
@@ -1634,18 +1637,22 @@
         kickoff: l.kickoff || null,
         selection: l.selection,
         label: l.label,
-        price: Number(l.price)
+        price: Number(l.price),
+        source: l.sport === "fc" ? "football" : ""
       };
     }).filter(function (l) { return l.id && l.selection; });
     if (!add.length) return [];
-    var legs = loadBook().slice();
+    var football = /football\.com/i.test(String(sp.shareUrl || "")) ||
+      (sp.legs || []).some(function (l) { return l.sport === "fc"; });
+    var legs = (football ? loadBookFc() : loadBook()).slice();
     add.forEach(function (p) {
       var hit = -1;
       legs.forEach(function (x, n) { if (x.id === p.id) hit = n; });
       if (hit >= 0) legs[hit] = p;
       else legs.push(p);
     });
-    saveBook(legs);
+    if (football) saveBookFc(legs);
+    else saveBook(legs);
     if (!/\/book(?:\.html)?$/.test(location.pathname)) location.href = "/book";
     return legs;
   }
