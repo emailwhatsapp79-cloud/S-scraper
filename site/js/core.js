@@ -380,7 +380,7 @@
       var ko = Number(g.kickoff) || 0;
       if (!ko || ko < now + soonMin * 60000) return;
       if (isUsed(g, taken)) return;
-      var p = stylePick(g);
+      var p = favPick(g);
       if (p) pool.push(p);
     });
 
@@ -448,7 +448,7 @@
       var ko = Number(g.kickoff) || 0;
       if (!ko || ko < now + soonMin * 60000) return;
       if (isUsed(g, taken)) return;
-      var p = stylePick(g);
+      var p = favPick(g);
       if (p) pool.push(p);
     });
     pool.sort(byKick);
