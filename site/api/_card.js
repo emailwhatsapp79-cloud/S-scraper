@@ -203,6 +203,17 @@ function legs(market) {
   return by;
 }
 
+function refs(market) {
+  const by = {};
+  for (const o of market.outcomes || []) {
+    const id = String(o.id || o.outcomeId || "");
+    const p = parseFloat(o.odds);
+    if (!id || !isFinite(p)) continue;
+    by[o.desc] = { marketId: String(market.id || market.marketId || ""), outcomeId: id, odds: p };
+  }
+  return by;
+}
+
 export function normalise(ev) {
   if ((ev.sport || {}).id !== SPORT) return null;
   const got = {};
@@ -213,6 +224,12 @@ export function normalise(ev) {
   const ft = got.ft;
   if (!ft || ft.Home == null || ft.Draw == null || ft.Away == null) return null;
   const dc = got.dc, ht = got.ht;
+  const marketRefs = {};
+  for (const m of ev.markets || []) {
+    const slot = WANTED[m.desc];
+    if (!slot || marketRefs[slot]) continue;
+    marketRefs[slot] = refs(m);
+  }
   const cat = (ev.sport || {}).category || {};
   const tour = cat.tournament || {};
   return {
@@ -229,5 +246,13 @@ export function normalise(ev) {
       ? { home_draw: dc["Home or Draw"], home_away: dc["Home or Away"], draw_away: dc["Draw or Away"] }
       : null,
     ht: ht && ht.Home != null ? { home: ht.Home, draw: ht.Draw, away: ht.Away } : null,
+    selectionRefs: {
+      "1": marketRefs.ft?.Home || null,
+      X: marketRefs.ft?.Draw || null,
+      "2": marketRefs.ft?.Away || null,
+      "1X": marketRefs.dc?.["Home or Draw"] || null,
+      "12": marketRefs.dc?.["Home or Away"] || null,
+      X2: marketRefs.dc?.["Draw or Away"] || null,
+    },
   };
 }
