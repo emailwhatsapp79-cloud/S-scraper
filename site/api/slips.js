@@ -1,13 +1,19 @@
 // Paper book. GET lists slips (and refreshes scores). POST saves a new slip.
+// ?account=1 is the Football.com login. It lives here so the site stays
+// inside Vercel's serverless-function cap.
 import { cors } from "./_db.js";
 import { listSlips, createSlip, refreshSlips, reshareSlip } from "./_slips.js";
 import { guard } from "./_gate.js";
+import account from "./_fc_session.js";
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
 
   const started = Date.now();
   try {
+    const url = new URL(req.url || "/", "http://x");
+    if (url.searchParams.get("account") === "1") return account(req, res);
+
     if (req.method === "POST") {
       const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
       const slip = body.slipId
@@ -21,7 +27,6 @@ export default async function handler(req, res) {
 
     if (req.method !== "GET") return res.status(405).json({ ok: false, error: "GET or POST" });
 
-    const url = new URL(req.url, "http://x");
     const refreshNow = url.searchParams.get("live") === "1";
     let refresh = null;
     if (refreshNow) {

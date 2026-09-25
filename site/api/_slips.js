@@ -4,7 +4,7 @@ import { fetchEvent, scoreOf, FOOTBALL_BASE } from "./_card.js";
 import { shareSelections } from "./_share.js";
 import { notifyBooked } from "./_push.js";
 import { placeOrder, loadGifts } from "./_fc.js";
-import { readSession, writeSession } from "./fc.js";
+import { readSession, writeSession } from "./_fc_session.js";
 
 let schemaReady = false;
 

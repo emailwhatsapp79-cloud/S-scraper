@@ -52,7 +52,7 @@
   }
 
   function loadAcct() {
-    return fetch("/api/fc").then(function (r) { return r.json(); }).then(function (d) {
+    return fetch("/api/slips?account=1").then(function (r) { return r.json(); }).then(function (d) {
       acct = d && d.ok !== false ? d : { connected: false, error: d && d.error };
       if (acct.gifts && acct.gifts.length && !giftId) giftId = acct.gifts[0].id;
       renderDraft();
@@ -88,7 +88,7 @@
       box.appendChild(V.el("p", "note", bits.join(" · ") + ". Signs out on its own after one day."));
       var out = V.el("button", "rm", "Sign out now");
       out.addEventListener("click", function () {
-        fetch("/api/fc", { method: "DELETE" }).then(function () { acct = { connected: false }; renderDraft(); });
+        fetch("/api/slips?account=1", { method: "DELETE" }).then(function () { acct = { connected: false }; renderDraft(); });
       });
       box.appendChild(out);
       return box;
@@ -107,7 +107,7 @@
     go.addEventListener("click", function () {
       go.disabled = true;
       go.textContent = "Connecting…";
-      fetch("/api/fc", {
+      fetch("/api/slips?account=1", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ phone: phone.value, password: pass.value })
