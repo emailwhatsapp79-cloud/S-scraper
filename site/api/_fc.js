@@ -22,7 +22,7 @@ const WANT = {
 const LOGIN_MSG = {
   11601: "Password is incorrect.",
   11602: "That Football.com account is locked.",
-  11603: "Password is incorrect.",
+  11603: "Football.com did not accept that phone or password.",
   11010: "Password is incorrect.",
   11613: "That email is not verified on Football.com.",
   12400: "Football.com is asking for a text code. Turn off two-factor there, then connect again.",
@@ -31,6 +31,15 @@ const LOGIN_MSG = {
 
 export function md5(s) {
   return createHash("md5").update(String(s)).digest("hex");
+}
+
+// Football.com refuses a login that has no deviceId cookie (bizCode 19000).
+export function deviceUuid() {
+  const b = randomBytes(16);
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = b.toString("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
 }
 
 // Football.com logs in with the local number, no leading 0 and no 234.
@@ -168,7 +177,8 @@ async function patronKey() {
 
 export async function login(phone, password) {
   const username = normalisePhone(phone);
-  const deviceId = randomBytes(16).toString("hex");
+  const deviceId = deviceUuid();
+  const fingerprint = randomBytes(16).toString("hex");
   const { ursId, key } = await patronKey();
   const form = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(md5(password))}&keepSignedIn=false`;
   const res = await fetch(`${HOST}/api/ng/patron/accessToken`, {
@@ -177,7 +187,8 @@ export async function login(phone, password) {
       "Content-Type": "text/plain",
       "encryption-type": "1",
       ursId,
-      Fingerprint: deviceId,
+      Fingerprint: fingerprint,
+      Cookie: `deviceId=${deviceId}`,
     }),
     body: aesEncrypt(form, key),
   });

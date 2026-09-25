@@ -671,17 +671,6 @@
     return b;
   }
 
-  function fcMatchUrl(g) {
-    if (!g || !g.eventId) return "";
-    var league = String(g.league || "");
-    var cat = (league.split("·")[0] || league.split("-")[0] || "England").trim() || "England";
-    var home = String(g.home || "Home").trim();
-    var away = String(g.away || "Away").trim();
-    var seg = function (s) { return encodeURIComponent(s).replace(/%2D/gi, "-"); };
-    return "https://www.football.com/ng/m/n/sport/vFootball/" +
-      seg(cat) + "/Virtual/" + seg(home) + "-vs-" + seg(away) + "/" + g.eventId;
-  }
-
   function market(title, pairs, favKey, pick) {
     var box = el("div", "mkt");
     box.appendChild(el("div", "mkt-t", title));
@@ -730,8 +719,7 @@
     var box = el("div", "game" + (r.verdict === "show" ? " match" : r.verdict === "hold" ? " hold" : "") + (picked ? " picked" : ""));
     var row = el("div", "row1");
     if (opts.n) row.appendChild(el("span", "idx", String(opts.n)));
-    var matchUrl = g.source === "football" ? fcMatchUrl(g) : "";
-    row.appendChild(el("span", "gid", matchUrl ? "Match" : g.id));
+    row.appendChild(el("span", "gid", g.id));
     var who = el("div", "who");
     who.appendChild(teamsBlock(g.home, g.away));
     var meta = el("div", "meta");
@@ -747,19 +735,7 @@
     }
     who.appendChild(meta);
     row.appendChild(who);
-    if (matchUrl) {
-      var open = document.createElement("a");
-      open.className = "copy";
-      open.href = matchUrl;
-      open.target = "_blank";
-      open.rel = "noopener";
-      open.textContent = "Open";
-      open.addEventListener("click", function (e) { e.stopPropagation(); });
-      row.appendChild(open);
-      row.appendChild(copyBtn(matchUrl, "Copy link"));
-    } else {
-      row.appendChild(copyBtn(g.id));
-    }
+    row.appendChild(copyBtn(g.id));
     box.appendChild(row);
     if (!opts.compact) {
       var leg = g.source === "football"

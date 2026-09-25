@@ -2,13 +2,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   normalisePhone, sessionAlive, DAY_MS, buildOrder, movedTooFar,
-  fcMatchUrl, sharePageUrl, selectionId, fromUnits,
+  fcMatchUrl, sharePageUrl, selectionId, fromUnits, deviceUuid,
 } from "../site/api/_fc.js";
 
 test("phone drops 234 and the leading zero", () => {
   assert.equal(normalisePhone("08031234567"), "8031234567");
   assert.equal(normalisePhone("+234 803 123 4567"), "8031234567");
   assert.throws(() => normalisePhone("123"), /phone/);
+  assert.match(deviceUuid(), /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
 });
 
 test("session dies at 24 hours and not before", () => {
