@@ -308,16 +308,35 @@ export async function createSlip(stake, incoming, book, opts = {}) {
     });
   }
 
-  const combined = round2(legs.reduce((acc, l) => acc * l.price, 1));
+  const pay = opts.pay === "gift" ? "gift" : opts.pay === "money" ? "money" : "";
+  let placed = null;
+  let booked = legs;
+  if (pay) {
+    const session = await readSession("sporty");
+    if (!session) throw new Error("Connect SportyBet first. That login signs itself out after one day.");
+    let gift = null;
+    let current = session;
+    if (pay === "gift") {
+      const got = await loadGifts(session);
+      current = got.session || session;
+      if (got.session && got.session.cookie !== session.cookie) await writeSession(got.session);
+      gift = (got.gifts || []).find((g) => g.id === String(opts.giftId || "")) || null;
+      if (!gift) throw new Error("Pick a gift. This account has none that can cover a bet.");
+    }
+    placed = await placeOrder(current, legs, n, gift);
+    if (placed.session && placed.session.cookie !== current.cookie) await writeSession(placed.session);
+    booked = placed.legs;
+  }
+  const share = await tryShare(booked);
+  const combined = round2(booked.reduce((acc, l) => acc * l.price, 1));
   const potential = round2(n * combined);
   const id = crypto.randomUUID();
-  const share = await tryShare(legs);
 
   await sql`
-    INSERT INTO slips (id, stake, combined_odds, potential, status, share_code, share_url, share_error)
-    VALUES (${id}, ${n}, ${combined}, ${potential}, 'open', ${share.shareCode}, ${share.shareUrl}, ${share.shareError})`;
-  for (let i = 0; i < legs.length; i++) {
-    const l = legs[i];
+    INSERT INTO slips (id, stake, combined_odds, potential, status, share_code, share_url, share_error, order_id, pay_with)
+    VALUES (${id}, ${n}, ${combined}, ${potential}, 'open', ${share.shareCode}, ${share.shareUrl}, ${share.shareError}, ${placed ? placed.orderId : null}, ${pay || null})`;
+  for (let i = 0; i < booked.length; i++) {
+    const l = booked[i];
     await sql`
       INSERT INTO slip_legs (
         slip_id, pos, game_id, event_id, home, away, league, kickoff,

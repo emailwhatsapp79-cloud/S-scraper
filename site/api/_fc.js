@@ -1,11 +1,30 @@
 // Football.com account: one login, place a vFootball slip, gone after a day.
 // The password is hashed in memory for the login call and never stored.
 import { createHash, randomBytes, createCipheriv, createDecipheriv, createPublicKey, publicEncrypt, constants } from "crypto";
-import { fetchEvent, FOOTBALL_BASE } from "./_card.js";
+import { fetchEvent, FOOTBALL_BASE, BASE } from "./_card.js";
 
 export const HOST = "https://www.football.com";
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const SPORT_ID = "sr:sport:202120001";
+
+export const SPORTY = {
+  book: "sporty",
+  host: "https://www.sportybet.com",
+  operId: "2",
+  label: "SportyBet",
+};
+
+function brandOf(book) {
+  return book === "sporty" ? SPORTY : { book: "football", host: HOST, operId: "8", label: "Football.com" };
+}
+
+function labelOf(session) {
+  return session && session.book === "sporty" ? "SportyBet" : "Football.com";
+}
+
+function origin(session, brand) {
+  return (brand && brand.host) || (session && session.host) || HOST;
+}
 
 const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
   "(KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36";
@@ -62,7 +81,7 @@ export function normalisePhone(raw) {
   if (d.startsWith("234") && d.length > 10) d = d.slice(3);
   if (d.startsWith("0")) d = d.slice(1);
   if (!/^([789]\d{9})$/.test(d)) {
-    throw new Error("Use the Football.com phone, like 0803… or 803…");
+    throw new Error("Use the phone, like 0803… or 803…");
   }
   return d;
 }
@@ -119,15 +138,17 @@ export function movedTooFar(booked, live) {
   return b < a - 0.06 && (a - b) / a > 0.08;
 }
 
-function headers(session, extra = {}) {
+function headers(session, extra = {}, brand) {
+  const host = origin(session, brand);
+  const operId = (brand && brand.operId) || (session && session.operId) || "8";
   return {
     "User-Agent": UA,
     Accept: "application/json, text/plain, */*",
-    Origin: HOST,
-    Referer: `${HOST}/ng/m/`,
+    Origin: host,
+    Referer: `${host}/ng/m/`,
     Platform: "wap",
     ClientId: "wap",
-    OperId: "8",
+    OperId: operId,
     ...(session && session.cookie ? { Cookie: session.cookie } : {}),
     ...extra,
   };
@@ -157,11 +178,13 @@ async function readJson(res) {
   try { return JSON.parse(text); } catch { return { message: text.slice(0, 180) }; }
 }
 
-function failMessage(body, fallback, table) {
+function failMessage(body, fallback, table, label) {
   const code = Number(body && body.bizCode);
-  if (table && table[code]) return table[code];
-  if (LOGIN_MSG[code]) return LOGIN_MSG[code];
-  return (body && (body.message || body.innerMsg)) || fallback;
+  let msg;
+  if (table && table[code]) msg = table[code];
+  else if (LOGIN_MSG[code]) msg = LOGIN_MSG[code];
+  else msg = (body && (body.message || body.innerMsg)) || fallback;
+  return label ? String(msg).replaceAll("Football.com", label) : msg;
 }
 
 function orderKey() {
@@ -197,25 +220,26 @@ function aesDecrypt(payload, key) {
   return Buffer.concat([decipher.update(raw.subarray(16)), decipher.final()]).toString("utf8");
 }
 
-async function patronKey() {
-  const res = await fetch(`${HOST}/api/ng/patron/cipher`, {
+async function patronKey(brand) {
+  const res = await fetch(`${brand.host}/api/ng/patron/cipher`, {
     method: "POST",
-    headers: headers(null),
+    headers: headers(null, {}, brand),
   });
   const body = await readJson(res);
   if (body.bizCode !== 10000 || !body.data?.password || !body.data?.ursId) {
-    throw new Error("Football.com did not open a login channel");
+    throw new Error(`${brand.label} did not open a login channel`);
   }
   return { ursId: body.data.ursId, key: Buffer.from(body.data.password, "base64") };
 }
 
-export async function login(phone, password) {
+export async function login(phone, password, book) {
+  const brand = brandOf(book);
   const username = normalisePhone(phone);
   const deviceId = deviceUuid();
   const fingerprint = randomBytes(16).toString("hex");
-  const { ursId, key } = await patronKey();
+  const { ursId, key } = await patronKey(brand);
   const form = `username=${encodeURIComponent(username)}&password=${encodeURIComponent(md5(password))}&keepSignedIn=false`;
-  const res = await fetch(`${HOST}/api/ng/patron/accessToken`, {
+  const res = await fetch(`${brand.host}/api/ng/patron/accessToken`, {
     method: "POST",
     headers: headers(null, {
       "Content-Type": "text/plain",
@@ -223,7 +247,7 @@ export async function login(phone, password) {
       ursId,
       Fingerprint: fingerprint,
       Cookie: `deviceId=${deviceId}`,
-    }),
+    }, brand),
     body: aesEncrypt(form, key),
   });
   const raw = await res.text();
@@ -231,7 +255,7 @@ export async function login(phone, password) {
   try { body = JSON.parse(aesDecrypt(raw, key)); }
   catch { try { body = JSON.parse(raw); } catch { body = { message: raw.slice(0, 180) }; } }
   if (body.bizCode !== 10000) {
-    throw new Error(failMessage(body, "Football.com did not accept that login"));
+    throw new Error(failMessage(body, `${brand.label} did not accept that login`, null, brand.label));
   }
   const data = body.data || {};
   const accessToken = data.accessToken || data.token || "";
@@ -241,10 +265,13 @@ export async function login(phone, password) {
     accessToken, refreshToken, userId, deviceId,
   });
   if (!cookie || (!accessToken && !cookie.includes("accessToken="))) {
-    throw new Error("Football.com signed in but did not return a session");
+    throw new Error(`${brand.label} signed in but did not return a session`);
   }
   const loggedInAt = Date.now();
   return {
+    book: brand.book,
+    host: brand.host,
+    operId: brand.operId,
     loggedInAt,
     expiresAt: loggedInAt + DAY_MS,
     phone: username,
@@ -259,7 +286,7 @@ export async function login(phone, password) {
 export async function logoutRemote(session) {
   if (!session || !session.cookie) return;
   try {
-    await fetch(`${HOST}/api/ng/patron/accessToken/delete`, {
+    await fetch(`${origin(session)}/api/ng/patron/accessToken/delete`, {
       method: "DELETE",
       headers: headers(session),
     });
@@ -267,7 +294,7 @@ export async function logoutRemote(session) {
 }
 
 async function authed(session, path, opts = {}) {
-  const res = await fetch(`${HOST}${path}`, {
+  const res = await fetch(`${origin(session)}${path}`, {
     method: opts.method || "GET",
     headers: headers(session, opts.headers || {}),
     body: opts.body,
@@ -283,14 +310,14 @@ function authDead(status, body) {
 }
 
 export async function refreshSession(session) {
-  if (!sessionAlive(session)) throw new Error("Football.com signed out after one day");
-  const res = await fetch(`${HOST}/api/ng/patron/refreshToken`, {
+  if (!sessionAlive(session)) throw new Error(`${labelOf(session)} signed out after one day`);
+  const res = await fetch(`${origin(session)}/api/ng/patron/refreshToken`, {
     method: "PUT",
     headers: headers(session, { "Content-Type": "application/x-www-form-urlencoded" }),
     body: "keepSignedIn=false",
   });
   const body = await readJson(res);
-  if (body.bizCode !== 10000) throw new Error("Football.com session ended. Connect again.");
+  if (body.bizCode !== 10000) throw new Error(`${labelOf(session)} session ended. Connect again.`);
   const data = body.data || {};
   const accessToken = data.accessToken || session.accessToken;
   const refreshToken = data.refreshToken || session.refreshToken;
@@ -436,11 +463,13 @@ export function quote(ev, selection) {
   return null;
 }
 
-export async function priceLeg(leg) {
-  const ev = await fetchEvent(leg.eventId, {}, FOOTBALL_BASE);
+export async function priceLeg(leg, book) {
+  const sporty = book === "sporty";
+  const label = sporty ? "SportyBet" : "Football.com";
+  const ev = await fetchEvent(leg.eventId, {}, sporty ? BASE : FOOTBALL_BASE);
   const q = quote(ev, leg.selection);
   if (!q) {
-    throw new Error(`${leg.home} v ${leg.away} is not open on Football.com. Refresh the card.`);
+    throw new Error(`${leg.home} v ${leg.away} is not open on ${label}. Refresh the card.`);
   }
   if (movedTooFar(leg.price, q.odds)) {
     throw new Error(
@@ -514,14 +543,14 @@ async function orderChannel(session) {
     { key: orderKey(), padding: constants.RSA_PKCS1_PADDING },
     Buffer.from(plain),
   );
-  const res = await fetch(`${HOST}/api/ng/base/cipher`, {
+  const res = await fetch(`${origin(session)}/api/ng/base/cipher`, {
     method: "POST",
     headers: headers(session, { "Content-Type": "text/plain" }),
     body: wrapped.toString("base64"),
   });
   const body = await readJson(res);
   if (body.bizCode !== 10000 || !body.data?.transId) {
-    throw new Error("Football.com did not open a bet channel");
+    throw new Error(`${labelOf(session)} did not open a bet channel`);
   }
   return { transId: String(body.data.transId), key: aes };
 }
@@ -535,7 +564,7 @@ async function postOrder(session, order) {
   let current = session;
   for (let attempt = 0; attempt < 2; attempt++) {
     const { transId, key } = await orderChannel(current);
-    const res = await fetch(`${HOST}/api/ng/orders/order`, {
+    const res = await fetch(`${origin(current)}/api/ng/orders/order`, {
       method: "POST",
       headers: headers(current, {
         "Content-Type": "application/json;charset=UTF-8",
@@ -551,21 +580,21 @@ async function postOrder(session, order) {
     }
     return { session: current, status: res.status, body };
   }
-  return { session: current, status: 401, body: { message: "Football.com signed out. Connect again." } };
+  return { session: current, status: 401, body: { message: `${labelOf(current)} signed out. Connect again.` } };
 }
 
 export async function placeOrder(session, legs, stake, gift) {
   const priced = [];
-  for (const leg of legs) priced.push(await priceLeg(leg));
+  for (const leg of legs) priced.push(await priceLeg(leg, session && session.book));
   const order = buildOrder(priced, stake, gift);
   const hit = await postOrder(session, order);
   const body = hit.body || {};
   if (body.bizCode !== 10000) {
-    throw new Error(failMessage(body, "Football.com refused the bet", ORDER_MSG));
+    throw new Error(failMessage(body, `${labelOf(session)} refused the bet`, ORDER_MSG, labelOf(session)));
   }
   const data = body.data || {};
   const orderId = String(data.orderId || data.shortId || data.ticketId || "");
-  if (!orderId) throw new Error("Football.com did not return a bet number");
+  if (!orderId) throw new Error(`${labelOf(session)} did not return a bet number`);
   return {
     session: hit.session || session,
     orderId,

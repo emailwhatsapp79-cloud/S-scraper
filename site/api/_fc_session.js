@@ -7,7 +7,11 @@ import {
   login, logoutRemote, loadBalance, loadGifts, sessionAlive, maskPhone, DAY_MS,
 } from "./_fc.js";
 
-const KEY = "fc_session";
+const KEYS = { football: "fc_session", sporty: "sb_session" };
+
+function vaultKey(book) {
+  return book === "sporty" ? KEYS.sporty : KEYS.football;
+}
 
 async function ensure() {
   await sql`CREATE TABLE IF NOT EXISTS vault (
@@ -17,14 +21,15 @@ async function ensure() {
   )`;
 }
 
-async function readSession() {
+async function readSession(book = "football") {
   await ensure();
-  const rows = await sql`SELECT v FROM vault WHERE k = ${KEY}`;
+  const key = vaultKey(book);
+  const rows = await sql`SELECT v FROM vault WHERE k = ${key}`;
   if (!rows[0]) return null;
   const data = open(rows[0].v);
   if (!data || typeof data !== "object") return null;
   if (!sessionAlive(data)) {
-    await sql`DELETE FROM vault WHERE k = ${KEY}`;
+    await sql`DELETE FROM vault WHERE k = ${key}`;
     logoutRemote(data);
     return null;
   }
@@ -33,15 +38,17 @@ async function readSession() {
 
 async function writeSession(session) {
   await ensure();
+  const key = vaultKey(session && session.book);
   const packed = seal(session);
   await sql`
-    INSERT INTO vault (k, v, updated) VALUES (${KEY}, ${packed}, now())
+    INSERT INTO vault (k, v, updated) VALUES (${key}, ${packed}, now())
     ON CONFLICT (k) DO UPDATE SET v = EXCLUDED.v, updated = now()`;
 }
 
-async function clearSession() {
+async function clearSession(book = "football") {
   await ensure();
-  await sql`DELETE FROM vault WHERE k = ${KEY}`;
+  const key = vaultKey(book);
+  await sql`DELETE FROM vault WHERE k = ${key}`;
 }
 
 function view(session, extra = {}) {
@@ -60,20 +67,21 @@ function view(session, extra = {}) {
   };
 }
 
-export default async function handler(req, res) {
+export async function handle(req, res, book = "football") {
   if (guard(req, res)) return;
   res.setHeader("Cache-Control", "no-store");
+  const label = book === "sporty" ? "SportyBet" : "Football.com";
   try {
     if (req.method === "DELETE") {
-      const cur = await readSession();
+      const cur = await readSession(book);
       if (cur) await logoutRemote(cur);
-      await clearSession();
+      await clearSession(book);
       return res.status(200).json(view(null, { reason: "signed out" }));
     }
 
     if (req.method === "POST") {
       const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
-      const session = await login(body.phone, body.password);
+      const session = await login(body.phone, body.password, book);
       await writeSession(session);
       let balance = null;
       let gifts = [];
@@ -90,7 +98,7 @@ export default async function handler(req, res) {
 
     if (req.method !== "GET") return res.status(405).json({ ok: false, error: "GET, POST or DELETE" });
 
-    const session = await readSession();
+    const session = await readSession(book);
     if (!session) return res.status(200).json(view(null));
     let balance = null;
     let gifts = [];
@@ -106,8 +114,12 @@ export default async function handler(req, res) {
     }
     return res.status(200).json(view(session, { balance, gifts }));
   } catch (e) {
-    res.status(200).json({ ok: false, error: String(e.message || e) });
+    res.status(200).json({ ok: false, error: String(e.message || e).replaceAll("Football.com", label) });
   }
+}
+
+export default function handler(req, res) {
+  return handle(req, res, "football");
 }
 
 export { readSession, writeSession, clearSession };

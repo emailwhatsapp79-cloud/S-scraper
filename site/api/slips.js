@@ -4,7 +4,7 @@
 import { cors } from "./_db.js";
 import { listSlips, createSlip, refreshSlips, reshareSlip } from "./_slips.js";
 import { guard } from "./_gate.js";
-import account from "./_fc_session.js";
+import account, { handle as accountHandle } from "./_fc_session.js";
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
@@ -12,7 +12,9 @@ export default async function handler(req, res) {
   const started = Date.now();
   try {
     const url = new URL(req.url || "/", "http://x");
-    if (url.searchParams.get("account") === "1") return account(req, res);
+    const which = url.searchParams.get("account");
+    if (which === "1" || which === "football") return account(req, res);
+    if (which === "sporty") return accountHandle(req, res, "sporty");
 
     if (req.method === "POST") {
       const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});

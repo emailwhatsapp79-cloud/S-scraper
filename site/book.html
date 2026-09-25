@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/app.css?v=fc15">
+<link rel="stylesheet" href="/css/app.css?v=fc16">
 </head>
 <body>
 <main class="wrap">
@@ -24,20 +24,22 @@
     <div class="skel"></div>
   </div>
 </main>
-<script src="/js/core.js?v=fc15"></script>
+<script src="/js/core.js?v=fc16"></script>
 <script>
 (function () {
   var V = window.VFS;
   V.injectChrome("book");
   var stake = 100;
-  var pay = "money";
-  var giftId = "";
-  var acct = { connected: false };
+  var pay = { football: "money", sporty: "money" };
+  var giftId = { football: "", sporty: "" };
+  var acct = { football: { connected: false }, sporty: { connected: false } };
   try {
     var s = parseFloat(localStorage.getItem("vfs_stake"));
     if (isFinite(s) && s > 0) stake = s;
     var savedPay = localStorage.getItem("vfs_pay");
-    if (savedPay === "gift" || savedPay === "money") pay = savedPay;
+    if (savedPay === "gift" || savedPay === "money") pay.football = savedPay;
+    var savedSb = localStorage.getItem("vfs_pay_sb");
+    if (savedSb === "gift" || savedSb === "money") pay.sporty = savedSb;
   } catch (e) {}
 
   function naira(n) {
@@ -51,12 +53,15 @@
     return m + "m left";
   }
 
-  function loadAcct() {
-    return fetch("/api/slips?account=1").then(function (r) { return r.json(); }).then(function (d) {
-      acct = d && d.ok !== false ? d : { connected: false, error: d && d.error };
-      if (acct.gifts && acct.gifts.length && !giftId) giftId = acct.gifts[0].id;
-      renderDraft();
-    }).catch(function () {});
+  function loadAcct(which) {
+    var books = which ? [which] : ["football", "sporty"];
+    return Promise.all(books.map(function (key) {
+      var q = key === "sporty" ? "sporty" : "1";
+      return fetch("/api/slips?account=" + q).then(function (r) { return r.json(); }).then(function (d) {
+        acct[key] = d && d.ok !== false ? d : { connected: false, error: d && d.error };
+        if (acct[key].gifts && acct[key].gifts.length && !giftId[key]) giftId[key] = acct[key].gifts[0].id;
+      }).catch(function () {});
+    })).then(function () { renderDraft(); });
   }
 
   function renderDraft() {
@@ -68,32 +73,36 @@
       var empty = V.el("div", "empty");
       empty.innerHTML = "<b>Slip is empty.</b><br>On Football.com, tap Home or Draw or Draw or Away.";
       box.appendChild(empty);
-      if (!acct.connected) box.appendChild(accountBox());
       return;
     }
     if (foot.length) paintSlip(box, foot, "football", "Football.com", function (legs) { V.saveBookFc(legs); });
     if (sporty.length) paintSlip(box, sporty, "", "SportyBet", function (legs) { V.saveBook(legs); });
   }
 
-  function accountBox() {
+  function accountBox(key, name) {
+    var site = acct[key] || { connected: false };
+    var q = key === "sporty" ? "sporty" : "1";
     var box = V.el("div", "acct");
-    if (acct.connected) {
+    if (site.connected) {
       var line = V.el("div", "row1");
-      line.appendChild(V.el("b", null, acct.phone || "Football.com"));
-      line.appendChild(V.el("span", "sel", leftText(acct.remainingMs || 0)));
+      line.appendChild(V.el("b", null, site.phone || name));
+      line.appendChild(V.el("span", "sel", leftText(site.remainingMs || 0)));
       box.appendChild(line);
       var bits = [];
-      if (acct.balance != null) bits.push("Money " + naira(acct.balance));
-      bits.push((acct.gifts || []).length + " gift" + ((acct.gifts || []).length === 1 ? "" : "s"));
+      if (site.balance != null) bits.push("Money " + naira(site.balance));
+      bits.push((site.gifts || []).length + " gift" + ((site.gifts || []).length === 1 ? "" : "s"));
       box.appendChild(V.el("p", "note", bits.join(" · ") + ". Signs out on its own after one day."));
       var out = V.el("button", "rm", "Sign out now");
       out.addEventListener("click", function () {
-        fetch("/api/slips?account=1", { method: "DELETE" }).then(function () { acct = { connected: false }; renderDraft(); });
+        fetch("/api/slips?account=" + q, { method: "DELETE" }).then(function () {
+          acct[key] = { connected: false };
+          renderDraft();
+        });
       });
       box.appendChild(out);
       return box;
     }
-    box.appendChild(V.el("b", null, "Football.com account"));
+    box.appendChild(V.el("b", null, name + " account"));
     box.appendChild(V.el("p", "note", "Used only to place this slip. The password is not saved. The login ends after one day."));
     var phone = document.createElement("input");
     phone.type = "tel"; phone.placeholder = "Phone, 080…"; phone.autocomplete = "username";
@@ -107,15 +116,15 @@
     go.addEventListener("click", function () {
       go.disabled = true;
       go.textContent = "Connecting…";
-      fetch("/api/slips?account=1", {
+      fetch("/api/slips?account=" + q, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ phone: phone.value, password: pass.value })
       }).then(function (r) { return r.json(); }).then(function (d) {
         if (!d.ok || !d.connected) throw new Error(d.error || "Could not connect");
         pass.value = "";
-        acct = d;
-        if (acct.gifts && acct.gifts.length) giftId = acct.gifts[0].id;
+        acct[key] = d;
+        if (acct[key].gifts && acct[key].gifts.length) giftId[key] = acct[key].gifts[0].id;
         renderDraft();
       }).catch(function (e) {
         go.disabled = false;
@@ -159,7 +168,9 @@
 
   function paintSlip(box, legs, book, name, save) {
     box.appendChild(V.el("h2", "slips-h", name));
-    if (book === "football") box.appendChild(accountBox());
+    var key = book === "football" ? "football" : "sporty";
+    var site = acct[key] || { connected: false };
+    box.appendChild(accountBox(key, name));
     var odds = V.acca(legs.map(function (l) { return l.price; }));
     var ret = Math.round(stake * odds * 100) / 100;
     legs.forEach(function (l, i) {
@@ -199,23 +210,22 @@
     money.appendChild(a); money.appendChild(b);
     box.appendChild(money);
 
-    if (book === "football") {
-      var picks = V.el("div", "paypick");
+    var picks = V.el("div", "paypick");
       ["money", "gift"].forEach(function (kind) {
-        var btn = V.el("button", "chip" + (pay === kind ? " on" : ""), kind === "money" ? "Money" : "Gift");
+        var btn = V.el("button", "chip" + (pay[key] === kind ? " on" : ""), kind === "money" ? "Money" : "Gift");
         btn.type = "button";
         btn.addEventListener("click", function () {
-          pay = kind;
-          try { localStorage.setItem("vfs_pay", pay); } catch (e) {}
+          pay[key] = kind;
+          try { localStorage.setItem(key === "sporty" ? "vfs_pay_sb" : "vfs_pay", pay[key]); } catch (e) {}
           renderDraft();
         });
         picks.appendChild(btn);
       });
       box.appendChild(picks);
-      if (pay === "gift") {
-        var gifts = (acct.gifts || []);
+      if (pay[key] === "gift") {
+        var gifts = (site.gifts || []);
         if (!gifts.length) {
-          box.appendChild(V.el("p", "note", acct.connected ? "No gift on this account." : "Connect to see gifts."));
+          box.appendChild(V.el("p", "note", site.connected ? "No gift on this account." : "Connect to see gifts."));
         } else {
           var sel = document.createElement("select");
           sel.style.width = "100%";
@@ -225,24 +235,24 @@
             var o = document.createElement("option");
             o.value = g.id;
             o.textContent = g.name + " · " + naira(g.amount);
-            if (g.id === giftId) o.selected = true;
+            if (g.id === giftId[key]) o.selected = true;
             sel.appendChild(o);
           });
-          giftId = sel.value;
-          sel.addEventListener("change", function () { giftId = sel.value; });
+          giftId[key] = sel.value;
+          sel.addEventListener("change", function () { giftId[key] = sel.value; });
           box.appendChild(sel);
         }
       }
-      var go = V.el("button", "primary", acct.connected ? ("Place " + naira(stake) + " · " + pay) : "Connect Football.com to place");
-      go.disabled = !acct.connected || (pay === "gift" && !(acct.gifts || []).length);
+      var go = V.el("button", "primary", site.connected ? ("Place " + naira(stake) + " · " + pay[key]) : ("Connect " + name + " to place"));
+      go.disabled = !site.connected || (pay[key] === "gift" && !(site.gifts || []).length);
       go.addEventListener("click", function () {
         go.disabled = true;
         go.textContent = "Placing…";
-        sendSlip(legs, book, { pay: pay, giftId: giftId }).then(function (d) {
+        sendSlip(legs, book, { pay: pay[key], giftId: giftId[key] }).then(function (d) {
           save([]);
           renderDraft();
           loadSlips();
-          loadAcct();
+          loadAcct(key);
           if (d.slip && d.slip.orderId) {
             try { navigator.clipboard.writeText(d.slip.orderId); } catch (e) {}
           }
@@ -256,7 +266,7 @@
       linkOnly.type = "button";
       linkOnly.addEventListener("click", function () {
         linkOnly.disabled = true;
-        linkOnly.textContent = "Asking Football.com…";
+        linkOnly.textContent = "Asking " + name + "…";
         sendSlip(legs, book, {}).then(function (d) {
           save([]);
           renderDraft();
@@ -270,28 +280,7 @@
         });
       });
       box.appendChild(linkOnly);
-      box.appendChild(V.el("p", "note", "Place sends the stake to your Football.com balance or gift. A load link uses football.com/ng/m?shareCode= so a reload still finds it."));
-      return;
-    }
-
-    var codeBtn = V.el("button", "primary", "Book · get " + name + " code");
-    codeBtn.addEventListener("click", function () {
-      codeBtn.disabled = true;
-      codeBtn.textContent = "Booking…";
-      sendSlip(legs, book, {}).then(function (d) {
-        save([]);
-        renderDraft();
-        loadSlips();
-        if (d.slip && d.slip.shareCode) {
-          try { navigator.clipboard.writeText(d.slip.shareCode); } catch (e) {}
-        }
-      }).catch(function (e) {
-        codeBtn.disabled = false;
-        codeBtn.textContent = e.message;
-      });
-    });
-    box.appendChild(codeBtn);
-    box.appendChild(V.el("p", "note", "No login, no stake placed. Combined odds " + odds.toFixed(2) + " · " + legs.length + " legs. The code loads this slip on " + name + "."));
+      box.appendChild(V.el("p", "note", "Place sends the stake to your " + name + " balance or gift. Load link only makes a code and does not stake."));
   }
 
   function badge(status) {

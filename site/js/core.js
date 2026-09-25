@@ -1582,7 +1582,8 @@
 
     if (sp.orderId) {
       var placed = el("div", "codebox");
-      placed.appendChild(el("div", "mkt-t", "Placed on Football.com · " + (sp.payWith === "gift" ? "gift" : "money")));
+      var placedName = (sp.legs || []).some(function (l) { return l.sport === "fc"; }) ? "Football.com" : "SportyBet";
+      placed.appendChild(el("div", "mkt-t", "Placed on " + placedName + " · " + (sp.payWith === "gift" ? "gift" : "money")));
       var prow = el("div", "row1");
       prow.appendChild(el("span", "gid", sp.orderId));
       prow.appendChild(copyBtn(sp.orderId, "Copy"));
