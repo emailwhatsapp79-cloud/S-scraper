@@ -209,7 +209,12 @@ function refs(market) {
     const id = String(o.id || o.outcomeId || "");
     const p = parseFloat(o.odds);
     if (!id || !isFinite(p)) continue;
-    by[o.desc] = { marketId: String(market.id || market.marketId || ""), outcomeId: id, odds: p };
+    by[o.desc] = {
+      marketId: String(market.id || market.marketId || ""),
+      outcomeId: id,
+      odds: p,
+      probability: o.probability != null ? String(o.probability) : "",
+    };
   }
   return by;
 }

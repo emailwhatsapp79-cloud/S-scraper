@@ -3,6 +3,8 @@ import { sql, rowToGame } from "./_db.js";
 import { fetchEvent, scoreOf, FOOTBALL_BASE } from "./_card.js";
 import { shareSelections } from "./_share.js";
 import { notifyBooked } from "./_push.js";
+import { placeOrder, loadGifts } from "./_fc.js";
+import { readSession, writeSession } from "./fc.js";
 
 let schemaReady = false;
 
@@ -47,6 +49,8 @@ export async function ensureSlips() {
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_code TEXT`;
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_url TEXT`;
   await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS share_error TEXT`;
+  await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS order_id TEXT`;
+  await sql`ALTER TABLE slips ADD COLUMN IF NOT EXISTS pay_with TEXT`;
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS sport TEXT`;
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS market_id TEXT`;
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS outcome_id TEXT`;
@@ -126,6 +130,8 @@ function shapeSlip(s) {
     shareCode: s.share_code || null,
     shareUrl: s.share_url || null,
     shareError: s.share_error || null,
+    orderId: s.order_id || null,
+    payWith: s.pay_with || null,
   };
 }
 
@@ -176,7 +182,7 @@ function ttRowToGame(r) {
   };
 }
 
-export async function createSlip(stake, incoming, book) {
+export async function createSlip(stake, incoming, book, opts = {}) {
   await ensureSlips();
   const raw = Array.isArray(incoming) ? incoming : [];
   if (!raw.length) throw new Error("Pick at least one game");
@@ -203,19 +209,39 @@ export async function createSlip(stake, incoming, book) {
         price,
         marketId: row.marketId ? String(row.marketId) : null,
         outcomeId: row.outcomeId ? String(row.outcomeId) : null,
+        probability: row.probability ? String(row.probability) : "",
+        product: row.product ? String(row.product) : "3",
+        sportId: row.sportId || null,
       });
     }
-    const combined = round2(legs.reduce((acc, l) => acc * l.price, 1));
-    const potential = round2(n * combined);
+    const pay = opts.pay === "gift" ? "gift" : opts.pay === "money" ? "money" : "";
+    let placed = null;
+    let booked = legs;
+    if (pay) {
+      const session = await readSession();
+      if (!session) throw new Error("Connect Football.com first. That login signs itself out after one day.");
+      let gift = null;
+      let current = session;
+      if (pay === "gift") {
+        const got = await loadGifts(session);
+        current = got.session || session;
+        if (got.session && got.session.cookie !== session.cookie) await writeSession(got.session);
+        gift = (got.gifts || []).find((g) => g.id === String(opts.giftId || "")) || null;
+        if (!gift) throw new Error("Pick a gift. This account has none that can cover a bet.");
+      }
+      placed = await placeOrder(current, legs, n, gift);
+      if (placed.session && placed.session.cookie !== current.cookie) await writeSession(placed.session);
+      booked = placed.legs;
+    }
+    const share = await tryShare(booked);
     const id = crypto.randomUUID();
-    // Share is best-effort (same as the SportyBet path): if the code fails we
-    // still save the slip and surface the error, rather than blocking the book.
-    const share = await tryShare(legs);
+    const combined = round2(booked.reduce((acc, l) => acc * l.price, 1));
+    const potential = round2(n * combined);
     await sql`
-      INSERT INTO slips (id, stake, combined_odds, potential, status, share_code, share_url, share_error)
-      VALUES (${id}, ${n}, ${combined}, ${potential}, 'open', ${share.shareCode}, ${share.shareUrl}, ${share.shareError})`;
-    for (let i = 0; i < legs.length; i++) {
-      const l = legs[i];
+      INSERT INTO slips (id, stake, combined_odds, potential, status, share_code, share_url, share_error, order_id, pay_with)
+      VALUES (${id}, ${n}, ${combined}, ${potential}, 'open', ${share.shareCode}, ${share.shareUrl}, ${share.shareError}, ${placed ? placed.orderId : null}, ${pay || null})`;
+    for (let i = 0; i < booked.length; i++) {
+      const l = booked[i];
       await sql`
         INSERT INTO slip_legs (
           slip_id, pos, game_id, event_id, home, away, league, kickoff,

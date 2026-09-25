@@ -673,6 +673,20 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
   font-variant-numeric: tabular-nums;
 }
 .money .read { display: flex; align-items: center }
+.acct input, .acct select {
+  min-height: 44px;
+  width: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  border: 0;
+  box-shadow: var(--shadow);
+  border-radius: var(--r2);
+  padding: 0 12px;
+  font: inherit;
+}
+.paypick { display: flex; gap: 8px; margin: 0 0 12px; }
+.paypick .chip { flex: 1; text-align: center; }
+.ghost.wide { width: 100%; margin-top: 8px; }
 .primary {
   width: 100%;
   min-height: 48px;

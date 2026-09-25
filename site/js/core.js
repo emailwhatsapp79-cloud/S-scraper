@@ -143,7 +143,8 @@
       price: Number(price),
       source: g.source || "",
       marketId: g.selectionRefs && g.selectionRefs[selection] ? g.selectionRefs[selection].marketId : null,
-      outcomeId: g.selectionRefs && g.selectionRefs[selection] ? g.selectionRefs[selection].outcomeId : null
+      outcomeId: g.selectionRefs && g.selectionRefs[selection] ? g.selectionRefs[selection].outcomeId : null,
+      probability: g.selectionRefs && g.selectionRefs[selection] ? (g.selectionRefs[selection].probability || "") : ""
     };
   }
 
@@ -470,7 +471,8 @@
     return out;
   }
 
-  function bookLegs(legs, stake) {
+  function bookLegs(legs, stake, extra) {
+    extra = extra || {};
     var n = Number(stake);
     if (!(n > 0)) n = stakeOf();
     return fetch("/api/slips", {
@@ -479,6 +481,8 @@
       body: JSON.stringify({
         stake: n,
         book: (legs || []).some(function (l) { return l.source === "football"; }) ? "football" : "",
+        pay: extra.pay || "",
+        giftId: extra.giftId || "",
         legs: (legs || []).map(function (l) {
           return {
             gameId: l.id || l.gameId,
@@ -489,7 +493,8 @@
             label: l.label || "",
             source: l.source || "",
             marketId: l.marketId || null,
-            outcomeId: l.outcomeId || null
+            outcomeId: l.outcomeId || null,
+            probability: l.probability || ""
           };
         })
       })
@@ -649,20 +654,32 @@
     return box;
   }
 
-  function copyBtn(id) {
-    var b = el("button", "copy", "Copy ID");
+  function copyBtn(id, label) {
+    var word = label || "Copy ID";
+    var b = el("button", "copy", word);
     b.addEventListener("click", function (e) {
       e.stopPropagation();
       var done = function () {
         b.textContent = "Copied";
         b.classList.add("done");
-        setTimeout(function () { b.textContent = "Copy ID"; b.classList.remove("done"); }, 1400);
+        setTimeout(function () { b.textContent = word; b.classList.remove("done"); }, 1400);
       };
       if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(id).then(done, function () { b.textContent = id; });
-      } else { b.textContent = id; }
+        navigator.clipboard.writeText(String(id)).then(done, function () { b.textContent = String(id); });
+      } else { b.textContent = String(id); }
     });
     return b;
+  }
+
+  function fcMatchUrl(g) {
+    if (!g || !g.eventId) return "";
+    var league = String(g.league || "");
+    var cat = (league.split("·")[0] || league.split("-")[0] || "England").trim() || "England";
+    var home = String(g.home || "Home").trim();
+    var away = String(g.away || "Away").trim();
+    var seg = function (s) { return encodeURIComponent(s).replace(/%2D/gi, "-"); };
+    return "https://www.football.com/ng/m/n/sport/vFootball/" +
+      seg(cat) + "/Virtual/" + seg(home) + "-vs-" + seg(away) + "/" + g.eventId;
   }
 
   function market(title, pairs, favKey, pick) {
@@ -713,7 +730,8 @@
     var box = el("div", "game" + (r.verdict === "show" ? " match" : r.verdict === "hold" ? " hold" : "") + (picked ? " picked" : ""));
     var row = el("div", "row1");
     if (opts.n) row.appendChild(el("span", "idx", String(opts.n)));
-    row.appendChild(el("span", "gid", g.id));
+    var matchUrl = g.source === "football" ? fcMatchUrl(g) : "";
+    row.appendChild(el("span", "gid", matchUrl ? "Match" : g.id));
     var who = el("div", "who");
     who.appendChild(teamsBlock(g.home, g.away));
     var meta = el("div", "meta");
@@ -729,7 +747,19 @@
     }
     who.appendChild(meta);
     row.appendChild(who);
-    row.appendChild(copyBtn(g.id));
+    if (matchUrl) {
+      var open = document.createElement("a");
+      open.className = "copy";
+      open.href = matchUrl;
+      open.target = "_blank";
+      open.rel = "noopener";
+      open.textContent = "Open";
+      open.addEventListener("click", function (e) { e.stopPropagation(); });
+      row.appendChild(open);
+      row.appendChild(copyBtn(matchUrl, "Copy link"));
+    } else {
+      row.appendChild(copyBtn(g.id));
+    }
     box.appendChild(row);
     if (!opts.compact) {
       var leg = g.source === "football"
@@ -1574,6 +1604,16 @@
     h.appendChild(tot);
     card.appendChild(h);
 
+    if (sp.orderId) {
+      var placed = el("div", "codebox");
+      placed.appendChild(el("div", "mkt-t", "Placed on Football.com · " + (sp.payWith === "gift" ? "gift" : "money")));
+      var prow = el("div", "row1");
+      prow.appendChild(el("span", "gid", sp.orderId));
+      prow.appendChild(copyBtn(sp.orderId, "Copy"));
+      placed.appendChild(prow);
+      card.appendChild(placed);
+    }
+
     if (sp.shareCode) {
       var football = /football\.com/i.test(String(sp.shareUrl || "")) ||
         (sp.legs || []).some(function (l) { return l.sport === "fc"; });
@@ -1599,9 +1639,11 @@
       if (sp.shareUrl || sp.shareCode) {
         var link = document.createElement("a");
         var host = football ? "https://www.football.com" : "https://www.sportybet.com";
-        link.href = sp.shareUrl
-          ? String(sp.shareUrl).replace(/^http:\/\//, "https://")
-          : host + "/ng/?shareCode=" + encodeURIComponent(sp.shareCode);
+        link.href = football
+          ? host + "/ng/m?shareCode=" + encodeURIComponent(sp.shareCode)
+          : (sp.shareUrl
+            ? String(sp.shareUrl).replace(/^http:\/\//, "https://")
+            : host + "/ng/?shareCode=" + encodeURIComponent(sp.shareCode));
         link.textContent = "Open on " + bookName;
         link.target = "_blank";
         link.rel = "noopener";

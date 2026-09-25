@@ -12,7 +12,9 @@ export default async function handler(req, res) {
       const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
       const slip = body.slipId
         ? await reshareSlip(body.slipId)
-        : await createSlip(body.stake, body.legs || body.gameIds, body.book);
+        : await createSlip(body.stake, body.legs || body.gameIds, body.book, {
+          pay: body.pay, giftId: body.giftId,
+        });
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ ok: true, tookMs: Date.now() - started, slip });
     }

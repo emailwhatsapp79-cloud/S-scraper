@@ -7,7 +7,7 @@ const SALT = "vfs-gate-v1";
 const PIN_HASH = "a1130bfe4270bc67bed0b71f0ae687df544ee38a5b342a468b15549612e9629f";
 const SECRET = process.env.GATE_SECRET || process.env.CRON_SECRET || "vfs-dev-only";
 export const TTL_MS = 30 * 60 * 1000;
-export const LOCK_MINS = [30, 60, 120, 180, 240, 300, 360];
+export const LOCK_MINS = [30, 60, 120, 180, 240, 300, 360, 1440];
 
 export function clampLockMin(n) {
   const m = Number(n);
