@@ -1,6 +1,6 @@
 // Football.com account: one login, place a vFootball slip, gone after a day.
 // The password is hashed in memory for the login call and never stored.
-import { createHash, randomBytes, createCipheriv, createDecipheriv } from "crypto";
+import { createHash, randomBytes, createCipheriv, createDecipheriv, createPublicKey, publicEncrypt, constants } from "crypto";
 import { fetchEvent, FOOTBALL_BASE } from "./_card.js";
 
 export const HOST = "https://www.football.com";
@@ -28,6 +28,20 @@ const LOGIN_MSG = {
   12400: "Football.com is asking for a text code. Turn off two-factor there, then connect again.",
   19000: "Football.com rejected that phone or password.",
 };
+
+const ORDER_MSG = {
+  4100: "That stake is outside what Football.com allows.",
+  4200: "Not enough money on Football.com for this stake.",
+  4210: "That gift cannot be used on this bet.",
+  4300: "Football.com refused the bet.",
+  4510: "The price changed. Refresh, then place again.",
+  4650: "A market just closed. Refresh the card.",
+  19000: "Football.com refused the shape of this bet.",
+  19999: "Football.com could not read the bet. Try again.",
+};
+
+// Their place-bet call is RSA-wrapped. Plain JSON is refused once you are logged in.
+const ORDER_RSA_N = "c207d6f2db3fa03c7545b7e73d97550f30ef5c3019c4ba5f303fe7b1d2059c22eebde8a8cbd87310e91f84f7ecf697d365dfdb7ad5522b6fb185ea33281cf456ed845320a2e59cbaf507b1741554a478f7c21e06996018a20f00b0baffc65aeeb3b36193f6992b0f240ce84bce3bc07a4187d5ba5c5543884a6b624aab0507cf";
 
 export function md5(s) {
   return createHash("md5").update(String(s)).digest("hex");
@@ -143,10 +157,30 @@ async function readJson(res) {
   try { return JSON.parse(text); } catch { return { message: text.slice(0, 180) }; }
 }
 
-function failMessage(body, fallback) {
+function failMessage(body, fallback, table) {
   const code = Number(body && body.bizCode);
+  if (table && table[code]) return table[code];
   if (LOGIN_MSG[code]) return LOGIN_MSG[code];
   return (body && (body.message || body.innerMsg)) || fallback;
+}
+
+function orderKey() {
+  const n = Buffer.from(ORDER_RSA_N, "hex");
+  return createPublicKey({
+    key: { kty: "RSA", n: n.toString("base64url"), e: Buffer.from([1, 0, 1]).toString("base64url") },
+    format: "jwk",
+  });
+}
+
+// Prematch is 1, live is 2, a mix is 3. Same split Football.com uses.
+export function orderSubBiz(legs) {
+  let live = 0;
+  let pre = 0;
+  for (const l of legs || []) {
+    if (Number(l.product) === 1) live = 2;
+    else pre = 1;
+  }
+  return live + pre || 1;
 }
 
 function aesEncrypt(plain, key) {
@@ -463,7 +497,7 @@ export function buildOrder(legs, stake, gift) {
   const order = {
     bizType: 1,
     orderType: multiple ? 2 : 1,
-    subBizType: 1,
+    subBizType: orderSubBiz(list),
     paymentType: 0,
     actualPayAmount: payUnits,
     isBonusFactor: false,
@@ -473,18 +507,61 @@ export function buildOrder(legs, stake, gift) {
   return order;
 }
 
+async function orderChannel(session) {
+  const aes = randomBytes(16);
+  const plain = `password=${encodeURIComponent(aes.toString("base64"))}`;
+  const wrapped = publicEncrypt(
+    { key: orderKey(), padding: constants.RSA_PKCS1_PADDING },
+    Buffer.from(plain),
+  );
+  const res = await fetch(`${HOST}/api/ng/base/cipher`, {
+    method: "POST",
+    headers: headers(session, { "Content-Type": "text/plain" }),
+    body: wrapped.toString("base64"),
+  });
+  const body = await readJson(res);
+  if (body.bizCode !== 10000 || !body.data?.transId) {
+    throw new Error("Football.com did not open a bet channel");
+  }
+  return { transId: String(body.data.transId), key: aes };
+}
+
+function readOrderBody(text, key) {
+  try { return JSON.parse(aesDecrypt(text, key)); }
+  catch { try { return JSON.parse(text); } catch { return { message: String(text || "").slice(0, 180) }; } }
+}
+
+async function postOrder(session, order) {
+  let current = session;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { transId, key } = await orderChannel(current);
+    const res = await fetch(`${HOST}/api/ng/orders/order`, {
+      method: "POST",
+      headers: headers(current, {
+        "Content-Type": "application/json;charset=UTF-8",
+        "encryption-type": "2",
+        transId,
+      }),
+      body: aesEncrypt(JSON.stringify(order), key),
+    });
+    const body = readOrderBody(await res.text(), key);
+    if (attempt === 0 && authDead(res.status, body)) {
+      current = await refreshSession(current);
+      continue;
+    }
+    return { session: current, status: res.status, body };
+  }
+  return { session: current, status: 401, body: { message: "Football.com signed out. Connect again." } };
+}
+
 export async function placeOrder(session, legs, stake, gift) {
   const priced = [];
   for (const leg of legs) priced.push(await priceLeg(leg));
   const order = buildOrder(priced, stake, gift);
-  const hit = await withSession(session, "/api/ng/orders/order", {
-    method: "POST",
-    headers: { "Content-Type": "application/json;charset=UTF-8" },
-    body: JSON.stringify(order),
-  });
+  const hit = await postOrder(session, order);
   const body = hit.body || {};
   if (body.bizCode !== 10000) {
-    throw new Error(failMessage(body, "Football.com refused the bet"));
+    throw new Error(failMessage(body, "Football.com refused the bet", ORDER_MSG));
   }
   const data = body.data || {};
   const orderId = String(data.orderId || data.shortId || data.ticketId || "");

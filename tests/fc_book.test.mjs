@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   normalisePhone, sessionAlive, DAY_MS, buildOrder, movedTooFar,
-  fcMatchUrl, sharePageUrl, selectionId, fromUnits, deviceUuid,
+  fcMatchUrl, sharePageUrl, selectionId, fromUnits, deviceUuid, orderSubBiz,
 } from "../site/api/_fc.js";
 
 test("phone drops 234 and the leading zero", () => {
@@ -37,6 +37,9 @@ test("money order uses live units and a gift covers the stake", () => {
   }];
   const cash = buildOrder(legs, 100, null);
   assert.equal(cash.actualPayAmount, 1_000_000);
+  assert.equal(cash.subBizType, 1);
+  assert.equal(orderSubBiz([{ product: "1" }]), 2);
+  assert.equal(orderSubBiz([{ product: "1" }, { product: "3" }]), 3);
   assert.equal(cash.orderType, 1);
   assert.equal(cash.favor, undefined);
   assert.equal(cash.ticket.selections[0].id, selectionId("3", "sr:sport:202120001", "10", "9"));
