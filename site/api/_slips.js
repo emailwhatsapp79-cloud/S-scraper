@@ -340,7 +340,7 @@ export async function createSlip(stake, incoming, book, opts = {}) {
     await sql`
       INSERT INTO slip_legs (
         slip_id, pos, game_id, event_id, home, away, league, kickoff,
-        selection, selection_label, price, sport)
+        selection, selection_label, price, sport, market_id, outcome_id)
       VALUES (
         ${id}, ${i}, ${l.gameId}, ${l.eventId}, ${l.home}, ${l.away}, ${l.league}, ${l.kickoff},
         ${l.selection}, ${l.label}, ${l.price}, ${l.sport || "fb"}, ${l.marketId || null}, ${l.outcomeId || null})`;
