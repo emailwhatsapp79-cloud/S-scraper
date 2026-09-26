@@ -1585,7 +1585,7 @@
       var placedName = (sp.legs || []).some(function (l) { return l.sport === "fc"; }) ? "Football.com" : "SportyBet";
       placed.appendChild(el("div", "mkt-t", "Placed on " + placedName + " · " + (sp.payWith === "gift" ? "gift" : "money")));
       var prow = el("div", "row1");
-      prow.appendChild(el("span", "gid", sp.orderId));
+      prow.appendChild(el("span", "gid ord", sp.orderId));
       prow.appendChild(copyBtn(sp.orderId, "Copy"));
       placed.appendChild(prow);
       card.appendChild(placed);
