@@ -6,6 +6,7 @@ import { fetchEvent, FOOTBALL_BASE, BASE } from "./_card.js";
 export const HOST = "https://www.football.com";
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const SPORT_ID = "sr:sport:202120001";
+export const TT_SPORT = "sr:sport:20";
 
 export const SPORTY = {
   book: "sporty",
@@ -429,24 +430,51 @@ export async function loadGifts(session) {
   return { session: hit.session || session, gifts: gifts.filter((g) => g.id) };
 }
 
+function isTableLeg(leg) {
+  if (!leg) return false;
+  if (leg.sport === "tt" || String(leg.marketId || "") === "186") return true;
+  return /setka|elite series|liga pro|tt cup|challenger|table tennis/i.test(String(leg.league || ""));
+}
+
+function isTableEvent(ev) {
+  if (!ev) return false;
+  if (ev.sport && ev.sport.id === TT_SPORT) return true;
+  return (ev.markets || []).some((m) => String(m.id) === "186" || /^winner$/i.test(String(m.desc || "")));
+}
+
 export function quote(ev, selection) {
-  const want = WANT[String(selection || "")];
+  const sel = String(selection || "");
+  const tt = isTableEvent(ev);
+  const want = tt
+    ? (sel === "1" ? ["Winner", "Home"] : sel === "2" ? ["Winner", "Away"] : null)
+    : WANT[sel];
   if (!ev || !want) return null;
   const [desc, outcome] = want;
-  const markets = (ev.markets || []).filter((m) => String(m.desc || "") === desc);
+  const markets = (ev.markets || []).filter((m) => (
+    tt
+      ? (String(m.id) === "186" || /^winner$/i.test(String(m.desc || "")))
+      : String(m.desc || "") === desc
+  ));
   markets.sort((a, b) => {
     const liveA = a.product === 1 ? 1 : 0;
     const liveB = b.product === 1 ? 1 : 0;
-    const started = /^(H1|H2|HT|LIVE)/i.test(String(ev.matchStatus || ""));
+    const started = /^(H1|H2|HT|LIVE|Playing|set\s)/i.test(String(ev.matchStatus || ""));
     if (started && liveA !== liveB) return liveB - liveA;
     if (!started && liveA !== liveB) return liveA - liveB;
     return (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0);
   });
   for (const m of markets) {
-    const o = (m.outcomes || []).find((x) => String(x.desc || "") === outcome);
+    const o = (m.outcomes || []).find((x) => {
+      const id = String(x.id || x.outcomeId || "");
+      if (tt) {
+        if (outcome === "Home") return /^home$/i.test(String(x.desc || "")) || id === "4";
+        if (outcome === "Away") return /^away$/i.test(String(x.desc || "")) || id === "5";
+      }
+      return String(x.desc || "") === outcome;
+    });
     const odds = Number(o && o.odds);
     if (!o || !(odds > 1) || o.isActive === 0) continue;
-    const sportId = (ev.sport && ev.sport.id) || SPORT_ID;
+    const sportId = (ev.sport && ev.sport.id) || (tt ? TT_SPORT : SPORT_ID);
     const marketId = String(m.id || m.marketId);
     const outcomeId = String(o.id || o.outcomeId);
     const product = String(m.product ?? 3);
@@ -466,8 +494,14 @@ export function quote(ev, selection) {
 export async function priceLeg(leg, book) {
   const sporty = book === "sporty";
   const label = sporty ? "SportyBet" : "Football.com";
-  const ev = await fetchEvent(leg.eventId, {}, sporty ? BASE : FOOTBALL_BASE);
-  const q = quote(ev, leg.selection);
+  const base = sporty ? BASE : FOOTBALL_BASE;
+  const tt = isTableLeg(leg);
+  let ev = await fetchEvent(leg.eventId, tt ? { marketId: "186" } : {}, base);
+  let q = quote(ev, leg.selection);
+  if (!q && sporty && !tt && (leg.selection === "1" || leg.selection === "2")) {
+    ev = await fetchEvent(leg.eventId, { marketId: "186" }, base);
+    q = quote(ev, leg.selection);
+  }
   if (!q) {
     throw new Error(`${leg.home} v ${leg.away} is not open on ${label}. Refresh the card.`);
   }
@@ -495,7 +529,7 @@ export function buildOrder(legs, stake, gift) {
   if (!(naira > 0)) throw new Error("Stake has to be above 0");
   const selections = list.map((l) => {
     const product = String(l.product || "3");
-    const sportId = l.sportId || SPORT_ID;
+    const sportId = l.sportId || (l.sport === "tt" || String(l.marketId) === "186" ? TT_SPORT : SPORT_ID);
     const marketId = String(l.marketId);
     const outcomeId = String(l.outcomeId);
     return {

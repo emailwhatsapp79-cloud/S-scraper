@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   normalisePhone, sessionAlive, DAY_MS, buildOrder, movedTooFar,
-  fcMatchUrl, sharePageUrl, selectionId, fromUnits, deviceUuid, orderSubBiz,
+  fcMatchUrl, sharePageUrl, selectionId, fromUnits, deviceUuid, orderSubBiz, quote,
 } from "../site/api/_fc.js";
 
 test("phone drops 234 and the leading zero", () => {
@@ -54,6 +54,34 @@ test("money order uses live units and a gift covers the stake", () => {
   assert.equal(two.orderType, 2);
   assert.equal(two.ticket.bets[0].selectedSystems[0], 2);
   assert.equal(fromUnits(2500000), 250);
+});
+
+test("table tennis winner prices as market 186, not 1X2", () => {
+  const ev = {
+    eventId: "sr:match:75059880",
+    matchStatus: "Not start",
+    sport: { id: "sr:sport:20" },
+    markets: [{
+      id: "186", desc: "Winner", product: 3, lastOddsChangeTime: 1,
+      outcomes: [
+        { id: "4", desc: "Home", odds: "1.53", isActive: 1, probability: "0.61" },
+        { id: "5", desc: "Away", odds: "2.35", isActive: 1, probability: "0.38" },
+      ],
+    }],
+  };
+  const home = quote(ev, "1");
+  assert.equal(home.marketId, "186");
+  assert.equal(home.outcomeId, "4");
+  assert.equal(home.sportId, "sr:sport:20");
+  assert.equal(home.odds, 1.53);
+  const away = quote(ev, "2");
+  assert.equal(away.outcomeId, "5");
+  const order = buildOrder([{
+    eventId: home.eventId, marketId: home.marketId, outcomeId: home.outcomeId,
+    sportId: home.sportId, product: "3", price: home.odds,
+  }], 100, null);
+  assert.equal(order.ticket.selections[0].id, "uof:3/sr:sport:20/186/4");
+  assert.equal(quote({ sport: { id: "sr:sport:1" }, markets: [{ id: "1", desc: "1X2", product: 3, outcomes: [{ id: "1", desc: "Home", odds: "2.10", isActive: 1 }] }] }, "1").marketId, "1");
 });
 
 test("a small price drop is allowed, a real drop is not", () => {
