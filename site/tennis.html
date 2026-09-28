@@ -40,8 +40,8 @@
   .tn-cell span { display: block; font-size: 10.5px; color: var(--dim); margin-top: 2px }
   .tn-cell em { display: block; font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--go); margin-top: 1px }
   .tn-cell.book { box-shadow: inset 0 0 0 1px var(--go), var(--shadow) }
-  .tn-cell.ahead { box-shadow: inset 0 0 0 1px var(--hold), var(--shadow) }
-  .tn-cell.ahead b, .tn-cell.ahead em { color: var(--hold) }
+  .tn-cell.ahead, .tn-cell.call { box-shadow: inset 0 0 0 1px var(--hold), var(--shadow) }
+  .tn-cell.ahead b, .tn-cell.ahead em, .tn-cell.call b, .tn-cell.call em { color: var(--hold) }
   .tn-tag { position: absolute; top: -8px; left: 50%; transform: translateX(-50%); background: var(--hold); color: #1a1408; font-style: normal; font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; line-height: 1; padding: 2px 5px; border-radius: 99px; white-space: nowrap }
   .tn-tag.book { background: var(--go); color: var(--go-ink) }
   .tn-cell.on { background: var(--go); color: var(--go-ink) }
@@ -57,7 +57,7 @@
     <a href="/tt">Table tennis</a>
     <a href="/tennis" class="on">Tennis</a>
   </div>
-  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. Book means the short price and we are with it. Ahead means we are only a little above that same price. A 5.00 on the other side is not a pick.</p>
+  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. A mark is only put down after Predixsport and TennisPredictions. If they are sure and the book agrees, only the straight-set score. If they have it close, their deciding score is allowed. If they disagree, nothing is marked.</p>
   <div class="chips" id="views">
     <button type="button" class="chip on" id="v-matches">Matches</button>
     <button type="button" class="chip" id="v-record">Ahead</button>
@@ -95,8 +95,9 @@
   function cell(g, sel, price, label, kind, extra) {
     var on = current(g.id) === sel;
     var c = V.el("div", "tn-cell" + (on ? " on" : kind ? " " + kind : ""));
-    if ((kind === "ahead" || kind === "book") && !on) {
-      c.appendChild(V.el("i", "tn-tag" + (kind === "book" ? " book" : ""), kind === "book" ? "book" : "ahead"));
+    if ((kind === "ahead" || kind === "book" || kind === "call") && !on) {
+      var word = kind === "book" ? "book" : (kind === "call" ? "call" : "ahead");
+      c.appendChild(V.el("i", "tn-tag" + (kind === "book" ? " book" : ""), word));
     }
     c.appendChild(V.el("b", null, price != null ? Number(price).toFixed(2) : label));
     c.appendChild(V.el("span", null, label));
@@ -131,7 +132,9 @@
     if (call.score) {
       var scoreText = g.ahead
         ? "a little ahead · ours " + pct(g.ahead.ours) + " · book " + pct(g.ahead.book)
-        : (g.withBook ? "with the book" : "most likely " + pct(call.scoreP) + (g.derived ? " · from the winner price" : ""));
+        : (g.called
+          ? "outside call " + g.called.sel.replace(":", "–")
+          : (g.withBook ? "with the book" : "most likely " + pct(call.scoreP) + (g.derived ? " · from the winner price" : "")));
       line.appendChild(V.el("b", null, call.score));
       line.appendChild(V.el("span", null, scoreText));
     }
@@ -181,11 +184,12 @@
       });
       scores.forEach(function (s) {
         var isAhead = g.ahead && s.sel === g.ahead.sel;
-        var withBook = !isAhead && (
+        var isCall = !isAhead && g.called && s.sel === g.called.sel;
+        var withBook = !isAhead && !isCall && (
           (g.withBook && s.sel === g.withBook.sel) ||
-          (!g.context && !g.ahead && s.sel === shortSel && shortOdds <= 1.7)
+          (!g.context && !g.ahead && !g.called && s.sel === shortSel && shortOdds <= 1.7)
         );
-        var kind = isAhead ? "ahead" : (withBook ? "book" : "");
+        var kind = isAhead ? "ahead" : (isCall ? "call" : (withBook ? "book" : ""));
         sg.appendChild(cell(g, s.sel, s.odds, s.sel, kind, pct(s.p)));
       });
       box.appendChild(sg);

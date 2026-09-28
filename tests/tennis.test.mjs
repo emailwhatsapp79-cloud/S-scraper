@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toSelection } from "../site/api/_share.js";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("four set scores add up to the match winner", () => {
@@ -93,6 +93,56 @@ test("a short book price is the pick, and a 5.00 on the other side is not", () =
   ]);
   assert.equal(little.ahead.sel, "2:0");
   assert.ok(little.ahead.gap >= 0.06 && little.ahead.gap <= 0.18);
+});
+
+test("an outside sure winner only allows straight sets, a close match allows 2-1", () => {
+  const predix = `
+    player-name player-one"><a href="/a">Daniil Medvedev</a>
+    player-two"><a href="/b">Roman Safiullin</a>
+    aria-valuenow="70.3" aria-valuenow="29.7"
+    Most likely set score: 2-0 <small class="ai-extra-prob">(45%)</small>
+    player-name player-one"><a href="/c">Roman One</a>
+    player-two"><a href="/d">Roman Two</a>
+    aria-valuenow="51.4" aria-valuenow="48.6"
+    Most likely set score: 2-1 <small class="ai-extra-prob">(31%)</small>
+  `;
+  const rows = parsePredix(predix);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].score, "2:0");
+  const tips = parseTpTips('visually-hidden">D. Medvedev vs R. Safiullin, ATP, Upcoming. Best AI tip: R. Safiullin, odds 2.4, confidence 7.2 out of 10.</span>');
+  assert.equal(tips[0].pick, "R. Safiullin");
+  const sureGame = {
+    home: "Medvedev, Daniil", away: "Safiullin, Roman",
+    call: { home: 68, away: 32, score: "2:1", scoreP: 30 },
+    scores: [{ sel: "2:0", odds: 1.4, p: 60 }, { sel: "2:1", odds: 4.5, p: 22 }],
+    ahead: { sel: "2:1", ours: 30, book: 18 },
+    context: { note: "A little ahead of the book on 2:1" },
+  };
+  const split = readOutside(sureGame, { predix: rows, tp: tips });
+  assert.equal(split.split, true);
+  applyOutside(sureGame, split);
+  assert.equal(sureGame.ahead, undefined);
+  assert.equal(sureGame.withBook, undefined);
+
+  const agreed = {
+    home: "Medvedev, Daniil", away: "Safiullin, Roman",
+    call: { home: 68, away: 32, score: "2:1" },
+    scores: [{ sel: "2:0", odds: 1.4, p: 60 }, { sel: "2:1", odds: 4.5, p: 22 }],
+    ahead: { sel: "2:1", ours: 30, book: 18 },
+    context: { note: "" },
+  };
+  applyOutside(agreed, readOutside(agreed, { predix: rows, tp: [] }));
+  assert.equal(agreed.ahead, undefined);
+  assert.equal(agreed.withBook.sel, "2:0");
+
+  const close = {
+    home: "Roman, One", away: "Roman, Two",
+    call: { home: 52, away: 48, score: "2:0" },
+    scores: [{ sel: "2:0", odds: 2.4, p: 40 }, { sel: "2:1", odds: 3.4, p: 28 }],
+    context: { note: "" },
+  };
+  applyOutside(close, readOutside(close, { predix: rows, tp: [] }));
+  assert.equal(close.called.sel, "2:1");
 });
 
 test("form nudges a little and an injury moves the winner", () => {

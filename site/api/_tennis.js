@@ -490,6 +490,214 @@ export function stanceOf(ours, bookScores) {
   return { ahead: null, withBook: null };
 }
 
+function pullText(url) {
+  const ac = new AbortController();
+  const to = setTimeout(() => ac.abort(), 8000);
+  return fetch(url, {
+    headers: { "User-Agent": UA, Accept: "text/html" },
+    signal: ac.signal,
+  }).then((r) => (r.ok ? r.text() : "")).catch(() => "").finally(() => clearTimeout(to));
+}
+
+export function playersMatch(a, b) {
+  const A = nameKey(a).split("|").filter((t) => t.length >= 4);
+  const B = nameKey(b).split("|").filter((t) => t.length >= 4);
+  if (!A.length || !B.length) return false;
+  return A.some((t) => B.includes(t));
+}
+
+function flipScore(sel) {
+  const m = String(sel || "").match(/^(\d+)[:-](\d+)$/);
+  return m ? m[2] + ":" + m[1] : "";
+}
+
+export function parsePredix(html) {
+  const out = [];
+  const blocks = String(html || "").split("player-name player-one").slice(1);
+  for (const block of blocks) {
+    const home = block.match(/>([^<]+)<\/a>/);
+    const away = block.match(/player-two">\s*(?:<a[^>]*>)?([^<]+)/);
+    const probs = [...block.matchAll(/aria-valuenow="([\d.]+)"/g)].map((m) => Number(m[1]));
+    const score = block.match(/Most likely set score:[\s\S]{0,120}?(\d)\s*[-–]\s*(\d)/);
+    const scoreP = block.match(/ai-extra-prob">\((\d+(?:\.\d+)?)%\)/);
+    if (!home || !away || probs.length < 2) continue;
+    out.push({
+      home: home[1].trim(),
+      away: away[1].replace(/<[^>]+>/g, "").trim(),
+      homeP: probs[0],
+      awayP: probs[1],
+      score: score ? score[1] + ":" + score[2] : "",
+      scoreP: scoreP ? Number(scoreP[1]) : null,
+    });
+  }
+  return out;
+}
+
+export function parseTpTips(html) {
+  const out = [];
+  for (const m of String(html || "").matchAll(/visually-hidden">([^<]+)</g)) {
+    const text = m[1];
+    if (!/Upcoming/i.test(text)) continue;
+    const vs = text.match(/^(.+?)\s+vs\s+(.+?),/);
+    const tip = text.match(/Best AI tip:\s+([^,]+),\s+odds\s+[\d.]+,\s+confidence\s+([\d.]+)/i);
+    if (!vs || !tip) continue;
+    const pick = tip[1].trim();
+    if (/^[OU]\d/.test(pick)) continue;
+    out.push({ home: vs[1].trim(), away: vs[2].trim(), pick, conf: Number(tip[2]) });
+  }
+  return out;
+}
+
+export function readOutside(game, bag) {
+  const predixRow = (bag?.predix || []).find((row) => (
+    (playersMatch(game.home, row.home) && playersMatch(game.away, row.away)) ||
+    (playersMatch(game.home, row.away) && playersMatch(game.away, row.home))
+  ));
+  let predix = null;
+  if (predixRow) {
+    const direct = playersMatch(game.home, predixRow.home) && playersMatch(game.away, predixRow.away);
+    predix = direct ? predixRow : {
+      ...predixRow,
+      homeP: predixRow.awayP,
+      awayP: predixRow.homeP,
+      score: flipScore(predixRow.score),
+    };
+  }
+  const tpRow = (bag?.tp || []).find((row) => (
+    (playersMatch(game.home, row.home) && playersMatch(game.away, row.away)) ||
+    (playersMatch(game.home, row.away) && playersMatch(game.away, row.home))
+  ));
+  let tp = null;
+  if (tpRow) {
+    const pickHome = playersMatch(game.home, tpRow.pick);
+    const pickAway = playersMatch(game.away, tpRow.pick);
+    if (pickHome || pickAway) tp = { side: pickHome ? "home" : "away", conf: tpRow.conf, pick: tpRow.pick };
+  }
+  const predixSide = predix ? (predix.homeP >= predix.awayP ? "home" : "away") : null;
+  const predixP = predix ? Math.max(predix.homeP, predix.awayP) : null;
+  const split = !!(predixSide && tp && tp.side !== predixSide);
+  const side = split ? null : (predixSide || (tp && tp.side) || null);
+  const sure = !split && ((predixP != null && predixP >= 65) || (!predix && tp && tp.conf >= 7));
+  const close = !split && predixP != null && predixP >= 42 && predixP < 58;
+  return {
+    found: !!(predix || tp),
+    predixSide,
+    predixP,
+    score: predix ? predix.score : "",
+    scoreP: predix ? predix.scoreP : null,
+    tp,
+    split,
+    side,
+    sure,
+    close,
+  };
+}
+
+function addOutsideNote(game, text) {
+  if (!text) return;
+  if (!game.context) game.context = { source: "outside", note: text, home: null, away: null };
+  else {
+    const note = String(game.context.note || "")
+      .replace(/\s*·?\s*(?:A little ahead|Ahead) of the book on \d+:\d+/ig, "")
+      .replace(/\s*·?\s*With the book on \d+:\d+/ig, "")
+      .replace(/^\s*·\s*/, "")
+      .trim();
+    game.context.note = [note, text].filter(Boolean).join(" · ");
+  }
+}
+
+function bookSideOf(game) {
+  const home = Number(game.call?.home);
+  const away = Number(game.call?.away);
+  if (home || away) return home >= away ? "home" : "away";
+  const ho = Number(game.win?.home);
+  const ao = Number(game.win?.away);
+  if (ho > 1 && ao > 1) return ho <= ao ? "home" : "away";
+  return "home";
+}
+
+// Outside sites are read before a mark. A sure agreed winner can only be the
+// straight-set score. A close match may take the deciding score they name.
+// If they disagree with each other, nothing is marked.
+export function applyOutside(game, outside) {
+  if (!outside) return game;
+  const who = outside.side === "away" ? game.away : game.home;
+  const label = outside.found
+    ? (outside.predixP != null
+      ? "Predix " + String(who || "").split(",")[0].trim().split(/\s+/).pop() + " " + Math.round(outside.predixP) + "%" + (outside.score ? " · " + outside.score.replace(":", "–") : "")
+      : "TennisPredictions " + (outside.tp?.pick || "") + " " + outside.tp?.conf + "/10")
+    : "";
+  game.outside = {
+    found: outside.found,
+    side: outside.side,
+    p: outside.predixP,
+    score: outside.score || "",
+    split: !!outside.split,
+    sure: !!outside.sure,
+    close: !!outside.close,
+  };
+  if (!outside.found) {
+    if (game.ahead) delete game.ahead;
+    if (game.called) delete game.called;
+    return game;
+  }
+  if (outside.split) {
+    delete game.ahead;
+    delete game.withBook;
+    delete game.called;
+    addOutsideNote(game, "Predix and TennisPredictions disagree. No mark.");
+    return game;
+  }
+  const bookSide = bookSideOf(game);
+  if (outside.sure && outside.side && outside.side !== bookSide) {
+    delete game.ahead;
+    delete game.withBook;
+    delete game.called;
+    addOutsideNote(game, label + ". They are sure, the book is not. No mark.");
+    return game;
+  }
+  const straight = outside.side === "away" ? "0:2" : "2:0";
+  const theirScore = outside.score;
+  const deciding = theirScore === "2:1" || theirScore === "1:2";
+  if (outside.sure && !deciding) {
+    if (game.ahead && game.ahead.sel !== straight) delete game.ahead;
+    if (game.withBook && game.withBook.sel !== straight) delete game.withBook;
+    delete game.called;
+    if (!game.ahead && !game.withBook && (game.scores || []).some((s) => s.sel === straight)) {
+      game.withBook = { sel: straight };
+    }
+    addOutsideNote(game, label + ". Sure, so only " + straight.replace(":", "–") + ".");
+    return game;
+  }
+  if (deciding && (outside.close || !outside.sure)) {
+    const row = (game.scores || []).find((s) => s.sel === theirScore);
+    delete game.ahead;
+    delete game.withBook;
+    if (row && Number(row.odds) > 1 && Number(row.odds) <= 6 && Number(row.p) >= 18) {
+      game.called = { sel: theirScore, by: "predix", p: Number(row.p) };
+      if (game.call) game.call = { ...game.call, score: theirScore, scoreP: Number(row.p) };
+    }
+    addOutsideNote(game, label + ". Close, so " + theirScore.replace(":", "–") + " is allowed.");
+    return game;
+  }
+  delete game.ahead;
+  delete game.called;
+  addOutsideNote(game, label);
+  return game;
+}
+
+let outsideCache = { at: 0, bag: null };
+async function loadOutside() {
+  if (outsideCache.bag && Date.now() - outsideCache.at < 8 * 60 * 1000) return outsideCache.bag;
+  const [predixHtml, tpHtml] = await Promise.all([
+    pullText("https://www.predixsport.com/tennis_predictions"),
+    pullText("https://tennispredictions.ai/"),
+  ]);
+  const bag = { predix: parsePredix(predixHtml), tp: parseTpTips(tpHtml) };
+  outsideCache = { at: Date.now(), bag };
+  return bag;
+}
+
 function readForm(body, slug) {
   const edges = body?.data?.edges || [];
   const dots = [];
@@ -529,8 +737,12 @@ async function pool(items, n, fn) {
 }
 
 export async function enrichTennis(games) {
+  const outsideBag = await loadOutside().catch(() => ({ predix: [], tp: [] }));
   const index = await loadIndex();
-  if (!index.size) return games;
+  if (!index.size) {
+    for (const g of games || []) applyOutside(g, readOutside(g, outsideBag));
+    return games;
+  }
   const picked = [];
   for (const g of games) {
     const hit = index.get([nameKey(g.home), nameKey(g.away)].sort().join("~"));
@@ -638,6 +850,7 @@ export async function enrichTennis(games) {
       away: { dots: awayForm.dots, rank: rankOf(awayP.slug), out: awayOut },
     };
   });
+  for (const g of games || []) applyOutside(g, readOutside(g, outsideBag));
   return games;
 }
 
