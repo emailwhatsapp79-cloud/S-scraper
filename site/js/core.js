@@ -142,8 +142,10 @@
       label: label,
       price: Number(price),
       source: g.source || "",
+      sport: g.sport || "",
       marketId: g.selectionRefs && g.selectionRefs[selection] ? g.selectionRefs[selection].marketId : null,
       outcomeId: g.selectionRefs && g.selectionRefs[selection] ? g.selectionRefs[selection].outcomeId : null,
+      specifier: g.selectionRefs && g.selectionRefs[selection] ? (g.selectionRefs[selection].specifier || "") : "",
       probability: g.selectionRefs && g.selectionRefs[selection] ? (g.selectionRefs[selection].probability || "") : ""
     };
   }
@@ -492,8 +494,10 @@
             price: l.price, kickoff: l.kickoff,
             label: l.label || "",
             source: l.source || "",
+            sport: l.sport || "",
             marketId: l.marketId || null,
             outcomeId: l.outcomeId || null,
+            specifier: l.specifier || "",
             probability: l.probability || ""
           };
         })

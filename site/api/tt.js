@@ -5,10 +5,29 @@
 // the daily poll, so the card never waits on that. Gated like the rest.
 import { guard } from "./_gate.js";
 import { fetchTTCard, normalise, storeTT, listUpcomingTT, listRecentResultsTT, countsTT, getModelMeta } from "./_tt.js";
+import { fetchTennisCard } from "./_tennis.js";
+
+function wantedCard(req) {
+  if (req.query && req.query.card) return String(req.query.card);
+  const raw = String(req.url || "");
+  const i = raw.indexOf("?");
+  if (i < 0) return "";
+  return new URLSearchParams(raw.slice(i + 1)).get("card") || "";
+}
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
   const started = Date.now();
+  if (wantedCard(req) === "tennis") {
+    try {
+      const games = await fetchTennisCard();
+      res.setHeader("Cache-Control", "no-store");
+      res.status(200).json({ ok: true, tookMs: Date.now() - started, count: games.length, games });
+    } catch (e) {
+      res.status(200).json({ ok: false, error: String(e?.message || e), games: [] });
+    }
+    return;
+  }
 
   // Fresh card first, so the available games are never stale on load. Failures
   // here (SportyBet slow/down) never block the serve — we fall back to the DB.

@@ -275,16 +275,19 @@ export async function createSlip(stake, incoming, book, opts = {}) {
     const eid = String(row.eventId || "");
     let g = (eid && byEvent.get(eid)) || byId.get(id);
     if (!g && row.home && row.eventId && row.price) {
+      const league = row.league || "";
+      const asked = row.sport === "tn" || row.sport === "tt" ? row.sport : "";
       g = {
         id, eventId: row.eventId, home: row.home, away: row.away,
-        league: row.league || "Table tennis",
+        league: league || (asked === "tn" ? "Tennis" : "Table tennis"),
         kickoff: row.kickoff || null,
         ft: { home: row.selection === "1" ? Number(row.price) : null, draw: null, away: row.selection === "2" ? Number(row.price) : null },
-        sport: /setka|elite series|liga pro|tt cup|challenger|table tennis/i.test(String(row.league || "")) ? "tt" : "fb",
+        sport: asked || (/setka|elite series|liga pro|tt cup|challenger|table tennis/i.test(String(league)) ? "tt" : "fb"),
       };
     }
     if (!g) throw new Error(`Game ${id} is not on the stored card`);
-    if (g.sport !== "tt" && g.eventId) {
+    const sport = row.sport === "tn" || row.sport === "tt" ? row.sport : (g.sport || "fb");
+    if (sport !== "tt" && sport !== "tn" && g.eventId) {
       const ev = await fetchEvent(g.eventId);
       if (ev && ev.homeTeamName) {
         g = { ...g, home: ev.homeTeamName, away: ev.awayTeamName || g.away };
@@ -296,6 +299,7 @@ export async function createSlip(stake, incoming, book, opts = {}) {
         : null
     );
     if (!pick) throw new Error(`${g.home} v ${g.away} has no price for that pick`);
+    if (row.label) pick.label = String(row.label);
     legs.push({
       gameId: g.id,
       eventId: g.eventId,
@@ -303,8 +307,12 @@ export async function createSlip(stake, incoming, book, opts = {}) {
       away: g.away,
       league: g.league,
       kickoff: g.kickoff,
-      sport: g.sport || "fb",
       ...pick,
+      sport,
+      marketId: row.marketId ? String(row.marketId) : null,
+      outcomeId: row.outcomeId ? String(row.outcomeId) : null,
+      probability: row.probability ? String(row.probability) : "",
+      specifier: row.specifier ? String(row.specifier) : "",
     });
   }
 

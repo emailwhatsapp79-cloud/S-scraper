@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E12">
+<title>Tennis · Vantage</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  .seg { display: inline-flex; background: var(--card); box-shadow: var(--shadow); border-radius: 999px; padding: 3px; gap: 3px; margin-bottom: 12px }
+  .seg a, .seg button { border: 0; background: transparent; color: var(--dim); font: inherit; font-weight: 600; font-size: 13px; padding: 6px 14px; border-radius: 999px; text-decoration: none; cursor: pointer }
+  .seg a.on, .seg button.on { background: var(--bg); color: var(--ink) }
+  .tn { background: var(--card); box-shadow: var(--shadow); border-radius: var(--r); margin-bottom: 10px; padding: 13px 14px }
+  .tn-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px }
+  .tn-tourn { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 600 }
+  .tn-when { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--dim) }
+  .tn-call { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 10px; font-size: 13.5px }
+  .tn-call b { font-weight: 700 }
+  .tn-call span { color: var(--dim) }
+  .tn-pl { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-bottom: 6px }
+  .tn-pl b { font-size: 15.5px; font-weight: 650 }
+  .tn-pl.on b { color: var(--go) }
+  .tn-pct { font-family: var(--mono); font-size: 13px; color: var(--dim) }
+  .tn-bar { height: 6px; border-radius: 999px; background: var(--bg); overflow: hidden; box-shadow: var(--shadow); margin: 2px 0 10px }
+  .tn-bar > i { display: block; height: 100%; background: var(--go) }
+  .tn-lab { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 600; margin: 8px 0 6px }
+  .tn-g { display: grid; grid-template-columns: 1fr 1fr; gap: 6px }
+  .tn-s { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px }
+  .tn-s.six { grid-template-columns: repeat(3, 1fr) }
+  .tn-cell { background: var(--bg); box-shadow: var(--shadow); border-radius: var(--r3); padding: 8px 4px; text-align: center; cursor: pointer }
+  .tn-cell b { display: block; font-family: var(--mono); font-size: 14px; font-weight: 650 }
+  .tn-cell span { display: block; font-size: 10.5px; color: var(--dim); margin-top: 2px }
+  .tn-cell em { display: block; font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--go); margin-top: 1px }
+  .tn-cell.on { background: var(--go); color: var(--go-ink) }
+  .tn-cell.on span, .tn-cell.on em { color: var(--go-ink) }
+  .tn-cell.pick { box-shadow: inset 0 0 0 1px var(--go), var(--shadow) }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="seg">
+    <a href="/tt">Table tennis</a>
+    <a href="/tennis" class="on">Tennis</a>
+  </div>
+  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. The winner is those scores added up. Tap a price to put it on the SportyBet slip.</p>
+  <div class="chips" id="tourns"></div>
+  <h2 class="lab-h" id="head">Upcoming</h2>
+  <div id="out"><div class="skel"></div><div class="skel"></div></div>
+</main>
+<script src="/js/core.js"></script>
+<script>
+(function () {
+  var V = window.VFS;
+  V.injectChrome("tt");
+  var LAST = [], LEAGUE = "All";
+
+  function lastName(s) {
+    var t = String(s || "").trim();
+    if (t.indexOf(",") >= 0) return t.split(",")[0].trim();
+    var p = t.split(/\s+/);
+    return p[p.length - 1] || t;
+  }
+  function pct(n) { return (n == null || !isFinite(n)) ? "—" : Math.round(n) + "%"; }
+  function current(id) {
+    var legs = V.loadBook();
+    for (var i = 0; i < legs.length; i++) if (legs[i].id === id) return legs[i].selection;
+    return null;
+  }
+  function gameOf(g) {
+    return {
+      id: g.id, eventId: g.eventId, home: g.home, away: g.away,
+      league: g.tourn || "Tennis", kickoff: g.start || null,
+      sport: "tn", selectionRefs: g.selectionRefs || {}
+    };
+  }
+  function cell(g, sel, price, label, mark, extra) {
+    var on = current(g.id) === sel;
+    var c = V.el("div", "tn-cell" + (on ? " on" : "") + (mark && !on ? " pick" : ""));
+    c.appendChild(V.el("b", null, price != null ? Number(price).toFixed(2) : label));
+    c.appendChild(V.el("span", null, label));
+    if (extra) c.appendChild(V.el("em", null, extra));
+    if (price != null && g.selectionRefs && g.selectionRefs[sel]) {
+      c.addEventListener("click", function (e) {
+        e.stopPropagation();
+        V.toggleBook(V.makePick(gameOf(g), sel, price, label));
+        render();
+      });
+    }
+    return c;
+  }
+  function card(g) {
+    var box = V.el("article", "tn");
+    var top = V.el("div", "tn-top");
+    top.appendChild(V.el("span", "tn-tourn", g.tourn || "Tennis"));
+    var t = V.until(g.start);
+    var when = V.el("time", "tn-when", (t.text || V.clock(g.start) || "").trim() || V.clock(g.start));
+    when.setAttribute("data-kick", String(g.start || ""));
+    top.appendChild(when);
+    box.appendChild(top);
+
+    var call = g.call || {};
+    var winner = call.side === "away" ? g.away : g.home;
+    var line = V.el("div", "tn-call");
+    line.appendChild(V.el("b", null, lastName(winner)));
+    line.appendChild(V.el("span", null, "wins " + pct(call.side === "away" ? call.away : call.home)));
+    if (call.score) {
+      line.appendChild(V.el("b", null, call.score));
+      line.appendChild(V.el("span", null, "most likely " + pct(call.scoreP) + (g.derived ? " · from the winner price" : "")));
+    }
+    box.appendChild(line);
+
+    var homeOn = call.side !== "away";
+    [["home", g.home, call.home], ["away", g.away, call.away]].forEach(function (p) {
+      var row = V.el("div", "tn-pl" + ((p[0] === "home") === homeOn ? " on" : ""));
+      row.appendChild(V.el("b", null, p[1]));
+      row.appendChild(V.el("span", "tn-pct", pct(p[2])));
+      box.appendChild(row);
+    });
+    var bar = V.el("div", "tn-bar");
+    var fill = V.el("i");
+    fill.style.width = Math.max(4, Math.min(96, call.home || 50)) + "%";
+    bar.appendChild(fill);
+    box.appendChild(bar);
+
+    if (g.win) {
+      box.appendChild(V.el("div", "tn-lab", "Winner"));
+      var wg = V.el("div", "tn-g");
+      wg.appendChild(cell(g, "1", g.win.home, lastName(g.home), homeOn, pct(call.home)));
+      wg.appendChild(cell(g, "2", g.win.away, lastName(g.away), !homeOn, pct(call.away)));
+      box.appendChild(wg);
+    }
+    var scores = g.scores || [];
+    if (scores.length) {
+      box.appendChild(V.el("div", "tn-lab", g.derived ? "Set score, estimated" : "Set score"));
+      var sg = V.el("div", "tn-s" + (scores.length > 4 ? " six" : ""));
+      scores.forEach(function (s) {
+        sg.appendChild(cell(g, s.sel, s.odds, s.sel, s.sel === call.score, pct(s.p)));
+      });
+      box.appendChild(sg);
+    }
+    return box;
+  }
+
+  function tourns(list) {
+    var box = document.getElementById("tourns");
+    var names = ["All"];
+    list.forEach(function (g) { if (g.tourn && names.indexOf(g.tourn) < 0) names.push(g.tourn); });
+    box.textContent = "";
+    names.forEach(function (n) {
+      var b = V.el("button", "chip" + (n === LEAGUE ? " on" : ""), n.length > 28 ? n.slice(0, 26) + "…" : n);
+      b.addEventListener("click", function () { LEAGUE = n; render(); });
+      box.appendChild(b);
+    });
+  }
+
+  function render() {
+    var out = document.getElementById("out");
+    out.textContent = "";
+    var list = LAST.filter(function (g) { return LEAGUE === "All" || g.tourn === LEAGUE; });
+    document.getElementById("head").textContent = "Upcoming — " + list.length;
+    if (!list.length) {
+      out.appendChild(V.el("div", "empty", LAST.length ? "Nothing in that tournament." : "No upcoming tennis on SportyBet right now."));
+    } else list.forEach(function (g) { out.appendChild(card(g)); });
+    tourns(LAST);
+    V.tick();
+  }
+
+  function load() {
+    return fetch("/api/tt?card=tennis").then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) throw new Error((d && d.error) || "Could not load tennis");
+      LAST = d.games || [];
+      render();
+    }).catch(function (e) {
+      document.getElementById("out").textContent = "";
+      document.getElementById("out").appendChild(V.el("div", "empty", e.message));
+    });
+  }
+  load();
+  window.addEventListener("vfs-book", render);
+})();
+</script>
+</body>
+</html>

@@ -78,7 +78,8 @@
   .seg { display: inline-flex; background: var(--card); box-shadow: var(--shadow); border-radius: 999px; padding: 3px; gap: 3px; margin-bottom: 12px }
   .stats { grid-template-columns: 1fr 1fr }
   .seg button { border: 0; background: transparent; color: var(--dim); font: inherit; font-weight: 600; font-size: 13px; padding: 6px 14px; border-radius: 999px; cursor: pointer }
-  .seg button.on { background: var(--bg); color: var(--ink) }
+  .seg a { border: 0; background: transparent; color: var(--dim); font: inherit; font-weight: 600; font-size: 13px; padding: 6px 14px; border-radius: 999px; text-decoration: none }
+  .seg a.on { background: var(--bg); color: var(--ink) }
 </style>
 </head>
 <body>
@@ -89,6 +90,10 @@
   </div>
   <p class="note" id="sofa-note"></p>
   <p class="note" id="bt-note"></p>
+  <div class="seg">
+    <a href="/tt" class="on">Table tennis</a>
+    <a href="/tennis">Tennis</a>
+  </div>
   <div class="seg" id="seg">
     <button type="button" data-mode="up" class="on">Upcoming</button>
     <button type="button" data-mode="res">Results</button>

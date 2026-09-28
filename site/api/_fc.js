@@ -442,8 +442,30 @@ function isTableEvent(ev) {
   return (ev.markets || []).some((m) => String(m.id) === "186" || /^winner$/i.test(String(m.desc || "")));
 }
 
+function quoteScore(ev, sel) {
+  const markets = (ev.markets || []).filter((m) => String(m.id) === "199" || /correct score/i.test(String(m.desc || "")));
+  markets.sort((a, b) => (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0));
+  for (const m of markets) {
+    const o = (m.outcomes || []).find((x) => String(x.desc || "").replace("-", ":") === sel);
+    const odds = Number(o && o.odds);
+    if (!o || !(odds > 1) || o.isActive === 0) continue;
+    return {
+      eventId: String(ev.eventId),
+      sportId: (ev.sport && ev.sport.id) || "sr:sport:5",
+      marketId: String(m.id || "199"),
+      outcomeId: String(o.id || ""),
+      specifier: String(m.specifier || ""),
+      product: String(m.product ?? 3),
+      odds,
+      probability: o.probability != null ? String(o.probability) : "",
+    };
+  }
+  return null;
+}
+
 export function quote(ev, selection) {
   const sel = String(selection || "");
+  if (/^\d+:\d+$/.test(sel)) return ev ? quoteScore(ev, sel) : null;
   const tt = isTableEvent(ev);
   const want = tt
     ? (sel === "1" ? ["Winner", "Home"] : sel === "2" ? ["Winner", "Away"] : null)
@@ -483,6 +505,7 @@ export function quote(ev, selection) {
       sportId,
       marketId,
       outcomeId,
+      specifier: String(m.specifier || ""),
       product,
       odds,
       probability: o.probability != null ? String(o.probability) : "",
@@ -495,10 +518,15 @@ export async function priceLeg(leg, book) {
   const sporty = book === "sporty";
   const label = sporty ? "SportyBet" : "Football.com";
   const base = sporty ? BASE : FOOTBALL_BASE;
-  const tt = isTableLeg(leg);
-  let ev = await fetchEvent(leg.eventId, tt ? { marketId: "186" } : {}, base);
+  const score = /^\d+:\d+$/.test(String(leg.selection || ""));
+  const tt = !score && (isTableLeg(leg) || leg.sport === "tn");
+  let ev = await fetchEvent(leg.eventId, tt ? { marketId: "186" } : (score ? { marketId: "199" } : {}), base);
   let q = quote(ev, leg.selection);
-  if (!q && sporty && !tt && (leg.selection === "1" || leg.selection === "2")) {
+  if (!q && sporty && score) {
+    ev = await fetchEvent(leg.eventId, { marketId: "199" }, base);
+    q = quote(ev, leg.selection);
+  }
+  if (!q && sporty && !tt && !score && (leg.selection === "1" || leg.selection === "2")) {
     ev = await fetchEvent(leg.eventId, { marketId: "186" }, base);
     q = quote(ev, leg.selection);
   }
@@ -516,6 +544,7 @@ export async function priceLeg(leg, book) {
     sportId: q.sportId,
     marketId: q.marketId,
     outcomeId: q.outcomeId,
+    specifier: q.specifier || leg.specifier || "",
     product: q.product,
     price: q.odds,
     probability: q.probability,
@@ -529,12 +558,16 @@ export function buildOrder(legs, stake, gift) {
   if (!(naira > 0)) throw new Error("Stake has to be above 0");
   const selections = list.map((l) => {
     const product = String(l.product || "3");
-    const sportId = l.sportId || (l.sport === "tt" || String(l.marketId) === "186" ? TT_SPORT : SPORT_ID);
+    const sportId = l.sportId || (
+      l.sport === "tn" || String(l.marketId) === "199" ? "sr:sport:5"
+        : (l.sport === "tt" || String(l.marketId) === "186" ? TT_SPORT : SPORT_ID)
+    );
     const marketId = String(l.marketId);
     const outcomeId = String(l.outcomeId);
-    return {
+    const id = selectionId(product, sportId, marketId, outcomeId) + (l.specifier ? `?${l.specifier}` : "");
+    const row = {
       eventId: String(l.eventId),
-      id: selectionId(product, sportId, marketId, outcomeId),
+      id,
       marketId,
       odds: String(l.price),
       probability: l.probability ? String(l.probability) : "",
@@ -542,6 +575,8 @@ export function buildOrder(legs, stake, gift) {
       banker: false,
       betslipKey: betslipKey(sportId, l.eventId, marketId, outcomeId),
     };
+    if (l.specifier) row.specifier = String(l.specifier);
+    return row;
   });
   const multiple = selections.length > 1;
   const stakeUnits = units(naira);

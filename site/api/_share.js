@@ -56,6 +56,7 @@ export function toSelection(leg) {
     odds: String(leg.price),
   };
   if (leg.probability) row.probability = String(leg.probability);
+  if (leg.specifier) row.specifier = String(leg.specifier);
   if (football && !isTT(leg)) {
     const sportId = leg.sportId || SPORT_ID;
     const product = String(leg.product || "3");

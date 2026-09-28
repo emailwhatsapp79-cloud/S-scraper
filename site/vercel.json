@@ -42,6 +42,10 @@
     {
       "source": "/tt",
       "destination": "/tt.html"
+    },
+    {
+      "source": "/tennis",
+      "destination": "/tennis.html"
     }
   ],
   "headers": [
@@ -51,6 +55,14 @@
     },
     {
       "source": "/tt.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
+      "source": "/tennis",
+      "headers": [{ "key": "Cache-Control", "value": "no-store" }]
+    },
+    {
+      "source": "/tennis.html",
       "headers": [{ "key": "Cache-Control", "value": "no-store" }]
     }
   ]
