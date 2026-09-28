@@ -206,9 +206,11 @@ export function normaliseTennis(ev, tourn) {
 export async function fetchTennisCard() {
   const found = [];
   const seen = new Set();
-  for (let page = 1; page <= 4; page++) {
+  // option 1 is the short board and skips most matches inside 11 hours.
+  // option 2 with a 24h window is the list SportyBet shows for today.
+  for (let page = 1; page <= 6; page++) {
     const data = await getJson({
-      sportId: SPORT, marketId: "186,199", option: "1",
+      sportId: SPORT, marketId: "186,199", option: "2", timeline: "24",
       pageSize: "100", pageNum: String(page),
     });
     let count = 0;
