@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toSelection } from "../site/api/_share.js";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("four set scores add up to the match winner", () => {
@@ -20,6 +20,20 @@ test("four set scores add up to the match winner", () => {
   const back = tennisCall(made);
   assert.ok(Math.abs(back.home - 0.75) < 0.01);
   assert.ok(Math.abs(made.reduce((s, x) => s + x.p, 0) - 1) < 0.001);
+});
+
+test("the record keeps the green score only when our number is closer", () => {
+  const many = (n, hit, ours, book) => Array.from({ length: n }, () => ({ hit, ours, book }));
+  assert.equal(recordVerdict(many(5, false, 40, 15)).used, "early");
+  assert.equal(recordVerdict(many(12, false, 40, 15)).used, "book");
+  assert.equal(recordVerdict(many(12, true, 40, 15)).used, "ours");
+  const games = [{ ahead: { sel: "2:1", ours: 39, book: 21 }, context: { note: "Ahead of the book on 2:1" } }];
+  applyRecord(games, { used: "book" });
+  assert.equal(games[0].ahead, undefined);
+  assert.equal(games[0].context.note, "");
+  const stay = [{ ahead: { sel: "1:2" }, context: { note: "Ahead of the book on 1:2" } }];
+  applyRecord(stay, { used: "early" });
+  assert.equal(stay[0].ahead.sel, "1:2");
 });
 
 test("recent straight sets can get ahead of the book score", () => {

@@ -44,6 +44,9 @@
   .tn-cell.on span, .tn-cell.on em { color: var(--go-ink) }
   .tn-cell.ahead { background: var(--go); color: var(--go-ink) }
   .tn-cell.ahead span, .tn-cell.ahead em { color: var(--go-ink) }
+  .tn-hit, .tn-miss { margin-left: auto; font-family: var(--mono); font-size: 12.5px }
+  .tn-hit { color: var(--go) }
+  .tn-miss { color: var(--bad) }
 </style>
 </head>
 <body>
@@ -52,7 +55,11 @@
     <a href="/tt">Table tennis</a>
     <a href="/tennis" class="on">Tennis</a>
   </div>
-  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. The winner stays with the book. A green score is the result recent sets say the book is short on. Tap a price to put it on the SportyBet slip.</p>
+  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. The winner stays with the book. A green score is the result recent sets say the book is short on. The record turns that green off if the book’s number has been closer.</p>
+  <div class="chips" id="views">
+    <button type="button" class="chip on" id="v-matches">Matches</button>
+    <button type="button" class="chip" id="v-record">Record</button>
+  </div>
   <div class="chips" id="tourns"></div>
   <h2 class="lab-h" id="head">Upcoming</h2>
   <div id="out"><div class="skel"></div><div class="skel"></div></div>
@@ -62,7 +69,7 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("tt");
-  var LAST = [], LEAGUE = "All";
+  var LAST = [], LEAGUE = "All", VIEW = "matches", RECORD = null;
 
   function lastName(s) {
     var t = String(s || "").trim();
@@ -183,7 +190,47 @@
     });
   }
 
+  function verdictLine(r) {
+    if (!r || !r.n) return "No green score has finished yet. Each one is saved when this page loads, bet or not.";
+    var line = r.hits + " of " + r.n + " landed. We called " + pct(r.avgOurs) + " on average, the book " + pct(r.avgBook) + ".";
+    if (r.used === "book") return line + " The book is closer, so the green score is off.";
+    if (r.used === "ours") return line + " Our number is closer, so the green score stays on.";
+    return line + " Green stays on until 12 have finished.";
+  }
+
+  function renderRecord() {
+    var out = document.getElementById("out");
+    out.textContent = "";
+    document.getElementById("head").textContent = "Record" + (RECORD && RECORD.open ? " — " + RECORD.open + " open" : "");
+    document.getElementById("tourns").textContent = "";
+    out.appendChild(V.el("p", "lede", verdictLine(RECORD)));
+    var rows = (RECORD && RECORD.rows) || [];
+    if (!rows.length) {
+      out.appendChild(V.el("div", "empty", "Nothing logged yet. Open Matches and the next green scores are saved."));
+      return;
+    }
+    rows.forEach(function (row) {
+      var box = V.el("article", "tn");
+      var top = V.el("div", "tn-top");
+      top.appendChild(V.el("span", "tn-tourn", row.tourn || "Tennis"));
+      var state = row.hit == null ? "Waiting" : (row.hit ? "Landed" : "Missed");
+      var mark = V.el("span", row.hit == null ? "tn-when" : (row.hit ? "tn-hit" : "tn-miss"), state);
+      top.appendChild(mark);
+      box.appendChild(top);
+      var line = V.el("div", "tn-call");
+      line.appendChild(V.el("b", null, lastName(row.home) + " vs " + lastName(row.away)));
+      line.appendChild(V.el("b", null, row.score));
+      line.appendChild(V.el("span", null, "ours " + pct(row.ours) + " · book " + pct(row.book) + (row.odds ? " · " + Number(row.odds).toFixed(2) : "")));
+      box.appendChild(line);
+      if (row.result) box.appendChild(V.el("div", "tn-note", "Finished " + row.result));
+      out.appendChild(box);
+    });
+  }
+
   function render() {
+    document.getElementById("v-matches").className = "chip" + (VIEW === "matches" ? " on" : "");
+    document.getElementById("v-record").className = "chip" + (VIEW === "record" ? " on" : "");
+    if (VIEW === "record") { renderRecord(); return; }
     var out = document.getElementById("out");
     out.textContent = "";
     var list = LAST.filter(function (g) { return LEAGUE === "All" || g.tourn === LEAGUE; });
@@ -199,6 +246,7 @@
     return fetch("/api/tt?card=tennis").then(function (r) { return r.json(); }).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.error) || "Could not load tennis");
       LAST = d.games || [];
+      RECORD = d.record || null;
       render();
     }).catch(function (e) {
       document.getElementById("out").textContent = "";
@@ -206,6 +254,8 @@
     });
   }
   load();
+  document.getElementById("v-matches").addEventListener("click", function () { VIEW = "matches"; render(); });
+  document.getElementById("v-record").addEventListener("click", function () { VIEW = "record"; render(); });
   window.addEventListener("vfs-book", render);
 })();
 </script>
