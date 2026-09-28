@@ -56,10 +56,10 @@
     <a href="/tt">Table tennis</a>
     <a href="/tennis" class="on">Tennis</a>
   </div>
-  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. The winner stays with the book. A green score is the result recent sets say the book is short on. The record turns that green off if the book’s number has been closer.</p>
+  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. Green is the most likely score. Gold, with ahead on it, is the one the book is short on. Ahead saves only those.</p>
   <div class="chips" id="views">
     <button type="button" class="chip on" id="v-matches">Matches</button>
-    <button type="button" class="chip" id="v-record">Record</button>
+    <button type="button" class="chip" id="v-record">Ahead</button>
   </div>
   <div class="chips" id="tourns"></div>
   <h2 class="lab-h" id="head">Upcoming</h2>
@@ -198,22 +198,22 @@
   }
 
   function verdictLine(r) {
-    if (!r || !r.n) return "No green score has finished yet. Each one is saved when this page loads, bet or not.";
-    var line = r.hits + " of " + r.n + " landed. We called " + pct(r.avgOurs) + " on average, the book " + pct(r.avgBook) + ".";
-    if (r.used === "book") return line + " The book is closer, so the green score is off.";
-    if (r.used === "ours") return line + " Our number is closer, so the green score stays on.";
-    return line + " Green stays on until 12 have finished.";
+    if (!r || !r.n) return "No ahead score has finished yet. Only the gold one is saved, the first time it shows, bet or not.";
+    var line = r.hits + " of " + r.n + " ahead scores landed. We called " + pct(r.avgOurs) + " on average, the book " + pct(r.avgBook) + ".";
+    if (r.used === "book") return line + " The book is closer, so the gold box is off.";
+    if (r.used === "ours") return line + " Our number is closer, so the gold box stays on.";
+    return line + " The gold box stays on until 12 have finished.";
   }
 
   function renderRecord() {
     var out = document.getElementById("out");
     out.textContent = "";
-    document.getElementById("head").textContent = "Record" + (RECORD && RECORD.open ? " — " + RECORD.open + " open" : "");
+    document.getElementById("head").textContent = "Ahead" + (RECORD && RECORD.open ? " — " + RECORD.open + " open" : "");
     document.getElementById("tourns").textContent = "";
     out.appendChild(V.el("p", "lede", verdictLine(RECORD)));
     var rows = (RECORD && RECORD.rows) || [];
     if (!rows.length) {
-      out.appendChild(V.el("div", "empty", "Nothing logged yet. Open Matches and the next green scores are saved."));
+      out.appendChild(V.el("div", "empty", "Nothing saved yet. Only a gold ahead score is stored, not the green one."));
       return;
     }
     rows.forEach(function (row) {
