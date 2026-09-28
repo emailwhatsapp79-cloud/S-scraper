@@ -171,8 +171,13 @@
     if (scores.length) {
       box.appendChild(V.el("div", "tn-lab", g.derived ? "Set score, estimated" : "Set score"));
       var sg = V.el("div", "tn-s" + (scores.length > 4 ? " six" : ""));
+      var likely = "", best = -1;
       scores.forEach(function (s) {
-        var kind = (g.ahead && s.sel === g.ahead.sel) ? "ahead" : (s.sel === call.score ? "pick" : "");
+        if (Number(s.p) > best) { best = Number(s.p); likely = s.sel; }
+      });
+      scores.forEach(function (s) {
+        var ahead = g.ahead && s.sel === g.ahead.sel;
+        var kind = ahead ? "ahead" : (s.sel === likely ? "pick" : "");
         sg.appendChild(cell(g, s.sel, s.odds, s.sel, kind, pct(s.p)));
       });
       box.appendChild(sg);
