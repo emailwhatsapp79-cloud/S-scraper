@@ -1,8 +1,29 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toSelection } from "../site/api/_share.js";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
+
+test("a simulated match is marked sim and is not a real player", () => {
+  assert.equal(isSimEvent({
+    homeTeamName: "Atmane, Terence (Srl)",
+    awayTeamName: "Struff, Jan-Lennard (SRL)",
+    sport: { category: { name: "Simulated Reality" } },
+  }, "SRL Fall Invitational", "Simulated Reality"), true);
+  assert.equal(isSimEvent({ homeTeamName: "Medvedev, Daniil", awayTeamName: "Safiullin, Roman" }, "ATP Beijing", "ATP"), false);
+  const g = normaliseTennis({
+    eventId: "sr:match:1",
+    gameId: "9",
+    homeTeamName: "Atmane, Terence (Srl)",
+    awayTeamName: "Struff, Jan-Lennard (SRL)",
+    estimateStartTime: Date.now() + 3600000,
+    matchStatus: "Not start",
+    markets: [],
+    sport: { category: { name: "Simulated Reality" } },
+  }, "SRL Fall Invitational", "Simulated Reality");
+  assert.equal(g.sim, true);
+  assert.match(g.tourn, /^SIM · /);
+});
 
 test("four set scores add up to the match winner", () => {
   const shares = fairShares([

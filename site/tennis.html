@@ -49,6 +49,8 @@
   .tn-hit, .tn-miss { margin-left: auto; font-family: var(--mono); font-size: 12.5px }
   .tn-hit { color: var(--go) }
   .tn-miss { color: var(--bad) }
+  .tn.sim { box-shadow: inset 0 0 0 1px var(--bad) }
+  .tn-sim { margin-right: 6px; color: var(--bad); font-size: 10px; font-weight: 700; letter-spacing: .06em; border: 1px solid var(--bad); border-radius: 99px; padding: 1px 6px }
 </style>
 </head>
 <body>
@@ -114,6 +116,10 @@
   function card(g) {
     var box = V.el("article", "tn");
     var top = V.el("div", "tn-top");
+    if (g.sim) {
+      box.className = "tn sim";
+      top.appendChild(V.el("b", "tn-sim", "SIM"));
+    }
     top.appendChild(V.el("span", "tn-tourn", g.tourn || "Tennis"));
     var t = V.until(g.start);
     var when = V.el("time", "tn-when", (t.text || V.clock(g.start) || "").trim() || V.clock(g.start));
@@ -121,6 +127,15 @@
     top.appendChild(when);
     box.appendChild(top);
 
+    if (g.sim) {
+      box.appendChild(V.el("div", "tn-note bad", "Simulated. Not a real match. Real player form does not count."));
+      [["", g.home], ["", g.away]].forEach(function (p) {
+        var row = V.el("div", "tn-pl");
+        row.appendChild(V.el("b", null, p[1]));
+        box.appendChild(row);
+      });
+      return box;
+    }
     var call = g.call || {};
     var winner = call.side === "away" ? g.away : g.home;
     var line = V.el("div", "tn-call");

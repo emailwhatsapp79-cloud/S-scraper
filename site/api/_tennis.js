@@ -143,12 +143,19 @@ function scoreRows(ev) {
   return rows;
 }
 
-export function normaliseTennis(ev, tourn) {
+export function isSimEvent(ev, tourn, category) {
+  const cat = ev?.sport?.category?.name || category || "";
+  const text = [tourn, cat, ev?.homeTeamName, ev?.awayTeamName].join(" ");
+  return /simulated reality|\bSRL\b|\(srl\)/i.test(text);
+}
+
+export function normaliseTennis(ev, tourn, category) {
   const home = ev.homeTeamName || "";
   const away = ev.awayTeamName || "";
   if (!home || !away || !ev.eventId) return null;
   const start = ev.estimateStartTime ? Number(ev.estimateStartTime) : null;
   if (!upcoming(ev.matchStatus, start)) return null;
+  const sim = isSimEvent(ev, tourn, category);
   const win = winPrices(ev);
   let scores = scoreRows(ev);
   let derived = false;
@@ -182,7 +189,8 @@ export function normaliseTennis(ev, tourn) {
     eventId: ev.eventId,
     sport: "tn",
     home, away,
-    tourn: tourn || "",
+    tourn: sim ? "SIM · " + (tourn || "Simulated Reality") : (tourn || ""),
+    sim,
     start,
     status: ev.matchStatus || "",
     derived,
@@ -219,7 +227,7 @@ export async function fetchTennisCard() {
         count++;
         const id = String(ev.eventId || ev.gameId || "");
         if (!id || seen.has(id)) continue;
-        const game = normaliseTennis(ev, t.name || "");
+        const game = normaliseTennis(ev, t.name || "", t.categoryName || "");
         if (!game) continue;
         seen.add(id);
         found.push(game);
@@ -738,15 +746,35 @@ async function pool(items, n, fn) {
   await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
 }
 
+function holdSim(g) {
+  if (!g?.sim) return false;
+  delete g.ahead;
+  delete g.withBook;
+  delete g.called;
+  delete g.book;
+  g.context = {
+    source: "sim",
+    note: "Simulated. Not a real match. Real player form does not count.",
+    home: null,
+    away: null,
+  };
+  return true;
+}
+
 export async function enrichTennis(games) {
+  for (const g of games || []) holdSim(g);
   const outsideBag = await loadOutside().catch(() => ({ predix: [], tp: [] }));
   const index = await loadIndex();
   if (!index.size) {
-    for (const g of games || []) applyOutside(g, readOutside(g, outsideBag));
+    for (const g of games || []) {
+      if (holdSim(g)) continue;
+      applyOutside(g, readOutside(g, outsideBag));
+    }
     return games;
   }
   const picked = [];
   for (const g of games) {
+    if (g.sim) continue;
     const hit = index.get([nameKey(g.home), nameKey(g.away)].sort().join("~"));
     if (!hit) continue;
     picked.push({ g, hit });
@@ -852,7 +880,10 @@ export async function enrichTennis(games) {
       away: { dots: awayForm.dots, rank: rankOf(awayP.slug), out: awayOut },
     };
   });
-  for (const g of games || []) applyOutside(g, readOutside(g, outsideBag));
+  for (const g of games || []) {
+    if (holdSim(g)) continue;
+    applyOutside(g, readOutside(g, outsideBag));
+  }
   return games;
 }
 
