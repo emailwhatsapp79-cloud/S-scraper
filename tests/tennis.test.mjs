@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("four set scores add up to the match winner", () => {
@@ -19,6 +19,21 @@ test("four set scores add up to the match winner", () => {
   const back = tennisCall(made);
   assert.ok(Math.abs(back.home - 0.75) < 0.01);
   assert.ok(Math.abs(made.reduce((s, x) => s + x.p, 0) - 1) < 0.001);
+});
+
+test("recent straight sets can get ahead of the book score", () => {
+  const rows = (sel, n) => Array.from({ length: n }, () => ({ sel, surface: "hardcourt_outdoor" }));
+  const home = rows("2:0", 8).concat(rows("0:2", 2));
+  const away = rows("0:2", 8).concat(rows("2:0", 2));
+  const book = [
+    { sel: "2:0", p: 30 }, { sel: "2:1", p: 30 },
+    { sel: "1:2", p: 20 }, { sel: "0:2", p: 20 },
+  ];
+  const hit = scoreEdge(0.6, home, away, book, "hardcourt_outdoor");
+  assert.equal(hit.edge.sel, "2:0");
+  assert.ok(hit.edge.gap >= 0.08);
+  const quiet = scoreEdge(0.6, rows("2:1", 4), rows("1:2", 4), book, "");
+  assert.equal(quiet, null);
 });
 
 test("form nudges a little and an injury moves the winner", () => {

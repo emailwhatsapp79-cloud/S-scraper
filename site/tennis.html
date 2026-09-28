@@ -27,6 +27,7 @@
   .tn-pl.on b { color: var(--go) }
   .tn-note { font-size: 12.5px; color: var(--hold); margin: -4px 0 8px }
   .tn-note.bad { color: var(--bad) }
+  .tn-note.ahead { color: var(--go) }
   .tn-dots { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; color: var(--dim) }
   .tn-dots i { font-style: normal; color: var(--faint); margin-right: 4px }
   .tn-bar { height: 6px; border-radius: 999px; background: var(--bg); overflow: hidden; box-shadow: var(--shadow); margin: 2px 0 10px }
@@ -50,7 +51,7 @@
     <a href="/tt">Table tennis</a>
     <a href="/tennis" class="on">Tennis</a>
   </div>
-  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. The winner is those scores added up. Recent matches and the injury list can move that call. Tap a price to put it on the SportyBet slip.</p>
+  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. The winner stays with the book. A green score is the result recent sets say the book is short on. Tap a price to put it on the SportyBet slip.</p>
   <div class="chips" id="tourns"></div>
   <h2 class="lab-h" id="head">Upcoming</h2>
   <div id="out"><div class="skel"></div><div class="skel"></div></div>
@@ -115,13 +116,17 @@
     var was = bookPct != null && Math.abs(bookPct - winPct) >= 1 ? " · book had " + pct(bookPct) : "";
     line.appendChild(V.el("span", null, "wins " + pct(winPct) + was));
     if (call.score) {
+      var scoreText = g.ahead
+        ? "ours " + pct(g.ahead.ours) + " · book " + pct(g.ahead.book)
+        : "most likely " + pct(call.scoreP) + (g.derived ? " · from the winner price" : "");
       line.appendChild(V.el("b", null, call.score));
-      line.appendChild(V.el("span", null, "most likely " + pct(call.scoreP) + (g.derived ? " · from the winner price" : "")));
+      line.appendChild(V.el("span", null, scoreText));
     }
     box.appendChild(line);
     if (g.context && g.context.note) {
-      var bad = /out|retired/i.test(g.context.note);
-      box.appendChild(V.el("div", "tn-note" + (bad ? " bad" : ""), g.context.note));
+      var bad = /out|retired/i.test(g.context.note) && !g.ahead;
+      var cls = "tn-note" + (g.ahead ? " ahead" : bad ? " bad" : "");
+      box.appendChild(V.el("div", cls, g.context.note));
     }
 
     var homeOn = call.side !== "away";

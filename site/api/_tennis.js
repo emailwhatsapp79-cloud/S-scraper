@@ -255,14 +255,21 @@ export function shiftCall(call, scores, flags) {
     if (f.awayRetire) nudge += 0.03;
     nudge = Math.max(-0.06, Math.min(0.06, nudge));
     if (Math.abs(nudge) >= 0.02) {
-      home = Math.min(0.92, Math.max(0.08, home + nudge));
-      why.push(nudge > 0 ? "home form" : "away form");
+      let next = home + nudge;
+      if (nudge > 0) next = Math.min(0.94, next);
+      else next = Math.max(0.06, next);
+      if (nudge > 0 && next < home) next = home;
+      if (nudge < 0 && next > home) next = home;
+      if (Math.abs(next - home) >= 0.015) {
+        home = next;
+        why.push(nudge > 0 ? "home form" : "away form");
+      }
     }
   }
   const rows = (scores || []).map((s) => ({ sel: s.sel, odds: s.odds, p: (Number(s.p) || 0) / 100 }));
   let h = 0, a = 0;
   for (const s of rows) (sideOfScore(s.sel) === "home" ? (h += s.p) : (a += s.p));
-  const nh = Math.min(0.94, Math.max(0.06, home));
+  const nh = Math.min(0.97, Math.max(0.03, home));
   const na = 1 - nh;
   if (h > 0) for (const s of rows) if (sideOfScore(s.sel) === "home") s.p *= nh / h;
   if (a > 0) for (const s of rows) if (sideOfScore(s.sel) !== "home") s.p *= na / a;
@@ -377,6 +384,92 @@ function readMissing(data) {
   return { home, away };
 }
 
+function readSets(body, slug) {
+  const edges = body?.data?.edges || [];
+  const rows = [];
+  for (const e of edges) {
+    const n = e.node || e;
+    if (!n.is_finished) continue;
+    const teams = n.teams || [];
+    const idx = teams.findIndex((t) => t.slug === slug);
+    if (idx < 0) continue;
+    const m = String(n.result_score || "").match(/^(\d+)\s*:\s*(\d+)$/);
+    if (!m) continue;
+    const left = Number(m[1]);
+    const right = Number(m[2]);
+    const mine = idx === 0 ? left : right;
+    const opp = idx === 0 ? right : left;
+    const sel = mine + ":" + opp;
+    if (sel !== "2:0" && sel !== "2:1" && sel !== "1:2" && sel !== "0:2") continue;
+    rows.push({
+      sel,
+      surface: n.unique_tournament?.surface || n.uniqueTournament?.surface || "",
+    });
+    if (rows.length >= 16) break;
+  }
+  return rows;
+}
+
+function straightWeight(rows, surface, losses) {
+  const want = losses ? ["0:2", "1:2"] : ["2:0", "2:1"];
+  const bag = losses ? "0:2" : "2:0";
+  let w = 0;
+  let n = 0;
+  for (const r of rows) {
+    if (!want.includes(r.sel)) continue;
+    const wt = surface && r.surface === surface ? 2 : 1;
+    n += wt;
+    if (r.sel === bag) w += wt;
+  }
+  return { w, n };
+}
+
+// Winner stays with the book. The set split comes from how these two
+// actually finish matches. Same-surface results count double.
+export function scoreEdge(qHome, homeRows, awayRows, bookScores, surface) {
+  const q = Math.min(0.97, Math.max(0.03, Number(qHome) || 0.5));
+  const iidH = (() => {
+    const made = scoresFromWin(q);
+    const a = made.find((s) => s.sel === "2:0").p;
+    const b = made.find((s) => s.sel === "2:1").p;
+    return a / (a + b);
+  })();
+  const iidA = (() => {
+    const made = scoresFromWin(1 - q);
+    const a = made.find((s) => s.sel === "2:0").p;
+    const b = made.find((s) => s.sel === "2:1").p;
+    return a / (a + b);
+  })();
+  const homeWins = straightWeight(homeRows, surface, false);
+  const awayLosses = straightWeight(awayRows, surface, true);
+  const awayWins = straightWeight(awayRows, surface, false);
+  const homeLosses = straightWeight(homeRows, surface, true);
+  const hn = homeWins.n + awayLosses.n;
+  const an = awayWins.n + homeLosses.n;
+  if (hn < 6 || an < 6) return null;
+  const shrink = 8;
+  const rH = (homeWins.w + awayLosses.w + iidH * shrink) / (hn + shrink);
+  const rA = (awayWins.w + homeLosses.w + iidA * shrink) / (an + shrink);
+  const ours = [
+    { sel: "2:0", p: q * rH },
+    { sel: "2:1", p: q * (1 - rH) },
+    { sel: "1:2", p: (1 - q) * (1 - rA) },
+    { sel: "0:2", p: (1 - q) * rA },
+  ];
+  const sum = ours.reduce((n, s) => n + s.p, 0) || 1;
+  for (const s of ours) s.p /= sum;
+  let best = null;
+  for (const s of ours) {
+    const row = (bookScores || []).find((b) => b.sel === s.sel);
+    if (!row) continue;
+    const book = (Number(row.p) || 0) / 100;
+    const gap = s.p - book;
+    if (!best || gap > best.gap) best = { sel: s.sel, gap, ours: s.p, book };
+  }
+  if (!best || best.gap < 0.08) return { ours, edge: null };
+  return { ours, edge: best };
+}
+
 function readForm(body, slug) {
   const edges = body?.data?.edges || [];
   const dots = [];
@@ -427,7 +520,7 @@ export async function enrichTennis(games) {
   }
   const hist = new Map();
   function history(slug) {
-    if (!hist.has(slug)) hist.set(slug, s24("/teams/tennis/" + encodeURIComponent(slug) + "/matches?lang=en&first=12&audience=en"));
+    if (!hist.has(slug)) hist.set(slug, s24("/teams/tennis/" + encodeURIComponent(slug) + "/matches?lang=en&first=20&audience=en"));
     return hist.get(slug);
   }
   await pool(picked, 6, async ({ g, hit }) => {
@@ -461,6 +554,8 @@ export async function enrichTennis(games) {
       homeRetire: homeForm.retire, awayRetire: awayForm.retire,
       homeOut, awayOut,
     };
+    const bookScores = (g.scores || []).map((s) => ({ sel: s.sel, p: s.p }));
+    const qBook = (Number(g.call?.home) || 50) / 100;
     const moved = shiftCall(g.call, g.scores, flags);
     if (moved.why.length) {
       g.book = { home: g.call.home, away: g.call.away, score: g.call.score };
@@ -486,6 +581,28 @@ export async function enrichTennis(games) {
     }
     if (homeForm.retire) bits.push(last(g.home) + " retired recently");
     if (awayForm.retire) bits.push(last(g.away) + " retired recently");
+    const edge = scoreEdge(qBook, readSets(homeBody, homeP.slug), readSets(awayBody, awayP.slug), bookScores, hit.surface || "");
+    if (edge && edge.edge) {
+      const e = edge.edge;
+      g.ahead = {
+        sel: e.sel,
+        ours: pct1(e.ours),
+        book: pct1(e.book),
+      };
+      g.scores = g.scores.map((s) => {
+        const nxt = edge.ours.find((x) => x.sel === s.sel);
+        return nxt ? { ...s, p: pct1(nxt.p) } : s;
+      });
+      const summed = tennisCall(edge.ours);
+      g.call = {
+        side: summed.side,
+        home: pct1(summed.home),
+        away: pct1(summed.away),
+        score: e.sel,
+        scoreP: pct1(e.ours),
+      };
+      bits.push("Ahead of the book on " + e.sel);
+    }
     g.context = {
       source: "scores24",
       surface: hit.surface || "",
