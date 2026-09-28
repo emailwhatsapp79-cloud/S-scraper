@@ -29,14 +29,15 @@ function isTT(leg) {
 export function toSelection(leg) {
   const sel = String(leg.selection || "");
   const football = leg.sport === "fc" || leg.source === "football";
+  const tennis = leg.sport === "tn";
   if (!leg.eventId) {
     throw new Error(`${leg.home} v ${leg.away} is missing an event id — refresh ${football ? "Football.com" : "Matches"} first`);
   }
   let marketId = leg.marketId ? String(leg.marketId) : null;
   let outcomeId = leg.outcomeId ? String(leg.outcomeId) : null;
   if (!marketId || !outcomeId) {
-    let map = isTT(leg) ? TT_OUTCOMES[sel] : OUTCOMES[sel];
-    if (!map && !isTT(leg)) {
+    let map = (tennis || isTT(leg)) ? TT_OUTCOMES[sel] : OUTCOMES[sel];
+    if (!map && !tennis && !isTT(leg)) {
       const m = sel.match(/^(\d+):(\d+)$/);
       if (m) {
         const h = Number(m[1]), a = Number(m[2]);
@@ -44,6 +45,9 @@ export function toSelection(leg) {
           map = { marketId: "45", outcomeId: String(274 + 2 * (a * 5 + h)) };
         }
       }
+    }
+    if (!map && tennis && /^\d+:\d+$/.test(sel)) {
+      throw new Error(`${leg.home} v ${leg.away} ${sel} is a tennis set score. Refresh Tennis and tap the green score.`);
     }
     if (!map) throw new Error(`No booking slot for ${leg.selection}`);
     marketId = map.marketId;

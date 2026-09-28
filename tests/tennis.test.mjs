@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { toSelection } from "../site/api/_share.js";
 import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
@@ -50,6 +51,20 @@ test("form nudges a little and an injury moves the winner", () => {
   assert.equal(out.call.side, "away");
   assert.ok(out.call.home <= 12);
   assert.equal(nameKey("Svajda, Zachary"), nameKey("Zachary Svajda"));
+});
+
+test("a tennis set score is booked as tennis, not a football score", () => {
+  const row = toSelection({
+    eventId: "sr:match:1", home: "A", away: "B", sport: "tn", selection: "1:2", price: 4.3,
+    marketId: "199", outcomeId: "sr:correct_score:bestof:3:6",
+    specifier: "variant=sr:correct_score:bestof:3",
+  });
+  assert.equal(row.marketId, "199");
+  assert.equal(row.outcomeId, "sr:correct_score:bestof:3:6");
+  assert.equal(row.specifier, "variant=sr:correct_score:bestof:3");
+  assert.throws(() => toSelection({
+    eventId: "sr:match:1", home: "A", away: "B", sport: "tn", selection: "2:0", price: 1.5,
+  }), /tennis set score/);
 });
 
 test("a tennis set score books market 199 with its specifier", () => {

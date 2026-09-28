@@ -432,8 +432,9 @@ export async function loadGifts(session) {
 
 function isTableLeg(leg) {
   if (!leg) return false;
+  if (leg.sport === "tn" || String(leg.marketId || "") === "199") return false;
   if (leg.sport === "tt" || String(leg.marketId || "") === "186") return true;
-  return /setka|elite series|liga pro|tt cup|challenger|table tennis/i.test(String(leg.league || ""));
+  return /setka|elite series|liga pro|tt cup|challenger series|table tennis/i.test(String(leg.league || ""));
 }
 
 function isTableEvent(ev) {

@@ -54,6 +54,7 @@ export async function ensureSlips() {
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS sport TEXT`;
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS market_id TEXT`;
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS outcome_id TEXT`;
+  await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS specifier TEXT`;
   schemaReady = true;
 }
 
@@ -92,6 +93,8 @@ export function resolvePick(game, selection) {
 
 export function dcHit(selection, home, away) {
   if (home == null || away == null) return null;
+  const sets = String(selection || "").match(/^(\d+):(\d+)$/);
+  if (sets) return home === Number(sets[1]) && away === Number(sets[2]);
   if (selection === "1") return home > away;
   if (selection === "X") return home === away;
   if (selection === "2") return away > home;
@@ -156,6 +159,7 @@ function shapeLeg(l) {
     sport: l.sport || "fb",
     marketId: l.market_id || null,
     outcomeId: l.outcome_id || null,
+    specifier: l.specifier || "",
   };
 }
 
@@ -245,10 +249,10 @@ export async function createSlip(stake, incoming, book, opts = {}) {
       await sql`
         INSERT INTO slip_legs (
           slip_id, pos, game_id, event_id, home, away, league, kickoff,
-          selection, selection_label, price, sport, market_id, outcome_id)
+          selection, selection_label, price, sport, market_id, outcome_id, specifier)
         VALUES (
           ${id}, ${i}, ${l.gameId}, ${l.eventId}, ${l.home}, ${l.away}, ${l.league}, ${l.kickoff},
-          ${l.selection}, ${l.label}, ${l.price}, ${"fc"}, ${l.marketId}, ${l.outcomeId})`;
+          ${l.selection}, ${l.label}, ${l.price}, ${"fc"}, ${l.marketId}, ${l.outcomeId}, ${l.specifier || null})`;
     }
     const all = await listSlips();
     return all.find((s) => s.id === id);
@@ -273,8 +277,16 @@ export async function createSlip(stake, incoming, book, opts = {}) {
   for (const row of raw.slice(0, 12)) {
     const id = String(row.gameId || row.id || "");
     const eid = String(row.eventId || "");
-    let g = (eid && byEvent.get(eid)) || byId.get(id);
-    if (!g && row.home && row.eventId && row.price) {
+    let g = row.sport === "tn" ? null : ((eid && byEvent.get(eid)) || byId.get(id));
+    if (row.sport === "tn") {
+      if (!row.eventId || !row.home || !(Number(row.price) > 1)) {
+        throw new Error("Tennis leg is missing the match. Refresh Tennis and tap the green score.");
+      }
+      g = {
+        id: id || eid, eventId: row.eventId, home: row.home, away: row.away || "",
+        league: row.league || "Tennis", kickoff: row.kickoff || null, sport: "tn",
+      };
+    } else if (!g && row.home && row.eventId && row.price) {
       const league = row.league || "";
       const asked = row.sport === "tn" || row.sport === "tt" ? row.sport : "";
       g = {
@@ -348,10 +360,10 @@ export async function createSlip(stake, incoming, book, opts = {}) {
     await sql`
       INSERT INTO slip_legs (
         slip_id, pos, game_id, event_id, home, away, league, kickoff,
-        selection, selection_label, price, sport, market_id, outcome_id)
+        selection, selection_label, price, sport, market_id, outcome_id, specifier)
       VALUES (
         ${id}, ${i}, ${l.gameId}, ${l.eventId}, ${l.home}, ${l.away}, ${l.league}, ${l.kickoff},
-        ${l.selection}, ${l.label}, ${l.price}, ${l.sport || "fb"}, ${l.marketId || null}, ${l.outcomeId || null})`;
+        ${l.selection}, ${l.label}, ${l.price}, ${l.sport || "fb"}, ${l.marketId || null}, ${l.outcomeId || null}, ${l.specifier || null})`;
   }
 
   await refreshSlips();
@@ -373,6 +385,7 @@ export async function reshareSlip(slipId) {
     sport: l.sport || "fb",
     marketId: l.market_id || null,
     outcomeId: l.outcome_id || null,
+    specifier: l.specifier || "",
   }));
   const share = await tryShare(legs);
   await sql`
