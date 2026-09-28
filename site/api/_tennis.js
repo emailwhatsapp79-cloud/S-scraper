@@ -468,6 +468,28 @@ export function scoreEdge(qHome, homeRows, awayRows, bookScores, surface) {
   return { ours, edge: { sel: mode.sel, gap, ours: mode.p, book } };
 }
 
+// The pick follows the book's short score. A little above that price can be
+// marked ahead. A long price on the other side is never the pick.
+export function stanceOf(ours, bookScores) {
+  const rows = bookScores || [];
+  let top = null;
+  for (const b of rows) {
+    if (!top || Number(b.p) > Number(top.p)) top = b;
+  }
+  if (!top) return { ahead: null, withBook: null };
+  const mine = (ours || []).find((s) => s.sel === top.sel);
+  const book = (Number(top.p) || 0) / 100;
+  const oursP = mine ? mine.p : book;
+  const gap = oursP - book;
+  const odds = Number(top.odds);
+  if (!(odds > 1)) return { ahead: null, withBook: null };
+  if (odds <= 2.5 && gap >= 0.06 && gap <= 0.18 && oursP >= 0.45) {
+    return { ahead: { sel: top.sel, ours: oursP, book, gap }, withBook: null };
+  }
+  if (odds <= 1.7 && gap >= -0.08) return { ahead: null, withBook: { sel: top.sel } };
+  return { ahead: null, withBook: null };
+}
+
 function readForm(body, slug) {
   const edges = body?.data?.edges || [];
   const dots = [];
@@ -552,7 +574,7 @@ export async function enrichTennis(games) {
       homeRetire: homeForm.retire, awayRetire: awayForm.retire,
       homeOut, awayOut,
     };
-    const bookScores = (g.scores || []).map((s) => ({ sel: s.sel, p: s.p }));
+    const bookScores = (g.scores || []).map((s) => ({ sel: s.sel, p: s.p, odds: s.odds }));
     const qBook = (Number(g.call?.home) || 50) / 100;
     const moved = shiftCall(g.call, g.scores, flags);
     if (moved.why.length) {
@@ -580,8 +602,12 @@ export async function enrichTennis(games) {
     if (homeForm.retire) bits.push(last(g.home) + " retired recently");
     if (awayForm.retire) bits.push(last(g.away) + " retired recently");
     const edge = scoreEdge(qBook, readSets(homeBody, homeP.slug), readSets(awayBody, awayP.slug), bookScores, hit.surface || "");
-    if (edge && edge.edge) {
-      const e = edge.edge;
+    const ours = edge && edge.ours
+      ? edge.ours
+      : bookScores.map((b) => ({ sel: b.sel, p: (Number(b.p) || 0) / 100 }));
+    const stance = stanceOf(ours, bookScores);
+    if (stance.ahead && edge && edge.ours) {
+      const e = stance.ahead;
       g.ahead = {
         sel: e.sel,
         ours: pct1(e.ours),
@@ -599,7 +625,10 @@ export async function enrichTennis(games) {
         score: e.sel,
         scoreP: pct1(e.ours),
       };
-      bits.push("Ahead of the book on " + e.sel);
+      bits.push("A little ahead of the book on " + e.sel);
+    } else if (stance.withBook) {
+      g.withBook = stance.withBook;
+      bits.push("With the book on " + stance.withBook.sel);
     }
     g.context = {
       source: "scores24",
@@ -652,7 +681,7 @@ export function applyRecord(games, verdict) {
     delete g.ahead;
     if (g.context && g.context.note) {
       g.context.note = String(g.context.note)
-        .replace(/\s*·?\s*Ahead of the book on \d+:\d+/, "")
+        .replace(/\s*·?\s*(?:A little ahead|Ahead) of the book on \d+:\d+/i, "")
         .replace(/^\s*·\s*/, "")
         .trim();
     }

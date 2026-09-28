@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toSelection } from "../site/api/_share.js";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("four set scores add up to the match winner", () => {
@@ -61,6 +61,38 @@ test("recent straight sets can get ahead of the book score", () => {
     assert.equal(dog.edge.sel, mode.sel);
     assert.ok(dog.edge.ours >= 0.4);
   }
+});
+
+test("a short book price is the pick, and a 5.00 on the other side is not", () => {
+  const book = [
+    { sel: "2:0", p: 78, odds: 1.16 },
+    { sel: "2:1", p: 12, odds: 5.1 },
+    { sel: "1:2", p: 6, odds: 9 },
+    { sel: "0:2", p: 4, odds: 12 },
+  ];
+  const aligned = stanceOf([
+    { sel: "2:0", p: 0.8 }, { sel: "2:1", p: 0.1 },
+    { sel: "1:2", p: 0.06 }, { sel: "0:2", p: 0.04 },
+  ], book);
+  assert.equal(aligned.ahead, null);
+  assert.equal(aligned.withBook.sel, "2:0");
+  const fight = stanceOf([
+    { sel: "2:0", p: 0.5 }, { sel: "2:1", p: 0.3 },
+    { sel: "1:2", p: 0.12 }, { sel: "0:2", p: 0.08 },
+  ], book);
+  assert.equal(fight.ahead, null);
+  assert.equal(fight.withBook, null);
+  const little = stanceOf([
+    { sel: "2:0", p: 0.7 }, { sel: "2:1", p: 0.16 },
+    { sel: "1:2", p: 0.08 }, { sel: "0:2", p: 0.06 },
+  ], [
+    { sel: "2:0", p: 60, odds: 1.55 },
+    { sel: "2:1", p: 22, odds: 3.6 },
+    { sel: "1:2", p: 12, odds: 6 },
+    { sel: "0:2", p: 6, odds: 9 },
+  ]);
+  assert.equal(little.ahead.sel, "2:0");
+  assert.ok(little.ahead.gap >= 0.06 && little.ahead.gap <= 0.18);
 });
 
 test("form nudges a little and an injury moves the winner", () => {
