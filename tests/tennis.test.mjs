@@ -49,6 +49,18 @@ test("recent straight sets can get ahead of the book score", () => {
   assert.ok(hit.edge.gap >= 0.08);
   const quiet = scoreEdge(0.6, rows("2:1", 4), rows("1:2", 4), book, "");
   assert.equal(quiet, null);
+  const homeDecider = rows("2:1", 8).concat(rows("2:0", 2));
+  const awayDecider = rows("1:2", 8).concat(rows("0:2", 2));
+  const short = [
+    { sel: "2:0", p: 46 }, { sel: "2:1", p: 18 },
+    { sel: "1:2", p: 22 }, { sel: "0:2", p: 14 },
+  ];
+  const dog = scoreEdge(0.64, homeDecider, awayDecider, short, "hardcourt_outdoor");
+  if (dog && dog.edge) {
+    const mode = dog.ours.reduce((a, b) => (b.p > a.p ? b : a));
+    assert.equal(dog.edge.sel, mode.sel);
+    assert.ok(dog.edge.ours >= 0.4);
+  }
 });
 
 test("form nudges a little and an injury moves the winner", () => {

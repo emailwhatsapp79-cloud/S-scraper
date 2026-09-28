@@ -424,8 +424,8 @@ function straightWeight(rows, surface, losses) {
   return { w, n };
 }
 
-// Winner stays with the book. The set split comes from how these two
-// actually finish matches. Same-surface results count double.
+// Winner stays with the book. Only the most likely score can be marked ahead.
+// A deciding set the book is cheap on is not a pick if another score is likelier.
 export function scoreEdge(qHome, homeRows, awayRows, bookScores, surface) {
   const q = Math.min(0.97, Math.max(0.03, Number(qHome) || 0.5));
   const iidH = (() => {
@@ -458,16 +458,14 @@ export function scoreEdge(qHome, homeRows, awayRows, bookScores, surface) {
   ];
   const sum = ours.reduce((n, s) => n + s.p, 0) || 1;
   for (const s of ours) s.p /= sum;
-  let best = null;
-  for (const s of ours) {
-    const row = (bookScores || []).find((b) => b.sel === s.sel);
-    if (!row) continue;
-    const book = (Number(row.p) || 0) / 100;
-    const gap = s.p - book;
-    if (!best || gap > best.gap) best = { sel: s.sel, gap, ours: s.p, book };
-  }
-  if (!best || best.gap < 0.08) return { ours, edge: null };
-  return { ours, edge: best };
+  const mode = ours.reduce((a, b) => (b.p > a.p ? b : a));
+  if (mode.p < 0.4) return { ours, edge: null };
+  const row = (bookScores || []).find((b) => b.sel === mode.sel);
+  if (!row) return { ours, edge: null };
+  const book = (Number(row.p) || 0) / 100;
+  const gap = mode.p - book;
+  if (gap < 0.08) return { ours, edge: null };
+  return { ours, edge: { sel: mode.sel, gap, ours: mode.p, book } };
 }
 
 function readForm(body, slug) {

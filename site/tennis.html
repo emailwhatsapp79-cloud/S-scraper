@@ -56,7 +56,7 @@
     <a href="/tt">Table tennis</a>
     <a href="/tennis" class="on">Tennis</a>
   </div>
-  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. Green is the most likely score. Gold, with ahead on it, is the one the book is short on. Ahead saves only those.</p>
+  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. Green is the most likely score, and only when it is at least half. Gold is that same score when the book is short on it. A longer score is not marked just because the price looks big.</p>
   <div class="chips" id="views">
     <button type="button" class="chip on" id="v-matches">Matches</button>
     <button type="button" class="chip" id="v-record">Ahead</button>
@@ -177,7 +177,7 @@
       });
       scores.forEach(function (s) {
         var ahead = g.ahead && s.sel === g.ahead.sel;
-        var kind = ahead ? "ahead" : (s.sel === likely ? "pick" : "");
+        var kind = ahead ? "ahead" : (s.sel === likely && best >= 50 ? "pick" : "");
         sg.appendChild(cell(g, s.sel, s.odds, s.sel, kind, pct(s.p)));
       });
       box.appendChild(sg);
