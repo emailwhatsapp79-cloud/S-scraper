@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("four set scores add up to the match winner", () => {
@@ -19,6 +19,22 @@ test("four set scores add up to the match winner", () => {
   const back = tennisCall(made);
   assert.ok(Math.abs(back.home - 0.75) < 0.01);
   assert.ok(Math.abs(made.reduce((s, x) => s + x.p, 0) - 1) < 0.001);
+});
+
+test("form nudges a little and an injury moves the winner", () => {
+  const call = { home: 55, away: 45, score: "2:1", scoreP: 30 };
+  const scores = [
+    { sel: "2:0", p: 25 }, { sel: "2:1", p: 30 },
+    { sel: "1:2", p: 25 }, { sel: "0:2", p: 20 },
+  ];
+  const hot = shiftCall(call, scores, { homeN: 5, awayN: 5, homeWins: 5, awayWins: 0, homeRetire: false, awayRetire: false });
+  assert.ok(hot.call.home > 55);
+  assert.ok(hot.call.home - 55 <= 7);
+  assert.equal(hot.why.includes("home form"), true);
+  const out = shiftCall(call, scores, { homeOut: true, homeN: 0, awayN: 0, homeWins: 0, awayWins: 0 });
+  assert.equal(out.call.side, "away");
+  assert.ok(out.call.home <= 12);
+  assert.equal(nameKey("Svajda, Zachary"), nameKey("Zachary Svajda"));
 });
 
 test("a tennis set score books market 199 with its specifier", () => {

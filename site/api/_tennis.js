@@ -228,3 +228,271 @@ export async function fetchTennisCard() {
   found.sort((a, b) => (a.start || 0) - (b.start || 0));
   return found;
 }
+
+function pct1(x) { return Math.round(x * 1000) / 10; }
+
+function sideOfScore(sel) {
+  return sideOf(sel);
+}
+
+// Move the book call when recent results or an injury list disagree with it.
+// The shift is small on form, and large only when a player is actually listed out.
+export function shiftCall(call, scores, flags) {
+  const base = (Number(call?.home) || 0) / 100;
+  let home = base;
+  const why = [];
+  const f = flags || {};
+  if (f.homeOut && f.awayOut) why.push("both listed out");
+  else if (f.homeOut) { home = Math.min(home, 0.12); why.push("home listed out"); }
+  else if (f.awayOut) { home = Math.max(home, 0.88); why.push("away listed out"); }
+  else {
+    let nudge = 0;
+    if (f.homeN >= 4 && f.awayN >= 4) {
+      const gap = f.homeWins / f.homeN - f.awayWins / f.awayN;
+      if (Math.abs(gap) >= 0.35) nudge = Math.sign(gap) * Math.min(0.06, Math.abs(gap) * 0.08);
+    }
+    if (f.homeRetire) nudge -= 0.03;
+    if (f.awayRetire) nudge += 0.03;
+    nudge = Math.max(-0.06, Math.min(0.06, nudge));
+    if (Math.abs(nudge) >= 0.02) {
+      home = Math.min(0.92, Math.max(0.08, home + nudge));
+      why.push(nudge > 0 ? "home form" : "away form");
+    }
+  }
+  const rows = (scores || []).map((s) => ({ sel: s.sel, odds: s.odds, p: (Number(s.p) || 0) / 100 }));
+  let h = 0, a = 0;
+  for (const s of rows) (sideOfScore(s.sel) === "home" ? (h += s.p) : (a += s.p));
+  const nh = Math.min(0.94, Math.max(0.06, home));
+  const na = 1 - nh;
+  if (h > 0) for (const s of rows) if (sideOfScore(s.sel) === "home") s.p *= nh / h;
+  if (a > 0) for (const s of rows) if (sideOfScore(s.sel) !== "home") s.p *= na / a;
+  const sum = rows.reduce((n, s) => n + s.p, 0) || 1;
+  for (const s of rows) s.p /= sum;
+  const next = tennisCall(rows);
+  return {
+    why,
+    home,
+    call: {
+      side: next.side,
+      home: pct1(next.home),
+      away: pct1(next.away),
+      score: next.score,
+      scoreP: pct1(next.scoreP),
+    },
+    scores: rows.map((s) => ({ sel: s.sel, odds: s.odds ?? null, p: pct1(s.p) })),
+  };
+}
+
+export function nameKey(s) {
+  return String(s || "")
+    .toLowerCase()
+    .replace(/[^a-z]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length > 1)
+    .sort()
+    .join("|");
+}
+
+function dayStamp(offset) {
+  const d = new Date(Date.now() + offset * 86400000);
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate());
+}
+
+async function s24(path) {
+  const target = "https://scores24.live/rapi" + path;
+  const ac = new AbortController();
+  const to = setTimeout(() => ac.abort(), 4500);
+  const hdr = {
+    "User-Agent": UA,
+    Accept: "application/json",
+    Origin: "https://scores24.live",
+    Referer: "https://scores24.live/en/tennis",
+  };
+  try {
+    const direct = await fetch(target, { headers: hdr, signal: ac.signal });
+    if (direct.ok) return await direct.json();
+    const key = process.env.GATE_SECRET || process.env.CRON_SECRET || "";
+    const origins = [];
+    if (process.env.VERCEL_PROJECT_PRODUCTION_URL) origins.push("https://" + process.env.VERCEL_PROJECT_PRODUCTION_URL);
+    if (process.env.VERCEL_URL) origins.push("https://" + process.env.VERCEL_URL);
+    for (const origin of origins) {
+      const u = origin + "/api/s24-proxy?kind=rapi&u=" + encodeURIComponent(target);
+      const r = await fetch(u, { headers: { "x-fill-key": key, Accept: "application/json" }, signal: ac.signal });
+      if (r.ok) return await r.json();
+    }
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+async function loadIndex() {
+  const map = new Map();
+  for (const off of [-1, 0, 1, 2]) {
+    const day = dayStamp(off);
+    const q = new URLSearchParams();
+    q.append("date_between[]", day + " 00:00:00");
+    q.append("date_between[]", day + " 23:59:59");
+    q.set("lang", "en");
+    q.set("is_bot", "false");
+    const body = await s24("/sport/tennis/leagues?" + q);
+    for (const league of body?.data || []) {
+      for (const m of league.matches || []) {
+        const teams = m.teams || [];
+        if (teams.length < 2 || !m.slug) continue;
+        const keys = [nameKey(teams[0].name), nameKey(teams[1].name)].sort().join("~");
+        if (!map.has(keys)) {
+          map.set(keys, {
+            slug: m.slug,
+            surface: m.uniqueTournament?.surface || m.unique_tournament?.surface || "",
+            players: teams.slice(0, 2).map((t) => ({ name: t.name, slug: t.slug, key: nameKey(t.name) })),
+          });
+        }
+      }
+    }
+  }
+  return map;
+}
+
+function person(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const name = raw.name || raw.player?.name || raw.player_name || "";
+  const why = raw.reason?.name || raw.reason || raw.type || raw.status || raw.description || "out";
+  if (!name && !why) return null;
+  return { name: String(name || ""), why: String(why) };
+}
+
+function readMissing(data) {
+  const raw = data?.missing_players || data?.missingPlayers || [];
+  const home = [];
+  const away = [];
+  if (Array.isArray(raw[0]) || Array.isArray(raw[1])) {
+    for (const p of raw[0] || []) { const x = person(p); if (x) home.push(x); }
+    for (const p of raw[1] || []) { const x = person(p); if (x) away.push(x); }
+  }
+  return { home, away };
+}
+
+function readForm(body, slug) {
+  const edges = body?.data?.edges || [];
+  const dots = [];
+  let wins = 0;
+  let retire = false;
+  let seen = 0;
+  for (const e of edges) {
+    const n = e.node || e;
+    if (!n.is_finished && String(n.status?.name || "") !== "retired") continue;
+    const teams = n.teams || [];
+    const idx = teams.findIndex((t) => t.slug === slug);
+    if (idx < 0) continue;
+    const winner = Number(n.winner);
+    const won = winner === idx + 1;
+    const retired = /retir|walkover|abandoned/i.test(String(n.status?.name || ""));
+    seen++;
+    if (seen <= 5) {
+      dots.push(won ? "W" : "L");
+      if (won) wins++;
+    }
+    if (seen <= 3 && retired && !won) retire = true;
+    if (seen >= 5 && retire) break;
+    if (seen >= 8) break;
+  }
+  return { dots, wins, n: Math.min(seen, 5), retire };
+}
+
+async function pool(items, n, fn) {
+  let i = 0;
+  async function worker() {
+    while (i < items.length) {
+      const cur = items[i++];
+      try { await fn(cur); } catch { /* one player must not blank the card */ }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+}
+
+export async function enrichTennis(games) {
+  const index = await loadIndex();
+  if (!index.size) return games;
+  const picked = [];
+  for (const g of games) {
+    const hit = index.get([nameKey(g.home), nameKey(g.away)].sort().join("~"));
+    if (!hit) continue;
+    picked.push({ g, hit });
+    if (picked.length >= 20) break;
+  }
+  const hist = new Map();
+  function history(slug) {
+    if (!hist.has(slug)) hist.set(slug, s24("/teams/tennis/" + encodeURIComponent(slug) + "/matches?lang=en&first=12&audience=en"));
+    return hist.get(slug);
+  }
+  await pool(picked, 6, async ({ g, hit }) => {
+    const homeP = hit.players.find((p) => p.key === nameKey(g.home)) || hit.players[0];
+    const awayP = hit.players.find((p) => p.key === nameKey(g.away)) || hit.players[1];
+    const [lineups, homeBody, awayBody] = await Promise.all([
+      s24("/matches/tennis/" + hit.slug + "/lineups?lang=en"),
+      history(homeP.slug),
+      history(awayP.slug),
+    ]);
+    const teams = lineups?.data?.teams || [];
+    const missing = readMissing(lineups?.data);
+    const rankOf = (slug) => {
+      const team = teams.find((t) => t.slug === slug);
+      const row = team?.lineups?.start?.[0];
+      const rank = Number(row?.ranking);
+      return rank > 0 ? rank : null;
+    };
+    const listed = (list, key) => list.some((p) => nameKey(p.name) === key);
+    const homeForm = readForm(homeBody, homeP.slug);
+    const awayForm = readForm(awayBody, awayP.slug);
+    const homeOut = listed(missing.home, homeP.key) || listed(missing.away, homeP.key);
+    const awayOut = listed(missing.home, awayP.key) || listed(missing.away, awayP.key);
+    const whyOf = (key) => {
+      const p = missing.home.concat(missing.away).find((x) => nameKey(x.name) === key);
+      return p ? p.why : "";
+    };
+    const flags = {
+      homeN: homeForm.n, awayN: awayForm.n,
+      homeWins: homeForm.wins, awayWins: awayForm.wins,
+      homeRetire: homeForm.retire, awayRetire: awayForm.retire,
+      homeOut, awayOut,
+    };
+    const moved = shiftCall(g.call, g.scores, flags);
+    if (moved.why.length) {
+      g.book = { home: g.call.home, away: g.call.away, score: g.call.score };
+      g.call = moved.call;
+      g.scores = g.scores.map((s) => {
+        const nxt = moved.scores.find((x) => x.sel === s.sel);
+        return nxt ? { ...s, p: nxt.p } : s;
+      });
+    }
+    const last = (name) => {
+      const t = String(name || "");
+      if (t.includes(",")) return t.split(",")[0].trim();
+      const p = t.split(/\s+/);
+      return p[p.length - 1] || t;
+    };
+    const bits = [];
+    if (homeOut) bits.push(last(g.home) + " listed out" + (whyOf(homeP.key) ? " (" + whyOf(homeP.key) + ")" : ""));
+    if (awayOut) bits.push(last(g.away) + " listed out" + (whyOf(awayP.key) ? " (" + whyOf(awayP.key) + ")" : ""));
+    if (!homeOut && !awayOut && homeForm.n >= 4 && awayForm.n >= 4) {
+      const gap = homeForm.wins / homeForm.n - awayForm.wins / awayForm.n;
+      if (gap >= 0.35) bits.push(last(g.home) + " won " + homeForm.wins + " of last " + homeForm.n);
+      else if (gap <= -0.35) bits.push(last(g.away) + " won " + awayForm.wins + " of last " + awayForm.n);
+    }
+    if (homeForm.retire) bits.push(last(g.home) + " retired recently");
+    if (awayForm.retire) bits.push(last(g.away) + " retired recently");
+    g.context = {
+      source: "scores24",
+      surface: hit.surface || "",
+      note: bits.join(" · "),
+      home: { dots: homeForm.dots, rank: rankOf(homeP.slug), out: homeOut },
+      away: { dots: awayForm.dots, rank: rankOf(awayP.slug), out: awayOut },
+    };
+  });
+  return games;
+}

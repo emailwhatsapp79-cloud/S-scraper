@@ -25,7 +25,10 @@
   .tn-pl { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; margin-bottom: 6px }
   .tn-pl b { font-size: 15.5px; font-weight: 650 }
   .tn-pl.on b { color: var(--go) }
-  .tn-pct { font-family: var(--mono); font-size: 13px; color: var(--dim) }
+  .tn-note { font-size: 12.5px; color: var(--hold); margin: -4px 0 8px }
+  .tn-note.bad { color: var(--bad) }
+  .tn-dots { font-family: var(--mono); font-size: 11px; letter-spacing: .08em; color: var(--dim) }
+  .tn-dots i { font-style: normal; color: var(--faint); margin-right: 4px }
   .tn-bar { height: 6px; border-radius: 999px; background: var(--bg); overflow: hidden; box-shadow: var(--shadow); margin: 2px 0 10px }
   .tn-bar > i { display: block; height: 100%; background: var(--go) }
   .tn-lab { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 600; margin: 8px 0 6px }
@@ -47,7 +50,7 @@
     <a href="/tt">Table tennis</a>
     <a href="/tennis" class="on">Tennis</a>
   </div>
-  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. The winner is those scores added up. Tap a price to put it on the SportyBet slip.</p>
+  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. The winner is those scores added up. Recent matches and the injury list can move that call. Tap a price to put it on the SportyBet slip.</p>
   <div class="chips" id="tourns"></div>
   <h2 class="lab-h" id="head">Upcoming</h2>
   <div id="out"><div class="skel"></div><div class="skel"></div></div>
@@ -107,19 +110,35 @@
     var winner = call.side === "away" ? g.away : g.home;
     var line = V.el("div", "tn-call");
     line.appendChild(V.el("b", null, lastName(winner)));
-    line.appendChild(V.el("span", null, "wins " + pct(call.side === "away" ? call.away : call.home)));
+    var winPct = call.side === "away" ? call.away : call.home;
+    var bookPct = g.book ? (call.side === "away" ? g.book.away : g.book.home) : null;
+    var was = bookPct != null && Math.abs(bookPct - winPct) >= 1 ? " · book had " + pct(bookPct) : "";
+    line.appendChild(V.el("span", null, "wins " + pct(winPct) + was));
     if (call.score) {
       line.appendChild(V.el("b", null, call.score));
       line.appendChild(V.el("span", null, "most likely " + pct(call.scoreP) + (g.derived ? " · from the winner price" : "")));
     }
     box.appendChild(line);
+    if (g.context && g.context.note) {
+      var bad = /out|retired/i.test(g.context.note);
+      box.appendChild(V.el("div", "tn-note" + (bad ? " bad" : ""), g.context.note));
+    }
 
     var homeOn = call.side !== "away";
     [["home", g.home, call.home], ["away", g.away, call.away]].forEach(function (p) {
       var row = V.el("div", "tn-pl" + ((p[0] === "home") === homeOn ? " on" : ""));
       row.appendChild(V.el("b", null, p[1]));
-      row.appendChild(V.el("span", "tn-pct", pct(p[2])));
+      var ctx = g.context && g.context[p[0]];
+      var meta = V.el("span", "tn-pct", pct(p[2]) + (ctx && ctx.rank ? " · #" + ctx.rank : ""));
+      row.appendChild(meta);
       box.appendChild(row);
+      if (ctx && ctx.dots && ctx.dots.length) {
+        var dots = V.el("div", "tn-dots");
+        var lab = V.el("i", null, "Last");
+        dots.appendChild(lab);
+        dots.appendChild(document.createTextNode(ctx.dots.join(" ")));
+        box.appendChild(dots);
+      }
     });
     var bar = V.el("div", "tn-bar");
     var fill = V.el("i");
