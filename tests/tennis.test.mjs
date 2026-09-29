@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toSelection } from "../site/api/_share.js";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("a simulated match is marked sim and is not a real player", () => {
@@ -23,6 +23,10 @@ test("a simulated match is marked sim and is not a real player", () => {
   }, "SRL Fall Invitational", "Simulated Reality");
   assert.equal(g.sim, true);
   assert.match(g.tourn, /^SIM · /);
+  assert.equal(isWomenEvent("WTA Beijing", "WTA"), true);
+  assert.equal(isWomenEvent("ITF W15 Maanshan", "ITF"), true);
+  assert.equal(isWomenEvent("ITF M15 Baku", "ITF"), false);
+  assert.equal(isWomenEvent("ATP Beijing", "ATP"), false);
 });
 
 test("four set scores add up to the match winner", () => {

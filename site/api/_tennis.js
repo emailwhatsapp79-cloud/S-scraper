@@ -143,6 +143,11 @@ function scoreRows(ev) {
   return rows;
 }
 
+export function isWomenEvent(tourn, category) {
+  const text = [tourn, category].filter(Boolean).join(" ");
+  return /\bWTA\b|\bwomen\b|\bITF\s+W\d+/i.test(text);
+}
+
 export function isSimEvent(ev, tourn, category) {
   const cat = ev?.sport?.category?.name || category || "";
   const text = [tourn, cat, ev?.homeTeamName, ev?.awayTeamName].join(" ");
@@ -156,6 +161,7 @@ export function normaliseTennis(ev, tourn, category) {
   const start = ev.estimateStartTime ? Number(ev.estimateStartTime) : null;
   if (!upcoming(ev.matchStatus, start)) return null;
   const sim = isSimEvent(ev, tourn, category);
+  const women = isWomenEvent(tourn, category);
   const win = winPrices(ev);
   let scores = scoreRows(ev);
   let derived = false;
@@ -191,6 +197,7 @@ export function normaliseTennis(ev, tourn, category) {
     home, away,
     tourn: sim ? "SIM · " + (tourn || "Simulated Reality") : (tourn || ""),
     sim,
+    women,
     start,
     status: ev.matchStatus || "",
     derived,
