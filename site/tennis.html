@@ -84,9 +84,12 @@
     return p[p.length - 1] || t;
   }
   function pct(n) { return (n == null || !isFinite(n)) ? "—" : Math.round(n) + "%"; }
-  function current(id) {
+  function current(g) {
     var legs = V.loadBook();
-    for (var i = 0; i < legs.length; i++) if (legs[i].id === id) return legs[i].selection;
+    for (var i = 0; i < legs.length; i++) {
+      if (g.eventId && legs[i].eventId === g.eventId) return legs[i].selection;
+      if (legs[i].id === g.id) return legs[i].selection;
+    }
     return null;
   }
   function gameOf(g) {
@@ -97,7 +100,7 @@
     };
   }
   function cell(g, sel, price, label, kind, extra) {
-    var on = current(g.id) === sel;
+    var on = current(g) === sel;
     var c = V.el("div", "tn-cell" + (on ? " on" : kind ? " " + kind : ""));
     if ((kind === "ahead" || kind === "book" || kind === "call") && !on) {
       var word = kind === "book" ? "book" : (kind === "call" ? "call" : "ahead");

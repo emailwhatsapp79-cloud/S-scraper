@@ -61,10 +61,10 @@ export function toSelection(leg) {
   };
   if (leg.probability) row.probability = String(leg.probability);
   if (leg.specifier) row.specifier = String(leg.specifier);
+  const sportId = leg.sportId || (tennis ? "sr:sport:5" : (isTT(leg) ? "sr:sport:20" : SPORT_ID));
+  row.sportId = sportId;
   if (football && !isTT(leg)) {
-    const sportId = leg.sportId || SPORT_ID;
     const product = String(leg.product || "3");
-    row.sportId = sportId;
     row.id = selectionId(product, sportId, marketId, outcomeId);
   }
   return row;

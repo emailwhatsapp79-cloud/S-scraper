@@ -552,12 +552,12 @@ export async function priceLeg(leg, book) {
   };
 }
 
-export function buildOrder(legs, stake, gift) {
+export function buildOrder(legs, stake, gift, shareCode) {
   const list = legs || [];
   if (!list.length) throw new Error("Nothing to place");
   const naira = Number(stake);
   if (!(naira > 0)) throw new Error("Stake has to be above 0");
-  const selections = list.map((l) => {
+  const selections = list.map((l, i) => {
     const product = String(l.product || "3");
     const sportId = l.sportId || (
       l.sport === "tn" || String(l.marketId) === "199" ? "sr:sport:5"
@@ -569,12 +569,11 @@ export function buildOrder(legs, stake, gift) {
     const row = {
       eventId: String(l.eventId),
       id,
-      marketId,
       odds: String(l.price),
       probability: l.probability ? String(l.probability) : "",
-      twoUpFactor: 1,
       banker: false,
-      betslipKey: betslipKey(sportId, l.eventId, marketId, outcomeId),
+      betPosition: i,
+      sportId,
     };
     if (l.specifier) row.specifier = String(l.specifier);
     return row;
@@ -603,6 +602,10 @@ export function buildOrder(legs, stake, gift) {
     ticket: { selections, bets },
   };
   if (favor) order.favor = favor;
+  if (shareCode) {
+    order.loadingShareCode = String(shareCode);
+    order.codeSource = 0;
+  }
   return order;
 }
 
@@ -656,7 +659,14 @@ async function postOrder(session, order) {
 export async function placeOrder(session, legs, stake, gift) {
   const priced = [];
   for (const leg of legs) priced.push(await priceLeg(leg, session && session.book));
-  const order = buildOrder(priced, stake, gift);
+  const sports = new Set(priced.map((l) => l.sportId).filter(Boolean));
+  let shareCode = "";
+  if (sports.size > 1) {
+    const { shareSelections } = await import("./_share.js");
+    const shared = await shareSelections(priced, session && session.book === "sporty" ? "sporty" : "football");
+    shareCode = shared.shareCode || "";
+  }
+  const order = buildOrder(priced, stake, gift, shareCode);
   const hit = await postOrder(session, order);
   const body = hit.body || {};
   if (body.bizCode !== 10000) {

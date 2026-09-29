@@ -526,13 +526,17 @@
     try { window.dispatchEvent(new Event("vfs-book")); } catch (e) {}
     return legs;
   }
+  function legKey(l) {
+    return String((l && (l.eventId || l.id)) || "");
+  }
   function inBook(id) {
-    return loadBook().some(function (l) { return l.id === id; });
+    return loadBook().some(function (l) { return l.id === id || l.eventId === id; });
   }
   function toggleBook(pick) {
     var legs = loadBook();
-    var prev = legs.filter(function (l) { return l.id === pick.id; })[0];
-    var kept = legs.filter(function (l) { return l.id !== pick.id; });
+    var key = legKey(pick);
+    var prev = legs.filter(function (l) { return legKey(l) === key; })[0];
+    var kept = legs.filter(function (l) { return legKey(l) !== key; });
     if (!prev || prev.selection !== pick.selection) kept.push(pick);
     return saveBook(kept);
   }

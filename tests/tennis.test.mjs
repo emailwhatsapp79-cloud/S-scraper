@@ -224,6 +224,15 @@ test("a tennis set score books market 199 with its specifier", () => {
   }], 100, null);
   assert.equal(order.ticket.selections[0].specifier, "variant=sr:correct_score:bestof:3");
   assert.match(order.ticket.selections[0].id, /199\/sr:correct_score:bestof:3:7\?variant=sr:correct_score:bestof:3$/);
+  assert.equal(order.ticket.selections[0].sportId, "sr:sport:5");
+  const mixed = buildOrder([
+    { eventId: "sr:match:1", marketId: "1", outcomeId: "1", sportId: "sr:sport:202120001", product: "3", price: 1.4, sport: "fb" },
+    { eventId: q.eventId, marketId: q.marketId, outcomeId: q.outcomeId, sportId: q.sportId, specifier: q.specifier, product: "3", price: q.odds, sport: "tn" },
+  ], 100, null, "XNWD12");
+  assert.equal(mixed.ticket.selections[0].sportId, "sr:sport:202120001");
+  assert.equal(mixed.ticket.selections[1].sportId, "sr:sport:5");
+  assert.equal(mixed.loadingShareCode, "XNWD12");
+  assert.equal(mixed.ticket.selections[1].betPosition, 1);
 
   const game = normaliseTennis({
     eventId: "sr:match:1", gameId: "9", matchStatus: "Not start",
