@@ -328,6 +328,12 @@ export async function createSlip(stake, incoming, book, opts = {}) {
     });
   }
 
+  const hasVirtual = legs.some((l) => l.sport !== "tn" && l.sport !== "tt");
+  const hasReal = legs.some((l) => l.sport === "tn" || l.sport === "tt");
+  if (hasVirtual && hasReal) {
+    throw new Error("SportyBet will not take virtual football and tennis on one ticket. Place the vFootball games first, then the tennis on its own.");
+  }
+
   const pay = opts.pay === "gift" ? "gift" : opts.pay === "money" ? "money" : "";
   let placed = null;
   let booked = legs;
