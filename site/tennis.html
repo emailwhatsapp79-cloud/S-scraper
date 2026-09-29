@@ -63,6 +63,7 @@
   <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. A mark is only put down after Predixsport and TennisPredictions. If they are sure and the book agrees, only the straight-set score. If they have it close, their deciding score is allowed. If they disagree, nothing is marked.</p>
   <div class="chips" id="views">
     <button type="button" class="chip on" id="v-matches">Matches</button>
+    <button type="button" class="chip" id="v-book">Book</button>
     <button type="button" class="chip" id="v-record">Ahead</button>
   </div>
   <div class="chips" id="tourns"></div>
@@ -74,7 +75,7 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("tt");
-  var LAST = [], LEAGUE = "All", VIEW = "matches", RECORD = null;
+  var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", RECORD = null;
 
   function lastName(s) {
     var t = String(s || "").trim();
@@ -216,6 +217,18 @@
     return box;
   }
 
+  function hasBook(g) {
+    if (!g || g.sim || g.ahead || g.called) return false;
+    if (g.withBook && g.withBook.sel) return true;
+    if (g.context) return false;
+    var short = 99;
+    (g.scores || []).forEach(function (s) {
+      var o = Number(s.odds);
+      if (o > 1 && o < short) short = o;
+    });
+    return short <= 1.7;
+  }
+
   function tourns(list) {
     var box = document.getElementById("tourns");
     var names = ["All"];
@@ -266,15 +279,17 @@
   }
 
   function render() {
-    document.getElementById("v-matches").className = "chip" + (VIEW === "matches" ? " on" : "");
+    document.getElementById("v-matches").className = "chip" + (VIEW === "matches" && !ONLY ? " on" : "");
+    document.getElementById("v-book").className = "chip" + (VIEW === "matches" && ONLY === "book" ? " on" : "");
     document.getElementById("v-record").className = "chip" + (VIEW === "record" ? " on" : "");
     if (VIEW === "record") { renderRecord(); return; }
     var out = document.getElementById("out");
     out.textContent = "";
     var list = LAST.filter(function (g) { return LEAGUE === "All" || g.tourn === LEAGUE; });
-    document.getElementById("head").textContent = "Upcoming — " + list.length;
+    if (ONLY === "book") list = list.filter(hasBook);
+    document.getElementById("head").textContent = (ONLY === "book" ? "Book — " : "Upcoming — ") + list.length;
     if (!list.length) {
-      out.appendChild(V.el("div", "empty", LAST.length ? "Nothing in that tournament." : "No upcoming tennis on SportyBet right now."));
+      out.appendChild(V.el("div", "empty", ONLY === "book" ? "No book mark in this list." : (LAST.length ? "Nothing in that tournament." : "No upcoming tennis on SportyBet right now.")));
     } else list.forEach(function (g) { out.appendChild(card(g)); });
     tourns(LAST);
     V.tick();
@@ -292,8 +307,9 @@
     });
   }
   load();
-  document.getElementById("v-matches").addEventListener("click", function () { VIEW = "matches"; render(); });
-  document.getElementById("v-record").addEventListener("click", function () { VIEW = "record"; render(); });
+  document.getElementById("v-matches").addEventListener("click", function () { VIEW = "matches"; ONLY = ""; render(); });
+  document.getElementById("v-book").addEventListener("click", function () { VIEW = "matches"; ONLY = "book"; render(); });
+  document.getElementById("v-record").addEventListener("click", function () { VIEW = "record"; ONLY = ""; render(); });
   window.addEventListener("vfs-book", render);
 })();
 </script>
