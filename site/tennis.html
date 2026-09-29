@@ -51,7 +51,7 @@
   .tn-miss { color: var(--bad) }
   .tn.sim { box-shadow: inset 0 0 0 1px var(--bad) }
   .tn-sim { margin-right: 6px; color: var(--bad); font-size: 10px; font-weight: 700; letter-spacing: .06em; border: 1px solid var(--bad); border-radius: 99px; padding: 1px 6px }
-  .tn-w { margin-right: 6px; color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: .06em; border: 1px solid var(--dim); border-radius: 99px; padding: 1px 6px }
+  .tn-w, .tn-draw { margin-right: 6px; color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: .06em; border: 1px solid var(--dim); border-radius: 99px; padding: 1px 6px }
 </style>
 </head>
 <body>
@@ -118,6 +118,8 @@
     var box = V.el("article", "tn");
     var top = V.el("div", "tn-top");
     if (g.women) top.appendChild(V.el("b", "tn-w", "W"));
+    if (g.draw === "doubles") top.appendChild(V.el("b", "tn-draw", "Doubles"));
+    else if (g.draw === "singles") top.appendChild(V.el("b", "tn-draw", "Singles"));
     if (g.sim) {
       box.className = "tn sim";
       top.appendChild(V.el("b", "tn-sim", "SIM"));

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toSelection } from "../site/api/_share.js";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent, drawOf } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("a simulated match is marked sim and is not a real player", () => {
@@ -27,6 +27,10 @@ test("a simulated match is marked sim and is not a real player", () => {
   assert.equal(isWomenEvent("ITF W15 Maanshan", "ITF"), true);
   assert.equal(isWomenEvent("ITF M15 Baku", "ITF"), false);
   assert.equal(isWomenEvent("ATP Beijing", "ATP"), false);
+  assert.equal(drawOf("ATP Beijing, China Men Singles", "Medvedev, Daniil", "Safiullin, Roman"), "singles");
+  assert.equal(drawOf("WTA 125K Adana, Turkiye Women Doubles", "Aksu A / Mert A", "Other / Pair"), "doubles");
+  assert.equal(drawOf("ITF M15 Baku", "One, A", "Two, B"), "singles");
+  assert.equal(drawOf("ITF W15 Maanshan Doubles", "A / B", "C / D"), "doubles");
 });
 
 test("four set scores add up to the match winner", () => {
