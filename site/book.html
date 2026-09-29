@@ -191,6 +191,20 @@
       box.appendChild(row);
     });
 
+    var cut = legs.filter(function (l) {
+      return l.kickoff && Number(l.kickoff) < Date.now() - 60000;
+    });
+    if (cut.length) {
+      var wipe = V.el("button", "ghost wide", "Clear " + cut.length + " that already started");
+      wipe.type = "button";
+      wipe.addEventListener("click", function () {
+        save(legs.filter(function (l) {
+          return !(l.kickoff && Number(l.kickoff) < Date.now() - 60000);
+        }));
+        renderDraft();
+      });
+      box.appendChild(wipe);
+    }
     var money = V.el("div", "money");
     var a = V.el("div");
     a.appendChild(V.el("label", null, "Stake"));
@@ -330,6 +344,7 @@
   renderDraft();
   loadAcct();
   window.addEventListener("vfs-book", renderDraft);
+  window.addEventListener("vfs-slips", function () { loadSlips(false); });
   loadSlips(false);
   loadSlips(true);
   setInterval(function () { loadSlips(true); }, 60000);

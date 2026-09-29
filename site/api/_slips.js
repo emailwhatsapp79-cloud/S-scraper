@@ -411,8 +411,8 @@ export async function refreshSlips() {
   const eventIds = [...new Set(legs.map((l) => l.event_id).filter(Boolean))];
   const snaps = await Promise.all(eventIds.map((id) => {
     const fc = legs.some((l) => l.event_id === id && l.sport === "fc");
-    const tt = legs.some((l) => l.event_id === id && l.sport === "tt");
-    return fetchEvent(id, tt ? { marketId: "186" } : {}, fc ? FOOTBALL_BASE : undefined);
+    const tn = legs.some((l) => l.event_id === id && (l.sport === "tn" || l.sport === "tt"));
+    return fetchEvent(id, tn ? { marketId: "186,199" } : {}, fc ? FOOTBALL_BASE : undefined);
   }));
   for (const ev of snaps) {
     const snap = scoreOf(ev);
@@ -460,7 +460,7 @@ export async function refreshSlips() {
     const ls = grouped.get(slip.id) || [];
     const anyLost = ls.some((l) => l.won === "no");
     const allWon = ls.length > 0 && ls.every((l) => l.won === "yes");
-    const anyLive = ls.some((l) => l.match_status && /^(H1|H2|HT|1H|2H|LIVE|set\s*\d|Playing)/i.test(l.match_status));
+    const anyLive = ls.some((l) => l.match_status && /^(H1|H2|HT|1H|2H|LIVE|set\s*\d|Playing|1st set|2nd set|3rd set)/i.test(l.match_status));
     let status = "open";
     let returned = null;
     let settledAt = null;
@@ -485,4 +485,14 @@ export async function refreshSlips() {
   let pushed = 0;
   try { pushed = (await notifyBooked(slips)).sent; } catch { /* keep scores */ }
   return { updated, pushed };
+}
+
+export async function clearSlip(id) {
+  await ensureSlips();
+  const rows = await sql`
+    UPDATE slips SET status = 'removed', settled_at = now()
+    WHERE id = ${id} AND status IN ('open', 'live')
+    RETURNING id`;
+  if (!rows.length) throw new Error("That slip is not on the list");
+  return { id };
 }

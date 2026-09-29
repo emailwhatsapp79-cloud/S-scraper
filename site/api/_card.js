@@ -188,7 +188,7 @@ export function scoreOf(ev) {
     ftAway: ft ? ft.away : null,
     htHome: ht ? ht.home : null,
     htAway: ht ? ht.away : null,
-    ended: /^end/i.test(status),
+    ended: /^(end|finish|retir|walkover|abandon|closed|cancel)/i.test(status),
     live,
     prices,
   };

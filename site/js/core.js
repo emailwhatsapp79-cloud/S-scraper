@@ -1486,7 +1486,7 @@
   }
 
   function matchState(l) {
-    if (l.won === true || l.won === false || /^end/i.test(l.status || "")) return "ended";
+    if (l.won === true || l.won === false || /^(end|finish|retir|walkover|abandon|closed)/i.test(l.status || "")) return "ended";
     if (isTT(l) && /^(set\s*\d|Playing|LIVE)/i.test(l.status || "")) return "live";
     if (!isTT(l) && /^(H1|H2|HT|1H|2H|LIVE)/i.test(l.status || "")) return "live";
     if (l.kickoff && Number(l.kickoff) <= Date.now() - 15000) return "live";
@@ -1652,6 +1652,27 @@
         rebetSlip(sp);
       });
       card.appendChild(re);
+    }
+    if (sp.status === "open" || sp.status === "live") {
+      var drop = el("button", "rebet", "Remove");
+      drop.type = "button";
+      drop.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        drop.disabled = true;
+        drop.textContent = "Removing…";
+        fetch("/api/slips?id=" + encodeURIComponent(sp.id), { method: "DELETE" })
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (!d || !d.ok) throw new Error((d && d.error) || "Could not remove");
+            try { window.dispatchEvent(new Event("vfs-slips")); } catch (err) {}
+          })
+          .catch(function (err) {
+            drop.disabled = false;
+            drop.textContent = err.message || "Could not remove";
+          });
+      });
+      card.appendChild(drop);
     }
     return card;
   }

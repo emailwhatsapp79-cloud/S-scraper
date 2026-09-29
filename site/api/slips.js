@@ -2,7 +2,7 @@
 // ?account=1 is the Football.com login. It lives here so the site stays
 // inside Vercel's serverless-function cap.
 import { cors } from "./_db.js";
-import { listSlips, createSlip, refreshSlips, reshareSlip } from "./_slips.js";
+import { listSlips, createSlip, refreshSlips, reshareSlip, clearSlip } from "./_slips.js";
 import { guard } from "./_gate.js";
 import account, { handle as accountHandle } from "./_fc_session.js";
 
@@ -25,6 +25,14 @@ export default async function handler(req, res) {
         });
       res.setHeader("Cache-Control", "no-store");
       return res.status(200).json({ ok: true, tookMs: Date.now() - started, slip });
+    }
+
+    if (req.method === "DELETE") {
+      const id = url.searchParams.get("id");
+      if (!id) return res.status(400).json({ ok: false, error: "Missing slip" });
+      await clearSlip(id);
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(200).json({ ok: true });
     }
 
     if (req.method !== "GET") return res.status(405).json({ ok: false, error: "GET or POST" });
