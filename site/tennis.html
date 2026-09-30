@@ -312,6 +312,7 @@
       });
       if (slips.length) ledgerStats(out, V.legStats(slips));
       groupDays(out, slips, function (s) { return s.createdAt || (s.legs[0] && s.legs[0].kickoff); }, V.slipCard);
+      out.appendChild(V.el("p", "note", slips.length + " settled slip(s), newest first."));
       return;
     }
     var list = BOOKS.filter(function (row) {
@@ -322,6 +323,7 @@
       var picks = list.map(function (row) { return toPick(row, REC); });
       if (picks.length) ledgerStats(out, V.pickStats(picks));
       groupDays(out, picks, function (p) { return p.kickoff; }, V.pickCard);
+      out.appendChild(V.el("p", "note", picks.length + " settled pick(s), newest first."));
       return;
     }
     list.forEach(function (row, i) { out.appendChild(bookGame(row, i + 1, REC)); });
@@ -329,37 +331,48 @@
   function toPick(row, kind) {
     var hit = kind === "winner" ? row.winnerHit : row.scoreHit;
     var who = row.winner === "2" ? lastName(row.away) : lastName(row.home);
+    var m = String(row.result || "").match(/^(\d+):(\d+)$/);
     return {
       home: row.home,
       away: row.away,
       league: row.tourn || "Tennis",
-      label: kind === "winner" ? (who + " · " + (row.score || "")) : (row.score || ""),
+      label: kind === "winner" ? who : (row.score || ""),
       price: Number(kind === "winner" ? row.winnerOdds : row.scoreOdds) || 0,
       won: hit === true,
       status: "Ended",
       kickoff: row.start,
-      setScore: row.result || "",
+      setScore: m ? m[1] + ":" + m[2] : "",
+      ft: m ? { home: Number(m[1]), away: Number(m[2]) } : null,
       sport: "tn"
     };
   }
   function toSlip(slip, rows) {
     var legs = rows.map(function (row) {
-      var label = /^\d+:\d+$/.test(row.selection)
-        ? row.selection
-        : (row.selection === "2" ? lastName(row.away) : lastName(row.home));
+      var m = String(row.result || "").match(/^(\d+):(\d+)$/);
       return {
         home: row.home, away: row.away, league: row.tourn || "Tennis",
-        label: label, price: Number(row.price) || 0, won: row.hit === true,
-        status: "Ended", kickoff: row.start, setScore: row.result || "",
+        label: row.label || row.selection, price: Number(row.price) || 0,
+        won: row.hit === true, status: "Ended", kickoff: row.start,
+        setScore: m ? m[1] + ":" + m[2] : "",
+        ft: m ? { home: Number(m[1]), away: Number(m[2]) } : null,
         sport: "tn", selection: row.selection, gameId: row.eventId
       };
     });
     var all = legs.length > 0 && legs.every(function (l) { return l.won === true; });
     var odds = legs.reduce(function (n, l) { return n * (l.price > 1 ? l.price : 1); }, 1);
     return {
-      id: slip.id, status: all ? "won" : "lost", legs: legs,
-      stake: 1, combinedOdds: odds, potential: odds, returned: all ? odds : 0,
-      shareCode: slip.code || "", createdAt: slip.at
+      id: slip.id,
+      status: all ? "won" : "lost",
+      legs: legs,
+      stake: Number(slip.stake) || 0,
+      combinedOdds: Number(slip.potential) > 0 && Number(slip.stake) > 0 ? Number(slip.potential) / Number(slip.stake) : odds,
+      potential: Number(slip.potential) || 0,
+      returned: all ? (slip.returned == null ? (Number(slip.potential) || 0) : Number(slip.returned)) : 0,
+      shareCode: slip.code || "",
+      shareUrl: slip.url || "",
+      orderId: slip.orderId || "",
+      payWith: slip.payWith || "",
+      createdAt: slip.at
     };
   }
   function ledgerStats(out, st) {

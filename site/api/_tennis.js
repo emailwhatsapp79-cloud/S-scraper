@@ -1066,7 +1066,11 @@ export function splitBooked(rows) {
   for (const r of mapped) {
     const id = r.slipId || "one";
     if (!by.has(id)) {
-      const slip = { id, code: r.code || "", at: r.at || null, rows: [] };
+    const slip = {
+      id, code: r.code || "", url: r.url || "", at: r.at || null,
+      stake: r.stake, potential: r.potential, returned: r.returned,
+      orderId: r.orderId || "", payWith: r.payWith || "", rows: [],
+    };
       by.set(id, slip);
       slips.push(slip);
     }
@@ -1089,7 +1093,13 @@ function mapBooked(r) {
     hit: r.won == null ? null : (r.won === "yes" || r.won === true),
     slipId: r.slipId || r.slip_id || "",
     code: r.code || r.share_code || "",
+    url: r.url || r.share_url || "",
     at: r.at || (r.created_at ? new Date(r.created_at).getTime() : null),
+    stake: r.stake == null ? null : Number(r.stake),
+    potential: r.potential == null ? null : Number(r.potential),
+    returned: r.returned == null ? null : Number(r.returned),
+    orderId: r.orderId || r.order_id || "",
+    payWith: r.payWith || r.pay_with || "",
     pos: Number(r.pos) || 0,
   };
 }
@@ -1101,7 +1111,8 @@ export async function bookedTennisRecord() {
   const raw = await sql`
     SELECT l.event_id, l.home, l.away, l.league, l.kickoff, l.selection, l.selection_label,
            l.price, l.won, l.set_score, l.slip_id, l.game_id, l.pos,
-           s.share_code, s.created_at
+           s.share_code, s.share_url, s.created_at, s.stake, s.potential, s.returned,
+           s.order_id, s.pay_with
     FROM slip_legs l
     JOIN slips s ON s.id = l.slip_id
     WHERE l.sport = 'tn'
