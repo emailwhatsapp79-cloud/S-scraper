@@ -292,21 +292,40 @@
       out.appendChild(V.el("p", "note", mine.length
         ? (settled.length ? (won + " of " + settled.length + " won.") : (mine.length + " booked, none finished yet."))
         : "You have not booked a tennis yet."));
-      mine.forEach(function (row) { out.appendChild(recordCard(row, row.hit, row.selection === "1" ? lastName(row.home) : (row.selection === "2" ? lastName(row.away) : row.selection), row.price)); });
+      mine.forEach(function (row) {
+        var placed = row.selection === "1"
+          ? ("Home · " + lastName(row.home))
+          : (row.selection === "2" ? ("Away · " + lastName(row.away)) : row.selection);
+        var outcome = row.result && /^\d+:\d+$/.test(row.result) ? row.result : "Still playing";
+        out.appendChild(recordCard(row, row.hit, [
+          ["Placed", placed],
+          ["Outcome", outcome]
+        ]));
+      });
       return;
     }
     var hitKey = REC === "winner" ? "winnerHit" : "scoreHit";
     out.appendChild(V.el("p", "lede", "The same games that are marked book. " + BOOKS.length + " in correct score and " + BOOKS.length + " in winners."));
     out.appendChild(V.el("p", "note", countLine(BOOKS, hitKey)));
     BOOKS.forEach(function (row) {
-      var pick = REC === "winner"
-        ? (row.winner === "2" ? lastName(row.away) : lastName(row.home))
-        : row.score;
-      var price = REC === "winner" ? row.winnerOdds : row.scoreOdds;
-      out.appendChild(recordCard(row, row[hitKey], pick, price));
+      var side = row.winner === "2" ? "Away" : "Home";
+      var who = row.winner === "2" ? lastName(row.away) : lastName(row.home);
+      var outcome = row.result && /^\d+:\d+$/.test(row.result) ? row.result : "Still playing";
+      if (REC === "winner") {
+        out.appendChild(recordCard(row, row.winnerHit, [
+          ["Placed", side + " · " + who],
+          ["Score", row.score || ""],
+          ["Outcome", outcome]
+        ]));
+      } else {
+        out.appendChild(recordCard(row, row.scoreHit, [
+          ["Placed", row.score || ""],
+          ["Outcome", outcome]
+        ]));
+      }
     });
   }
-  function recordCard(row, hit, pick, price) {
+  function recordCard(row, hit, lines) {
     var box = V.el("article", "tn");
     var top = V.el("div", "tn-top");
     top.appendChild(V.el("span", "tn-tourn", row.tourn || "Tennis"));
@@ -315,10 +334,11 @@
     box.appendChild(top);
     var call = V.el("div", "tn-call");
     call.appendChild(V.el("b", null, lastName(row.home) + " vs " + lastName(row.away)));
-    call.appendChild(V.el("b", null, pick || ""));
-    if (price) call.appendChild(V.el("span", null, Number(price).toFixed(2)));
+    (lines || []).forEach(function (line) {
+      call.appendChild(V.el("span", null, line[0]));
+      call.appendChild(V.el("b", null, line[1]));
+    });
     box.appendChild(call);
-    if (row.result && /^\d+:\d+$/.test(row.result)) box.appendChild(V.el("div", "tn-note", "Finished " + row.result));
     return box;
   }
 
