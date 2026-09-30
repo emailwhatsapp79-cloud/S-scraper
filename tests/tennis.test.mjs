@@ -218,6 +218,20 @@ test("a tennis set score books market 199 with its specifier", () => {
   assert.equal(q.outcomeId, "sr:correct_score:bestof:3:7");
   assert.equal(q.specifier, "variant=sr:correct_score:bestof:3");
   assert.equal(q.sportId, "sr:sport:5");
+  const closedLive = quote({
+    eventId: "sr:match:2",
+    matchStatus: "Not start",
+    sport: { id: "sr:sport:5" },
+    markets: [
+      { id: "199", desc: "Correct Score", product: 1, status: 1, lastOddsChangeTime: 9,
+        outcomes: [{ id: "sr:correct_score:bestof:3:4", desc: "2:0", odds: "2.80", isActive: 1 }] },
+      { id: "199", desc: "Correct Score", product: 3, status: 0, specifier: "",
+        outcomes: [{ id: "sr:correct_score:bestof:3:4", desc: "2:0", odds: "1.47", isActive: 1 }] },
+    ],
+  }, "2:0");
+  assert.equal(closedLive.odds, 1.47);
+  assert.equal(closedLive.product, "3");
+  assert.equal(closedLive.specifier, "");
   const order = buildOrder([{
     eventId: q.eventId, marketId: q.marketId, outcomeId: q.outcomeId,
     sportId: q.sportId, specifier: q.specifier, product: "3", price: q.odds,

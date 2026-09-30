@@ -445,8 +445,15 @@ function isTableEvent(ev) {
 
 function quoteScore(ev, sel) {
   const markets = (ev.markets || []).filter((m) => String(m.id) === "199" || /correct score/i.test(String(m.desc || "")));
-  markets.sort((a, b) => (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0));
-  for (const m of markets) {
+  const started = /^(1st set|2nd set|3rd set|set\s|Playing|LIVE)/i.test(String(ev.matchStatus || ""));
+  const open = markets.filter((m) => m.status == null || m.status === "" || Number(m.status) === 0);
+  open.sort((a, b) => {
+    const liveA = Number(a.product) === 1 ? 1 : 0;
+    const liveB = Number(b.product) === 1 ? 1 : 0;
+    if (liveA !== liveB) return started ? liveB - liveA : liveA - liveB;
+    return (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0);
+  });
+  for (const m of open) {
     const o = (m.outcomes || []).find((x) => String(x.desc || "").replace("-", ":") === sel);
     const odds = Number(o && o.odds);
     if (!o || !(odds > 1) || o.isActive === 0) continue;
@@ -545,7 +552,7 @@ export async function priceLeg(leg, book, opts = {}) {
     sportId: q.sportId,
     marketId: q.marketId,
     outcomeId: q.outcomeId,
-    specifier: q.specifier || leg.specifier || "",
+    specifier: q.specifier || "",
     product: q.product,
     price: q.odds,
     probability: q.probability,
@@ -590,7 +597,7 @@ export function buildOrder(legs, stake, gift, shareCode) {
     const row = {
       eventId: String(l.eventId),
       id,
-      odds: String(l.price),
+      odds: Number(l.price).toFixed(2),
       probability: l.probability ? String(l.probability) : "",
       banker: false,
       betPosition: i,
