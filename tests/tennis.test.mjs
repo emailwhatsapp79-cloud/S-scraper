@@ -4,6 +4,42 @@ import { toSelection } from "../site/api/_share.js";
 import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent, drawOf } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
+test("the card shows the open SportyBet price, not the closed copy", () => {
+  const g = normaliseTennis({
+    eventId: "sr:match:9",
+    gameId: "9",
+    homeTeamName: "Gabriele Bosio",
+    awayTeamName: "Karol Malirz",
+    estimateStartTime: Date.now() + 3600000,
+    matchStatus: "Not start",
+    markets: [
+      { id: "186", desc: "Winner", product: 1, status: 1, outcomes: [
+        { id: "4", desc: "Home", odds: "1.40", isActive: 1, probability: "0.70" },
+        { id: "5", desc: "Away", odds: "2.80", isActive: 1, probability: "0.30" },
+      ] },
+      { id: "186", desc: "Winner", product: 3, status: 0, outcomes: [
+        { id: "4", desc: "Home", odds: "1.18", isActive: 1, probability: "0.81" },
+        { id: "5", desc: "Away", odds: "4.25", isActive: 1, probability: "0.19" },
+      ] },
+      { id: "199", desc: "Correct Score", product: 1, status: 1, outcomes: [
+        { id: "live", desc: "2:0", odds: "2.80", isActive: 1, probability: "0.30" },
+        { id: "live2", desc: "0:2", odds: "2.85", isActive: 1, probability: "0.30" },
+        { id: "live3", desc: "2:1", odds: "3.10", isActive: 1, probability: "0.20" },
+        { id: "live4", desc: "1:2", odds: "3.20", isActive: 1, probability: "0.20" },
+      ] },
+      { id: "199", desc: "Correct Score", product: 3, status: 0, outcomes: [
+        { id: "sr:correct_score:bestof:3:4", desc: "2:0", odds: "1.47", isActive: 1, probability: "0.64" },
+        { id: "sr:correct_score:bestof:3:5", desc: "2:1", odds: "4.80", isActive: 1, probability: "0.18" },
+        { id: "sr:correct_score:bestof:3:6", desc: "1:2", odds: "9.25", isActive: 1, probability: "0.09" },
+        { id: "sr:correct_score:bestof:3:7", desc: "0:2", odds: "8.70", isActive: 1, probability: "0.09" },
+      ] },
+    ],
+  }, "ITF M15 Telavi", "ITF");
+  assert.equal(g.win.home, 1.18);
+  assert.equal(g.scores.filter((s) => s.sel === "2:0").length, 1);
+  assert.equal(g.scores.find((s) => s.sel === "2:0").odds, 1.47);
+});
+
 test("a simulated match is marked sim and is not a real player", () => {
   assert.equal(isSimEvent({
     homeTeamName: "Atmane, Terence (Srl)",

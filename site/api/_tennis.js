@@ -98,9 +98,17 @@ export function tennisCall(scores) {
   };
 }
 
+function chooseMarket(markets) {
+  const list = markets || [];
+  const open = list.filter((m) => m.status == null || m.status === "" || Number(m.status) === 0);
+  const pre = (open.length ? open : list).filter((m) => Number(m.product) !== 1);
+  const pool = pre.length ? pre : (open.length ? open : list);
+  return pool.slice().sort((a, b) => (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0))[0] || null;
+}
+
 function winPrices(ev) {
   const markets = (ev.markets || []).filter((m) => String(m.id) === "186" || /^winner$/i.test(String(m.desc || "")));
-  const m = markets[0];
+  const m = chooseMarket(markets);
   if (!m) return null;
   const out = { marketId: "186" };
   for (const o of m.outcomes || []) {
@@ -122,9 +130,10 @@ function winPrices(ev) {
 
 function scoreRows(ev) {
   const markets = (ev.markets || []).filter((m) => String(m.id) === "199" || /correct score/i.test(String(m.desc || "")));
+  const m = chooseMarket(markets);
+  if (!m) return [];
   const rows = [];
-  for (const m of markets) {
-    for (const o of m.outcomes || []) {
+  for (const o of m.outcomes || []) {
       const sel = String(o.desc || "").replace("-", ":");
       if (!/^\d+:\d+$/.test(sel)) continue;
       const odds = Number(o.odds);
@@ -137,7 +146,6 @@ function scoreRows(ev) {
         specifier: String(m.specifier || ""),
         probability: o.probability != null ? String(o.probability) : "",
       });
-    }
   }
   rows.sort((a, b) => (RANK[a.sel] ?? 50) - (RANK[b.sel] ?? 50));
   return rows;
