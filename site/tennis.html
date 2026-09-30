@@ -296,15 +296,19 @@
     }
     if (REC === "booked") {
       var slips = [];
+      var legs = [];
       ((BOOKED && BOOKED.slips) || []).forEach(function (slip) {
         var rows = (slip.rows || []).filter(function (r) {
           return WHEN === "done" ? r.hit != null : r.hit == null;
         });
-        if (rows.length) slips.push(toSlip(slip, rows, WHEN === "done"));
+        if (!rows.length) return;
+        var card = toSlip(slip, rows, WHEN === "done");
+        slips.push(card);
+        legs = legs.concat(card.legs);
       });
-      if (WHEN === "done" && slips.length) ledgerStats(out, V.legStats(slips));
-      groupDays(out, slips, function (s) { return s.createdAt || (s.legs[0] && s.legs[0].kickoff); }, V.slipCard);
-      if (WHEN === "done") out.appendChild(V.el("p", "note", slips.length + " settled slip(s), newest first."));
+      if (WHEN === "wait") slips = liveFirst(slips, slipKick);
+      if (WHEN === "done") countTiles(out, legs);
+      groupDays(out, slips, function (s) { return s.createdAt || slipKick(s); }, V.slipCard);
       return;
     }
     var list = BOOKS.filter(function (row) {
@@ -312,9 +316,43 @@
       return WHEN === "done" ? done : !done;
     });
     var picks = list.map(function (row) { return toPick(row, REC, WHEN === "done"); });
-    if (WHEN === "done" && picks.length) ledgerStats(out, V.pickStats(picks));
+    if (WHEN === "wait") picks = liveFirst(picks, function (p) { return p.kickoff; });
+    if (WHEN === "done") countTiles(out, picks);
     groupDays(out, picks, function (p) { return p.kickoff; }, V.pickCard);
-    if (WHEN === "done") out.appendChild(V.el("p", "note", picks.length + " settled pick(s), newest first."));
+  }
+  function liveFirst(items, kickOf) {
+    var now = Date.now();
+    return items.slice().sort(function (a, b) {
+      var ka = Number(kickOf(a)) || 0;
+      var kb = Number(kickOf(b)) || 0;
+      var la = ka > 0 && ka <= now ? 0 : 1;
+      var lb = kb > 0 && kb <= now ? 0 : 1;
+      if (la !== lb) return la - lb;
+      return ka - kb;
+    });
+  }
+  function slipKick(s) {
+    var now = Date.now();
+    var times = (s.legs || []).map(function (l) { return Number(l.kickoff) || 0; }).filter(Boolean);
+    var live = times.filter(function (t) { return t <= now; });
+    if (live.length) return Math.min.apply(null, live);
+    if (times.length) return Math.min.apply(null, times);
+    return Number(s.createdAt) || 0;
+  }
+  function countTiles(out, rows) {
+    var won = rows.filter(function (r) { return r.won === true; }).length;
+    var lost = rows.filter(function (r) { return r.won === false; }).length;
+    var box = V.el("div", "stats");
+    function tile(n, name, cls) {
+      var t = V.el("div", "stat" + (cls ? " " + cls : ""));
+      t.appendChild(V.el("b", null, String(n)));
+      t.appendChild(V.el("span", null, name));
+      box.appendChild(t);
+    }
+    tile(rows.length, "Games");
+    tile(won, "Won", "go");
+    tile(lost, "Lost", "bad");
+    out.appendChild(box);
   }
   function toPick(row, kind, done) {
     var hit = kind === "winner" ? row.winnerHit : row.scoreHit;
@@ -371,21 +409,6 @@
       payWith: slip.payWith || "",
       createdAt: slip.at
     };
-  }
-  function ledgerStats(out, st) {
-    if (!st || !st.legs) return;
-    var box = V.el("div", "stats");
-    function tile(text, name, cls) {
-      var t = V.el("div", "stat" + (cls ? " " + cls : ""));
-      t.appendChild(V.el("b", null, text));
-      t.appendChild(V.el("span", null, name));
-      box.appendChild(t);
-    }
-    var pct = function (x) { return (x * 100).toFixed(1) + "%"; };
-    tile(pct(st.hit) + " (" + st.wins + "/" + st.legs + ")", "Hit-rate");
-    tile(pct(st.breakeven), "Break-even");
-    tile((st.pnl >= 0 ? "+" : "") + (Math.round(st.pnl * 100) / 100) + "u", "Flat P&L", st.pnl >= 0 ? "go" : "bad");
-    out.appendChild(box);
   }
   function groupDays(out, items, dateOf, cardOf) {
     var last = "";
