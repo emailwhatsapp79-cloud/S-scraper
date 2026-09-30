@@ -64,7 +64,6 @@
     <a href="/tt">Table tennis</a>
     <a href="/tennis" class="on">Tennis</a>
   </div>
-  <p class="lede">Best of three ends 2–0, 2–1, 1–2 or 0–2. A mark is only put down after Predixsport and TennisPredictions. If they are sure and the book agrees, only the straight-set score. If they have it close, their deciding score is allowed. If they disagree, nothing is marked.</p>
   <div class="chips" id="views">
     <button type="button" class="chip on" id="v-matches">Matches</button>
     <button type="button" class="chip" id="v-book">Book</button>
@@ -262,11 +261,9 @@
 
   function countLine(rows, hitKey) {
     var done = rows.filter(function (r) { return r[hitKey] != null; });
+    if (!done.length) return "";
     var hits = done.filter(function (r) { return r[hitKey]; }).length;
-    var open = rows.length - done.length;
-    if (!rows.length) return "None marked book yet.";
-    if (!done.length) return rows.length + " marked, none finished yet.";
-    return hits + " of " + done.length + " won." + (open ? " " + open + " still to play." : "");
+    return hits + " of " + done.length;
   }
   function renderRecord() {
     var out = document.getElementById("out");
@@ -285,28 +282,32 @@
       return;
     }
     if (REC === "booked") {
-      var mine = (BOOKED && BOOKED.rows) || [];
-      var settled = mine.filter(function (r) { return r.hit != null; });
-      var won = settled.filter(function (r) { return r.hit; }).length;
-      out.appendChild(V.el("p", "lede", "Only the tennis you put on a slip yourself."));
-      out.appendChild(V.el("p", "note", mine.length
-        ? (settled.length ? (won + " of " + settled.length + " won.") : (mine.length + " booked, none finished yet."))
-        : "You have not booked a tennis yet."));
-      mine.forEach(function (row) {
-        var placed = row.selection === "1"
-          ? ("Home · " + lastName(row.home))
-          : (row.selection === "2" ? ("Away · " + lastName(row.away)) : row.selection);
-        var outcome = row.result && /^\d+:\d+$/.test(row.result) ? row.result : "Still playing";
-        out.appendChild(recordCard(row, row.hit, [
-          ["Placed", placed],
-          ["Outcome", outcome]
-        ]));
+      var slips = (BOOKED && BOOKED.slips) || [];
+      if (!slips.length) return;
+      slips.forEach(function (slip, i) {
+        var done = (slip.rows || []).filter(function (r) { return r.hit != null; });
+        var won = done.filter(function (r) { return r.hit; }).length;
+        var title = slip.code || ("Slip " + (slips.length - i));
+        var head = V.el("h2", "slips-h", title);
+        if (done.length) head.appendChild(V.el("span", "n", won + "/" + done.length));
+        else head.appendChild(V.el("span", "n", String((slip.rows || []).length)));
+        out.appendChild(head);
+        (slip.rows || []).forEach(function (row) {
+          var placed = row.selection === "1"
+            ? ("Home · " + lastName(row.home))
+            : (row.selection === "2" ? ("Away · " + lastName(row.away)) : row.selection);
+          var outcome = row.result && /^\d+:\d+$/.test(row.result) ? row.result : "Still playing";
+          out.appendChild(recordCard(row, row.hit, [
+            ["Placed", placed],
+            ["Outcome", outcome]
+          ]));
+        });
       });
       return;
     }
     var hitKey = REC === "winner" ? "winnerHit" : "scoreHit";
-    out.appendChild(V.el("p", "lede", "The same games that are marked book. " + BOOKS.length + " in correct score and " + BOOKS.length + " in winners."));
-    out.appendChild(V.el("p", "note", countLine(BOOKS, hitKey)));
+    var line = countLine(BOOKS, hitKey);
+    if (line) out.appendChild(V.el("p", "note", line));
     BOOKS.forEach(function (row) {
       var side = row.winner === "2" ? "Away" : "Home";
       var who = row.winner === "2" ? lastName(row.away) : lastName(row.home);

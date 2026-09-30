@@ -1038,35 +1038,40 @@ export function splitBooked(rows) {
       hits: done.filter(hitOf).length,
       n: done.length,
       open: mine.length - done.length,
-      rows: mine.slice(0, 40).map((r) => ({
-        eventId: r.eventId || r.event_id || "",
-        home: r.home || "",
-        away: r.away || "",
-        tourn: r.tourn || r.league || "",
-        start: r.start || (r.kickoff ? Number(r.kickoff) : null),
-        selection: String(r.selection || ""),
-        label: r.label || r.selection_label || String(r.selection || ""),
-        price: r.price == null ? null : Number(r.price),
-        result: r.result || r.set_score || r.setScore || null,
-        hit: r.won == null ? null : hitOf(r),
-      })),
+      rows: mine.slice(0, 80).map(mapBooked),
     };
   }
+  const mapped = list.slice(0, 80).map(mapBooked);
+  const slips = [];
+  const by = new Map();
+  for (const r of mapped) {
+    const id = r.slipId || "one";
+    if (!by.has(id)) {
+      const slip = { id, code: r.code || "", at: r.at || null, rows: [] };
+      by.set(id, slip);
+      slips.push(slip);
+    }
+    by.get(id).rows.push(r);
+  }
+  return { winners: pack("winner"), scores: pack("score"), rows: mapped, slips };
+}
+
+function mapBooked(r) {
   return {
-    winners: pack("winner"),
-    scores: pack("score"),
-    rows: list.slice(0, 40).map((r) => ({
-      eventId: r.eventId || r.event_id || "",
-      home: r.home || "",
-      away: r.away || "",
-      tourn: r.tourn || r.league || "",
-      start: r.start || (r.kickoff ? Number(r.kickoff) : null),
-      selection: String(r.selection || ""),
-      label: r.label || r.selection_label || String(r.selection || ""),
-      price: r.price == null ? null : Number(r.price),
-      result: r.result || r.set_score || r.setScore || null,
-      hit: r.won == null ? null : (r.won === "yes" || r.won === true),
-    })),
+    eventId: r.eventId || r.event_id || "",
+    home: r.home || "",
+    away: r.away || "",
+    tourn: r.tourn || r.league || "",
+    start: r.start || (r.kickoff ? Number(r.kickoff) : null),
+    selection: String(r.selection || ""),
+    label: r.label || r.selection_label || String(r.selection || ""),
+    price: r.price == null ? null : Number(r.price),
+    result: r.result || r.set_score || r.setScore || null,
+    hit: r.won == null ? null : (r.won === "yes" || r.won === true),
+    slipId: r.slipId || r.slip_id || "",
+    code: r.code || r.share_code || "",
+    at: r.at || (r.created_at ? new Date(r.created_at).getTime() : null),
+    pos: Number(r.pos) || 0,
   };
 }
 
@@ -1075,10 +1080,13 @@ export async function bookedTennisRecord() {
   const { fetchEvent } = await import("./_card.js");
   await ensureCalls();
   const raw = await sql`
-    SELECT event_id, home, away, league, kickoff, selection, selection_label, price, won, set_score, slip_id, game_id
-    FROM slip_legs
-    WHERE sport = 'tn'
-    ORDER BY kickoff DESC NULLS LAST
+    SELECT l.event_id, l.home, l.away, l.league, l.kickoff, l.selection, l.selection_label,
+           l.price, l.won, l.set_score, l.slip_id, l.game_id, l.pos,
+           s.share_code, s.created_at
+    FROM slip_legs l
+    JOIN slips s ON s.id = l.slip_id
+    WHERE l.sport = 'tn'
+    ORDER BY s.created_at DESC NULLS LAST, l.pos ASC
     LIMIT 80`;
   const rows = raw.map((r) => ({ ...r }));
   const due = [];
