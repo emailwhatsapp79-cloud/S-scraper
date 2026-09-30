@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toSelection } from "../site/api/_share.js";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent, drawOf } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent, drawOf, splitBooked } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("the card shows the open SportyBet price, not the closed copy", () => {
@@ -307,6 +307,22 @@ test("a tennis set score books market 199 with its specifier", () => {
   assert.equal(game.derived, false);
   assert.equal(game.winOpen, true);
   assert.equal(game.scoresOpen, true);
+});
+
+test("booked tennis splits into winners and correct score", () => {
+  const got = splitBooked([
+    { selection: "1", home: "A", away: "B", won: "yes", price: 1.31 },
+    { selection: "2", home: "C", away: "D", won: "no", price: 1.4 },
+    { selection: "1", home: "E", away: "F", won: null, price: 1.5 },
+    { selection: "2:0", home: "A", away: "B", won: "yes", price: 1.8, set_score: "2:0" },
+    { selection: "0:2", home: "C", away: "D", won: "no", price: 1.9, set_score: "2:1" },
+  ]);
+  assert.equal(got.winners.hits, 1);
+  assert.equal(got.winners.n, 2);
+  assert.equal(got.winners.open, 1);
+  assert.equal(got.scores.hits, 1);
+  assert.equal(got.scores.n, 2);
+  assert.equal(got.scores.rows[0].selection, "2:0");
 });
 
 test("a suspended tennis price is shown and cannot be booked", () => {

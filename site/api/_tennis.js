@@ -1013,6 +1013,79 @@ function finishedSets(ev) {
   };
 }
 
+export function splitBooked(rows) {
+  const list = rows || [];
+  function pack(kind) {
+    const mine = list.filter((r) => (
+      kind === "score" ? /^\d+:\d+$/.test(String(r.selection || "")) : (r.selection === "1" || r.selection === "2")
+    ));
+    const done = mine.filter((r) => r.won === "yes" || r.won === "no" || r.won === true || r.won === false);
+    const hitOf = (r) => r.won === "yes" || r.won === true;
+    return {
+      hits: done.filter(hitOf).length,
+      n: done.length,
+      open: mine.length - done.length,
+      rows: mine.slice(0, 40).map((r) => ({
+        eventId: r.eventId || r.event_id || "",
+        home: r.home || "",
+        away: r.away || "",
+        tourn: r.tourn || r.league || "",
+        start: r.start || (r.kickoff ? Number(r.kickoff) : null),
+        selection: String(r.selection || ""),
+        label: r.label || r.selection_label || String(r.selection || ""),
+        price: r.price == null ? null : Number(r.price),
+        result: r.result || r.set_score || r.setScore || null,
+        hit: r.won == null ? null : hitOf(r),
+      })),
+    };
+  }
+  return { winners: pack("winner"), scores: pack("score") };
+}
+
+export async function bookedTennisRecord() {
+  const { sql } = await import("./_db.js");
+  const { fetchEvent } = await import("./_card.js");
+  await ensureCalls();
+  const raw = await sql`
+    SELECT event_id, home, away, league, kickoff, selection, selection_label, price, won, set_score, slip_id, game_id
+    FROM slip_legs
+    WHERE sport = 'tn'
+    ORDER BY kickoff DESC NULLS LAST
+    LIMIT 80`;
+  const rows = raw.map((r) => ({ ...r }));
+  const due = [];
+  const seen = new Set();
+  for (const row of rows) {
+    if (row.won != null || !row.event_id || seen.has(row.event_id)) continue;
+    if (!(Number(row.kickoff) > 0) || Number(row.kickoff) > Date.now() - 45 * 60 * 1000) continue;
+    seen.add(row.event_id);
+    due.push(row);
+    if (due.length >= 12) break;
+  }
+  for (const row of due) {
+    try {
+      const ev = await fetchEvent(row.event_id, { marketId: "186" });
+      const fin = finishedSets(ev);
+      if (!fin || !/^\d+:\d+$/.test(String(fin.result || ""))) continue;
+      const [hs, as] = String(fin.result).split(":").map(Number);
+      for (const leg of rows) {
+        if (leg.event_id !== row.event_id || leg.won != null) continue;
+        let hit = null;
+        if (/^\d+:\d+$/.test(String(leg.selection || ""))) hit = leg.selection === fin.result;
+        else if (leg.selection === "1") hit = hs > as;
+        else if (leg.selection === "2") hit = as > hs;
+        if (hit == null) continue;
+        leg.won = hit ? "yes" : "no";
+        leg.set_score = fin.result;
+        await sql`
+          UPDATE slip_legs SET won = ${leg.won}, set_score = ${fin.result}, match_status = ${"Ended"}
+          WHERE slip_id = ${leg.slip_id} AND game_id = ${leg.game_id}`;
+      }
+    } catch { /* one result can wait */ }
+  }
+  return splitBooked(rows);
+}
+
 export async function trackTennis(games) {
   const { sql } = await import("./_db.js");
   await ensureCalls();

@@ -68,7 +68,7 @@
   <div class="chips" id="views">
     <button type="button" class="chip on" id="v-matches">Matches</button>
     <button type="button" class="chip" id="v-book">Book</button>
-    <button type="button" class="chip" id="v-record">Ahead</button>
+    <button type="button" class="chip" id="v-record">Record</button>
   </div>
   <div class="chips" id="tourns"></div>
   <h2 class="lab-h" id="head">Upcoming</h2>
@@ -79,7 +79,7 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("tt");
-  var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", RECORD = null;
+  var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", RECORD = null, BOOKED = null;
 
   function lastName(s) {
     var t = String(s || "").trim();
@@ -263,29 +263,38 @@
   function renderRecord() {
     var out = document.getElementById("out");
     out.textContent = "";
-    document.getElementById("head").textContent = "Ahead" + (RECORD && RECORD.open ? " — " + RECORD.open + " open" : "");
+    document.getElementById("head").textContent = "Record";
     document.getElementById("tourns").textContent = "";
-    out.appendChild(V.el("p", "lede", verdictLine(RECORD)));
-    var rows = (RECORD && RECORD.rows) || [];
-    if (!rows.length) {
-      out.appendChild(V.el("div", "empty", "Nothing saved yet. Only a gold ahead score is stored, not the green one."));
+    var booked = BOOKED;
+    if (!booked) {
+      out.appendChild(V.el("div", "empty", "Checking what you booked…"));
       return;
     }
-    rows.forEach(function (row) {
-      var box = V.el("article", "tn");
-      var top = V.el("div", "tn-top");
-      top.appendChild(V.el("span", "tn-tourn", row.tourn || "Tennis"));
-      var state = row.hit == null ? "Waiting" : (row.hit ? "Landed" : "Missed");
-      var mark = V.el("span", row.hit == null ? "tn-when" : (row.hit ? "tn-hit" : "tn-miss"), state);
-      top.appendChild(mark);
-      box.appendChild(top);
-      var line = V.el("div", "tn-call");
-      line.appendChild(V.el("b", null, lastName(row.home) + " vs " + lastName(row.away)));
-      line.appendChild(V.el("b", null, row.score));
-      line.appendChild(V.el("span", null, "ours " + pct(row.ours) + " · book " + pct(row.book) + (row.odds ? " · " + Number(row.odds).toFixed(2) : "")));
-      box.appendChild(line);
-      if (row.result) box.appendChild(V.el("div", "tn-note", "Finished " + row.result));
-      out.appendChild(box);
+    out.appendChild(V.el("p", "lede", "Taken from the tennis you booked. Winners is the match. Correct score is 2–0, 2–1, 1–2 or 0–2."));
+    [["Winners", booked.winners], ["Correct score", booked.scores]].forEach(function (pair) {
+      var name = pair[0];
+      var block = pair[1] || { hits: 0, n: 0, open: 0, rows: [] };
+      var head = V.el("h2", "slips-h", name);
+      var line = block.n
+        ? (block.hits + " of " + block.n + " won" + (block.open ? ". " + block.open + " still to play." : "."))
+        : (block.open ? (block.open + " booked, none finished yet.") : "None booked yet.");
+      out.appendChild(head);
+      out.appendChild(V.el("p", "note", line));
+      (block.rows || []).forEach(function (row) {
+        var box = V.el("article", "tn");
+        var top = V.el("div", "tn-top");
+        top.appendChild(V.el("span", "tn-tourn", row.tourn || "Tennis"));
+        var state = row.hit == null ? "Waiting" : (row.hit ? "Won" : "Lost");
+        top.appendChild(V.el("span", row.hit == null ? "tn-when" : (row.hit ? "tn-hit" : "tn-miss"), state));
+        box.appendChild(top);
+        var call = V.el("div", "tn-call");
+        call.appendChild(V.el("b", null, lastName(row.home) + " vs " + lastName(row.away)));
+        call.appendChild(V.el("b", null, row.selection === "1" ? lastName(row.home) : (row.selection === "2" ? lastName(row.away) : row.selection)));
+        call.appendChild(V.el("span", null, row.price ? Number(row.price).toFixed(2) : ""));
+        box.appendChild(call);
+        if (row.result && /^\d+:\d+$/.test(row.result)) box.appendChild(V.el("div", "tn-note", "Finished " + row.result));
+        out.appendChild(box);
+      });
     });
   }
 
@@ -339,6 +348,17 @@
     });
     if (changed) V.saveBook(next);
   }
+  function loadRecord() {
+    return fetch("/api/tt?card=tennis&record=1").then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || !d.ok) throw new Error((d && d.error) || "Could not load the record");
+      BOOKED = d.booked || { winners: { hits: 0, n: 0, open: 0, rows: [] }, scores: { hits: 0, n: 0, open: 0, rows: [] } };
+      if (VIEW === "record") render();
+    }).catch(function (e) {
+      if (VIEW !== "record") return;
+      document.getElementById("out").textContent = "";
+      document.getElementById("out").appendChild(V.el("div", "empty", e.message));
+    });
+  }
   function load(fresh) {
     return fetch("/api/tt?card=tennis" + (fresh ? "&fresh=1" : "")).then(function (r) { return r.json(); }).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.error) || "Could not load tennis");
@@ -369,7 +389,7 @@
   setInterval(function () { if (VIEW === "matches") load(true); }, 30000);
   document.getElementById("v-matches").addEventListener("click", function () { VIEW = "matches"; ONLY = ""; render(); });
   document.getElementById("v-book").addEventListener("click", function () { VIEW = "matches"; ONLY = "book"; render(); });
-  document.getElementById("v-record").addEventListener("click", function () { VIEW = "record"; ONLY = ""; render(); });
+  document.getElementById("v-record").addEventListener("click", function () { VIEW = "record"; ONLY = ""; render(); loadRecord(); });
   window.addEventListener("vfs-book", render);
 })();
 </script>
