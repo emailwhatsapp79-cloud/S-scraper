@@ -1009,19 +1009,38 @@ async function ensureCalls() {
   return sql;
 }
 
+function setTally(ev) {
+  const raw = String(ev.setScore || "").trim();
+  const direct = raw.match(/^(\d+)\s*[:\-]\s*(\d+)$/);
+  if (direct) {
+    const hs = Number(direct[1]);
+    const as = Number(direct[2]);
+    if ((hs >= 2 || as >= 2) && hs + as <= 5) return hs + ":" + as;
+  }
+  const gs = Array.isArray(ev.gameScore) ? ev.gameScore : [];
+  let h = 0;
+  let a = 0;
+  for (const g of gs) {
+    const p = String(g).match(/(\d+)\s*[:\-]\s*(\d+)/);
+    if (!p) continue;
+    const gh = Number(p[1]);
+    const ga = Number(p[2]);
+    if (gh === ga) continue;
+    if (gh > ga) h++;
+    else a++;
+  }
+  if (h >= 2 || a >= 2) return h + ":" + a;
+  return null;
+}
+
 function finishedSets(ev) {
   if (!ev) return null;
-  const status = String(ev.matchStatus || "");
-  const ended = /^end|finish|retir|walkover|abandon|closed/i.test(status);
-  if (!ended) return null;
-  const raw = String(ev.setScore || "").trim();
-  const m = raw.match(/^(\d+)\s*[:\-]\s*(\d+)$/);
-  if (!m) return { result: status || "ended", hitOf() { return null; } };
-  const sel = Number(m[1]) + ":" + Number(m[2]);
+  const sel = setTally(ev);
+  if (!sel) return null;
   return {
     result: sel,
     hitOf(score) {
-      return sel === "2:0" || sel === "2:1" || sel === "1:2" || sel === "0:2" ? sel === score : null;
+      return sel === score;
     },
   };
 }
@@ -1167,9 +1186,9 @@ export async function trackBooks(games) {
   }
   const due = await sql`
     SELECT event_id, score, winner FROM tn_books
-    WHERE result IS NULL AND start_at IS NOT NULL AND start_at < ${Date.now() - 90 * 60 * 1000}
+    WHERE result IS NULL AND start_at IS NOT NULL AND start_at < ${Date.now() - 20 * 60 * 1000}
     ORDER BY start_at ASC
-    LIMIT 12`;
+    LIMIT 24`;
   if (due.length) {
     const { fetchEvent } = await import("./_card.js");
     for (const row of due) {
@@ -1190,7 +1209,7 @@ export async function trackBooks(games) {
   const recent = await sql`
     SELECT event_id, home, away, tourn, start_at, score, winner, score_odds, winner_odds,
            result, score_hit, winner_hit
-    FROM tn_books ORDER BY start_at DESC NULLS LAST LIMIT 80`;
+    FROM tn_books ORDER BY start_at DESC NULLS LAST LIMIT 200`;
   return recent.map((r) => ({
     eventId: r.event_id,
     home: r.home,

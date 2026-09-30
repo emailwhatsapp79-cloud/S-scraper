@@ -84,7 +84,7 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("tt");
-  var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", RECORD = null, BOOKED = null, BOOKS = [], REC = "score";
+  var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", RECORD = null, BOOKED = null, BOOKS = [], REC = "score", WHEN = "wait";
 
   function lastName(s) {
     var t = String(s || "").trim();
@@ -283,19 +283,39 @@
       tabs.appendChild(b);
     });
     out.appendChild(tabs);
+    var when = V.el("div", "chips");
+    [["wait", "Waiting"], ["done", "Finished"]].forEach(function (pair) {
+      var b = V.el("button", "chip" + (WHEN === pair[0] ? " on" : ""), pair[1]);
+      b.addEventListener("click", function () { WHEN = pair[0]; render(); });
+      when.appendChild(b);
+    });
+    out.appendChild(when);
     if (BOOKED == null && !BOOKS.length) {
       out.appendChild(V.el("div", "empty", "Checking the record…"));
       return;
     }
     if (REC === "booked") {
-      var slips = (BOOKED && BOOKED.slips) || [];
-      slips.forEach(function (slip, i) { out.appendChild(slipBlock(slip, i + 1)); });
+      var n = 0;
+      ((BOOKED && BOOKED.slips) || []).forEach(function (slip) {
+        var rows = (slip.rows || []).filter(function (r) {
+          return WHEN === "done" ? r.hit != null : r.hit == null;
+        });
+        if (!rows.length) return;
+        n += 1;
+        out.appendChild(slipBlock(Object.assign({}, slip, { rows: rows }), n));
+      });
       return;
     }
     var hitKey = REC === "winner" ? "winnerHit" : "scoreHit";
-    var line = countLine(BOOKS, hitKey);
-    if (line) out.appendChild(V.el("p", "note", line));
-    BOOKS.forEach(function (row, i) { out.appendChild(bookGame(row, i + 1, REC)); });
+    var list = BOOKS.filter(function (row) {
+      var done = row.scoreHit != null || row.winnerHit != null;
+      return WHEN === "done" ? done : !done;
+    });
+    if (WHEN === "done") {
+      var line = countLine(list, hitKey);
+      if (line) out.appendChild(V.el("p", "note", line));
+    }
+    list.forEach(function (row, i) { out.appendChild(bookGame(row, i + 1, REC)); });
   }
   function placedCells(bits) {
     var g = V.el("div", bits.length === 3 ? "tn-s three" : (bits.length > 2 ? "tn-s" : "tn-g"));
