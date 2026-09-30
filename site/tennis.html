@@ -295,78 +295,75 @@
       return;
     }
     if (REC === "booked") {
-      if (WHEN !== "done") {
-        var n = 0;
-        ((BOOKED && BOOKED.slips) || []).forEach(function (slip) {
-          var rows = (slip.rows || []).filter(function (r) { return r.hit == null; });
-          if (!rows.length) return;
-          n += 1;
-          out.appendChild(slipBlock(Object.assign({}, slip, { rows: rows }), n));
-        });
-        return;
-      }
       var slips = [];
       ((BOOKED && BOOKED.slips) || []).forEach(function (slip) {
-        var rows = (slip.rows || []).filter(function (r) { return r.hit != null; });
-        if (rows.length) slips.push(toSlip(slip, rows));
+        var rows = (slip.rows || []).filter(function (r) {
+          return WHEN === "done" ? r.hit != null : r.hit == null;
+        });
+        if (rows.length) slips.push(toSlip(slip, rows, WHEN === "done"));
       });
-      if (slips.length) ledgerStats(out, V.legStats(slips));
+      if (WHEN === "done" && slips.length) ledgerStats(out, V.legStats(slips));
       groupDays(out, slips, function (s) { return s.createdAt || (s.legs[0] && s.legs[0].kickoff); }, V.slipCard);
-      out.appendChild(V.el("p", "note", slips.length + " settled slip(s), newest first."));
+      if (WHEN === "done") out.appendChild(V.el("p", "note", slips.length + " settled slip(s), newest first."));
       return;
     }
     var list = BOOKS.filter(function (row) {
       var done = row.scoreHit != null || row.winnerHit != null;
       return WHEN === "done" ? done : !done;
     });
-    if (WHEN === "done") {
-      var picks = list.map(function (row) { return toPick(row, REC); });
-      if (picks.length) ledgerStats(out, V.pickStats(picks));
-      groupDays(out, picks, function (p) { return p.kickoff; }, V.pickCard);
-      out.appendChild(V.el("p", "note", picks.length + " settled pick(s), newest first."));
-      return;
-    }
-    list.forEach(function (row, i) { out.appendChild(bookGame(row, i + 1, REC)); });
+    var picks = list.map(function (row) { return toPick(row, REC, WHEN === "done"); });
+    if (WHEN === "done" && picks.length) ledgerStats(out, V.pickStats(picks));
+    groupDays(out, picks, function (p) { return p.kickoff; }, V.pickCard);
+    if (WHEN === "done") out.appendChild(V.el("p", "note", picks.length + " settled pick(s), newest first."));
   }
-  function toPick(row, kind) {
+  function toPick(row, kind, done) {
     var hit = kind === "winner" ? row.winnerHit : row.scoreHit;
-    var who = row.winner === "2" ? lastName(row.away) : lastName(row.home);
+    var who = row.winner === "2" ? row.away : row.home;
     var m = String(row.result || "").match(/^(\d+):(\d+)$/);
-    return {
+    var pick = {
       home: row.home,
       away: row.away,
       league: row.tourn || "Tennis",
       label: kind === "winner" ? who : (row.score || ""),
       price: Number(kind === "winner" ? row.winnerOdds : row.scoreOdds) || 0,
-      won: hit === true,
-      status: "Ended",
       kickoff: row.start,
-      setScore: m ? m[1] + ":" + m[2] : "",
-      ft: m ? { home: Number(m[1]), away: Number(m[2]) } : null,
       sport: "tn"
     };
+    if (!done) return pick;
+    pick.won = hit === true;
+    pick.status = "Ended";
+    pick.setScore = m ? m[1] + ":" + m[2] : "";
+    if (m) pick.ft = { home: Number(m[1]), away: Number(m[2]) };
+    return pick;
   }
-  function toSlip(slip, rows) {
+  function toSlip(slip, rows, done) {
     var legs = rows.map(function (row) {
       var m = String(row.result || "").match(/^(\d+):(\d+)$/);
-      return {
+      var leg = {
         home: row.home, away: row.away, league: row.tourn || "Tennis",
-        label: row.label || row.selection, price: Number(row.price) || 0,
-        won: row.hit === true, status: "Ended", kickoff: row.start,
-        setScore: m ? m[1] + ":" + m[2] : "",
-        ft: m ? { home: Number(m[1]), away: Number(m[2]) } : null,
-        sport: "tn", selection: row.selection, gameId: row.eventId
+        label: row.label || row.selection,
+        price: Number(row.price) || 0,
+        kickoff: row.start, sport: "tn",
+        selection: row.selection, gameId: row.eventId
       };
+      if (done) {
+        leg.won = row.hit === true;
+        leg.status = "Ended";
+        leg.setScore = m ? m[1] + ":" + m[2] : "";
+        if (m) leg.ft = { home: Number(m[1]), away: Number(m[2]) };
+      }
+      return leg;
     });
-    var all = legs.length > 0 && legs.every(function (l) { return l.won === true; });
+    var all = done && legs.length > 0 && legs.every(function (l) { return l.won === true; });
     var odds = legs.reduce(function (n, l) { return n * (l.price > 1 ? l.price : 1); }, 1);
     return {
       id: slip.id,
-      status: all ? "won" : "lost",
+      status: !done ? "open" : (all ? "won" : "lost"),
+      quiet: true,
       legs: legs,
       stake: Number(slip.stake) || 0,
       combinedOdds: Number(slip.potential) > 0 && Number(slip.stake) > 0 ? Number(slip.potential) / Number(slip.stake) : odds,
-      potential: Number(slip.potential) || 0,
+      potential: Number(slip.potential) || odds * (Number(slip.stake) || 0),
       returned: all ? (slip.returned == null ? (Number(slip.potential) || 0) : Number(slip.returned)) : 0,
       shareCode: slip.code || "",
       shareUrl: slip.url || "",
@@ -397,90 +394,6 @@
       if (d && d !== last) { last = d; out.appendChild(V.el("div", "day", d)); }
       out.appendChild(cardOf(it));
     });
-  }
-  function placedCells(bits) {
-    var g = V.el("div", bits.length === 3 ? "tn-s three" : (bits.length > 2 ? "tn-s" : "tn-g"));
-    bits.forEach(function (bit) {
-      var c = V.el("div", "tn-cell");
-      c.appendChild(V.el("b", null, bit[0]));
-      c.appendChild(V.el("span", null, bit[1]));
-      g.appendChild(c);
-    });
-    return g;
-  }
-  function bookGame(row, n, kind) {
-    var hit = kind === "winner" ? row.winnerHit : row.scoreHit;
-    var box = V.el("article", "tn");
-    box.appendChild(V.el("span", "tn-num", String(n)));
-    var top = V.el("div", "tn-top");
-    top.appendChild(V.el("span", "tn-tourn", row.tourn || "Tennis"));
-    var state = hit == null ? "Waiting" : (hit ? "Won" : "Lost");
-    top.appendChild(V.el("span", hit == null ? "tn-when" : (hit ? "tn-hit" : "tn-miss"), state));
-    box.appendChild(top);
-    var homeOn = row.winner !== "2";
-    [[true, row.home], [false, row.away]].forEach(function (p) {
-      var pl = V.el("div", "tn-pl" + (p[0] === homeOn ? " on" : ""));
-      pl.appendChild(V.el("b", null, p[1]));
-      pl.appendChild(V.el("span", null, p[0] ? "Home" : "Away"));
-      box.appendChild(pl);
-    });
-    var outcome = row.result && /^\d+:\d+$/.test(row.result) ? row.result : "—";
-    if (kind === "winner") {
-      box.appendChild(placedCells([
-        [homeOn ? "Home" : "Away", "Placed"],
-        [row.score || "—", "Score"],
-        [outcome, "Outcome"]
-      ]));
-    } else {
-      box.appendChild(placedCells([
-        [row.score || "—", "Placed"],
-        [outcome, "Outcome"]
-      ]));
-    }
-    return box;
-  }
-  function slipBlock(slip, n) {
-    var rows = slip.rows || [];
-    var box = V.el("section", "tn-slip");
-    var head = V.el("div", "tn-slip-h");
-    head.appendChild(V.el("span", "tn-num", String(n)));
-    head.appendChild(V.el("b", null, rows.length + " booked"));
-    var done = rows.filter(function (r) { return r.hit != null; });
-    var won = done.filter(function (r) { return r.hit; }).length;
-    var odds = 1;
-    var priced = true;
-    rows.forEach(function (r) {
-      if (!(Number(r.price) > 1)) priced = false;
-      else odds *= Number(r.price);
-    });
-    if (priced && rows.length) head.appendChild(V.el("span", "tn-when", odds.toFixed(2)));
-    if (done.length) head.appendChild(V.el("span", won === done.length ? "tn-hit" : "tn-miss", won + "/" + done.length));
-    box.appendChild(head);
-    rows.forEach(function (row, i) {
-      var placed = /^\d+:\d+$/.test(row.selection)
-        ? row.selection
-        : (row.selection === "2" ? "Away" : "Home");
-      var outcome = row.result && /^\d+:\d+$/.test(row.result) ? row.result : "—";
-      var leg = V.el("article", "tn");
-      leg.appendChild(V.el("span", "tn-num", String(i + 1)));
-      var top = V.el("div", "tn-top");
-      top.appendChild(V.el("span", "tn-tourn", lastName(row.home) + " vs " + lastName(row.away)));
-      var state = row.hit == null ? "Waiting" : (row.hit ? "Won" : "Lost");
-      top.appendChild(V.el("span", row.hit == null ? "tn-when" : (row.hit ? "tn-hit" : "tn-miss"), state));
-      leg.appendChild(top);
-      var homeOn = row.selection !== "2" && row.selection !== "0:2" && row.selection !== "1:2";
-      [[true, row.home], [false, row.away]].forEach(function (p) {
-        var pl = V.el("div", "tn-pl" + (p[0] === homeOn ? " on" : ""));
-        pl.appendChild(V.el("b", null, p[1]));
-        pl.appendChild(V.el("span", null, p[0] ? "Home" : "Away"));
-        leg.appendChild(pl);
-      });
-      var bits = [[placed, "Placed"], [outcome, "Outcome"]];
-      if (row.price) bits.splice(1, 0, [Number(row.price).toFixed(2), "Odds"]);
-      leg.appendChild(placedCells(bits));
-      box.appendChild(leg);
-    });
-    return box;
   }
 
   function render() {

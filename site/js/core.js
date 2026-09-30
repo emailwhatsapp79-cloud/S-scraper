@@ -1647,7 +1647,7 @@
       .forEach(function (l) { card.appendChild(legRow(l)); });
 
     var leftover = (sp.legs || []).filter(function (l) { return matchState(l) !== "ended"; });
-    if (leftover.length) {
+    if (!sp.quiet && leftover.length) {
       var re = el("button", "rebet", "Rebet · " + leftover.length + " left");
       re.type = "button";
       re.addEventListener("click", function (e) {
@@ -1657,7 +1657,7 @@
       });
       card.appendChild(re);
     }
-    if (sp.status === "open" || sp.status === "live") {
+    if (!sp.quiet && (sp.status === "open" || sp.status === "live")) {
       var drop = el("button", "rebet", "Remove");
       drop.type = "button";
       drop.addEventListener("click", function (e) {
