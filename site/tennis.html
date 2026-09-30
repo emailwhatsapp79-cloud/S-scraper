@@ -302,7 +302,7 @@
         });
         if (!rows.length) return;
         n += 1;
-        out.appendChild(slipBlock(Object.assign({}, slip, { rows: rows }), n));
+        out.appendChild(WHEN === "done" ? historySlip(rows, n) : slipBlock(Object.assign({}, slip, { rows: rows }), n));
       });
       return;
     }
@@ -312,10 +312,75 @@
       return WHEN === "done" ? done : !done;
     });
     if (WHEN === "done") {
-      var line = countLine(list, hitKey);
-      if (line) out.appendChild(V.el("p", "note", line));
+      paintHistory(out, list, function (row) {
+        var hit = row[hitKey];
+        var label = REC === "winner"
+          ? ((row.winner === "2" ? "Away" : "Home") + (row.score ? " " + row.score : ""))
+          : (row.score || "");
+        var price = REC === "winner" ? row.winnerOdds : row.scoreOdds;
+        return historyCard(row.home, row.away, label, price, row.result, hit);
+      }, function (row) { return row.start; });
+      return;
     }
     list.forEach(function (row, i) { out.appendChild(bookGame(row, i + 1, REC)); });
+  }
+  function historyRow(home, away, label, price, score, won) {
+    var row = V.el("div", "leg ended");
+    var left = V.el("div", "leg-teams");
+    left.appendChild(V.teamsBlock(home, away));
+    var sel = V.el("div", "sel");
+    sel.appendChild(V.el("span", "pick", label || ""));
+    if (Number(price) > 1) sel.appendChild(document.createTextNode(" @ " + Number(price).toFixed(2)));
+    left.appendChild(sel);
+    row.appendChild(left);
+    var mid = V.el("div", "leg-mid");
+    mid.appendChild(V.el("div", "scoreboard", String(score || "–").replace(":", " – ")));
+    mid.appendChild(V.el("div", "phase", "FT"));
+    row.appendChild(mid);
+    row.appendChild(V.el("div", won ? "yes" : "no", won ? "Yes" : "No"));
+    return row;
+  }
+  function historyCard(home, away, label, price, score, won) {
+    var card = V.el("div", "slip " + (won ? "won" : "lost"));
+    card.appendChild(historyRow(home, away, label, price, score, won));
+    return card;
+  }
+  function historySlip(rows, n) {
+    var won = rows.filter(function (r) { return r.hit; }).length;
+    var all = won === rows.length;
+    var card = V.el("div", "slip " + (all ? "won" : "lost"));
+    var head = V.el("div", "slip-h");
+    head.appendChild(V.el("span", "badge " + (all ? "won" : "lost"), all ? "won" : "lost"));
+    head.appendChild(V.el("span", "sel", n + " · " + rows.length + " legs"));
+    head.appendChild(V.el("span", "tot", won + "/" + rows.length));
+    card.appendChild(head);
+    rows.forEach(function (row) {
+      var label = /^\d+:\d+$/.test(row.selection)
+        ? row.selection
+        : (row.selection === "2" ? "Away" : "Home");
+      card.appendChild(historyRow(row.home, row.away, label, row.price, row.result, row.hit));
+    });
+    return card;
+  }
+  function paintHistory(out, rows, cardOf, timeOf) {
+    var hits = rows.filter(function (r) {
+      var hit = REC === "winner" ? r.winnerHit : r.scoreHit;
+      return hit;
+    }).length;
+    if (rows.length) {
+      var stats = V.el("div", "stats");
+      var tile = V.el("div", "stat" + (hits * 2 >= rows.length ? " go" : ""));
+      tile.appendChild(V.el("b", null, hits + "/" + rows.length));
+      tile.appendChild(V.el("span", null, "Hit-rate"));
+      stats.appendChild(tile);
+      out.appendChild(stats);
+    }
+    var last = "";
+    rows.forEach(function (row) {
+      var d = V.dayLabel(timeOf(row));
+      if (d && d !== last) { last = d; out.appendChild(V.el("div", "day", d)); }
+      out.appendChild(cardOf(row));
+    });
   }
   function placedCells(bits) {
     var g = V.el("div", bits.length === 3 ? "tn-s three" : (bits.length > 2 ? "tn-s" : "tn-g"));
