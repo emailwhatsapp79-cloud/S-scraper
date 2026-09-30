@@ -17,7 +17,8 @@
   .seg a.on, .seg button.on { background: var(--bg); color: var(--ink) }
   .tn { background: var(--card); box-shadow: var(--shadow); border-radius: var(--r); margin-bottom: 10px; padding: 13px 14px }
   .tn-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px }
-  .tn-tourn { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 600 }
+  .tn-top .gid { font-size: 16px; padding-top: 0 }
+  .tn-tourn { flex: 1; min-width: 0; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 600 }
   .tn-when { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--dim) }
   .tn-call { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 4px 0 10px; font-size: 13.5px }
   .tn-call b { font-weight: 700 }
@@ -121,6 +122,7 @@
   function card(g) {
     var box = V.el("article", "tn");
     var top = V.el("div", "tn-top");
+    if (g.id && String(g.id).indexOf("sr:") !== 0) top.appendChild(V.el("span", "gid", String(g.id)));
     if (g.women) top.appendChild(V.el("b", "tn-w", "W"));
     if (g.draw === "doubles") top.appendChild(V.el("b", "tn-draw", "Doubles"));
     else if (g.draw === "singles") top.appendChild(V.el("b", "tn-draw", "Singles"));
