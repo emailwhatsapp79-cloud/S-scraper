@@ -295,91 +295,94 @@
       return;
     }
     if (REC === "booked") {
-      var n = 0;
-      ((BOOKED && BOOKED.slips) || []).forEach(function (slip) {
-        var rows = (slip.rows || []).filter(function (r) {
-          return WHEN === "done" ? r.hit != null : r.hit == null;
+      if (WHEN !== "done") {
+        var n = 0;
+        ((BOOKED && BOOKED.slips) || []).forEach(function (slip) {
+          var rows = (slip.rows || []).filter(function (r) { return r.hit == null; });
+          if (!rows.length) return;
+          n += 1;
+          out.appendChild(slipBlock(Object.assign({}, slip, { rows: rows }), n));
         });
-        if (!rows.length) return;
-        n += 1;
-        out.appendChild(WHEN === "done" ? historySlip(rows, n) : slipBlock(Object.assign({}, slip, { rows: rows }), n));
+        return;
+      }
+      var slips = [];
+      ((BOOKED && BOOKED.slips) || []).forEach(function (slip) {
+        var rows = (slip.rows || []).filter(function (r) { return r.hit != null; });
+        if (rows.length) slips.push(toSlip(slip, rows));
       });
+      if (slips.length) ledgerStats(out, V.legStats(slips));
+      groupDays(out, slips, function (s) { return s.createdAt || (s.legs[0] && s.legs[0].kickoff); }, V.slipCard);
       return;
     }
-    var hitKey = REC === "winner" ? "winnerHit" : "scoreHit";
     var list = BOOKS.filter(function (row) {
       var done = row.scoreHit != null || row.winnerHit != null;
       return WHEN === "done" ? done : !done;
     });
     if (WHEN === "done") {
-      paintHistory(out, list, function (row) {
-        var hit = row[hitKey];
-        var label = REC === "winner"
-          ? ((row.winner === "2" ? "Away" : "Home") + (row.score ? " " + row.score : ""))
-          : (row.score || "");
-        var price = REC === "winner" ? row.winnerOdds : row.scoreOdds;
-        return historyCard(row.home, row.away, label, price, row.result, hit);
-      }, function (row) { return row.start; });
+      var picks = list.map(function (row) { return toPick(row, REC); });
+      if (picks.length) ledgerStats(out, V.pickStats(picks));
+      groupDays(out, picks, function (p) { return p.kickoff; }, V.pickCard);
       return;
     }
     list.forEach(function (row, i) { out.appendChild(bookGame(row, i + 1, REC)); });
   }
-  function historyRow(home, away, label, price, score, won) {
-    var row = V.el("div", "leg ended");
-    var left = V.el("div", "leg-teams");
-    left.appendChild(V.teamsBlock(home, away));
-    var sel = V.el("div", "sel");
-    sel.appendChild(V.el("span", "pick", label || ""));
-    if (Number(price) > 1) sel.appendChild(document.createTextNode(" @ " + Number(price).toFixed(2)));
-    left.appendChild(sel);
-    row.appendChild(left);
-    var mid = V.el("div", "leg-mid");
-    mid.appendChild(V.el("div", "scoreboard", String(score || "–").replace(":", " – ")));
-    mid.appendChild(V.el("div", "phase", "FT"));
-    row.appendChild(mid);
-    row.appendChild(V.el("div", won ? "yes" : "no", won ? "Yes" : "No"));
-    return row;
+  function toPick(row, kind) {
+    var hit = kind === "winner" ? row.winnerHit : row.scoreHit;
+    var who = row.winner === "2" ? lastName(row.away) : lastName(row.home);
+    return {
+      home: row.home,
+      away: row.away,
+      league: row.tourn || "Tennis",
+      label: kind === "winner" ? (who + " · " + (row.score || "")) : (row.score || ""),
+      price: Number(kind === "winner" ? row.winnerOdds : row.scoreOdds) || 0,
+      won: hit === true,
+      status: "Ended",
+      kickoff: row.start,
+      setScore: row.result || "",
+      sport: "tn"
+    };
   }
-  function historyCard(home, away, label, price, score, won) {
-    var card = V.el("div", "slip " + (won ? "won" : "lost"));
-    card.appendChild(historyRow(home, away, label, price, score, won));
-    return card;
-  }
-  function historySlip(rows, n) {
-    var won = rows.filter(function (r) { return r.hit; }).length;
-    var all = won === rows.length;
-    var card = V.el("div", "slip " + (all ? "won" : "lost"));
-    var head = V.el("div", "slip-h");
-    head.appendChild(V.el("span", "badge " + (all ? "won" : "lost"), all ? "won" : "lost"));
-    head.appendChild(V.el("span", "sel", n + " · " + rows.length + " legs"));
-    head.appendChild(V.el("span", "tot", won + "/" + rows.length));
-    card.appendChild(head);
-    rows.forEach(function (row) {
+  function toSlip(slip, rows) {
+    var legs = rows.map(function (row) {
       var label = /^\d+:\d+$/.test(row.selection)
         ? row.selection
-        : (row.selection === "2" ? "Away" : "Home");
-      card.appendChild(historyRow(row.home, row.away, label, row.price, row.result, row.hit));
+        : (row.selection === "2" ? lastName(row.away) : lastName(row.home));
+      return {
+        home: row.home, away: row.away, league: row.tourn || "Tennis",
+        label: label, price: Number(row.price) || 0, won: row.hit === true,
+        status: "Ended", kickoff: row.start, setScore: row.result || "",
+        sport: "tn", selection: row.selection, gameId: row.eventId
+      };
     });
-    return card;
+    var all = legs.length > 0 && legs.every(function (l) { return l.won === true; });
+    var odds = legs.reduce(function (n, l) { return n * (l.price > 1 ? l.price : 1); }, 1);
+    return {
+      id: slip.id, status: all ? "won" : "lost", legs: legs,
+      stake: 1, combinedOdds: odds, potential: odds, returned: all ? odds : 0,
+      shareCode: slip.code || "", createdAt: slip.at
+    };
   }
-  function paintHistory(out, rows, cardOf, timeOf) {
-    var hits = rows.filter(function (r) {
-      var hit = REC === "winner" ? r.winnerHit : r.scoreHit;
-      return hit;
-    }).length;
-    if (rows.length) {
-      var stats = V.el("div", "stats");
-      var tile = V.el("div", "stat" + (hits * 2 >= rows.length ? " go" : ""));
-      tile.appendChild(V.el("b", null, hits + "/" + rows.length));
-      tile.appendChild(V.el("span", null, "Hit-rate"));
-      stats.appendChild(tile);
-      out.appendChild(stats);
+  function ledgerStats(out, st) {
+    if (!st || !st.legs) return;
+    var box = V.el("div", "stats");
+    function tile(text, name, cls) {
+      var t = V.el("div", "stat" + (cls ? " " + cls : ""));
+      t.appendChild(V.el("b", null, text));
+      t.appendChild(V.el("span", null, name));
+      box.appendChild(t);
     }
+    var pct = function (x) { return (x * 100).toFixed(1) + "%"; };
+    tile(pct(st.hit) + " (" + st.wins + "/" + st.legs + ")", "Hit-rate");
+    tile(pct(st.breakeven), "Break-even");
+    tile((st.pnl >= 0 ? "+" : "") + (Math.round(st.pnl * 100) / 100) + "u", "Flat P&L", st.pnl >= 0 ? "go" : "bad");
+    out.appendChild(box);
+  }
+  function groupDays(out, items, dateOf, cardOf) {
     var last = "";
-    rows.forEach(function (row) {
-      var d = V.dayLabel(timeOf(row));
+    items.forEach(function (it) {
+      var d = V.dayLabel(dateOf(it));
       if (d && d !== last) { last = d; out.appendChild(V.el("div", "day", d)); }
-      out.appendChild(cardOf(row));
+      out.appendChild(cardOf(it));
     });
   }
   function placedCells(bits) {
