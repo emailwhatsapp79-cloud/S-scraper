@@ -187,10 +187,14 @@
         var next = j.legs.map(function (l, i) {
           var q = (d.legs || [])[i] || {};
           if (q.error) {
-            bits.push((l.home || "Game") + " is not open");
-            return l;
+            bits.push((l.home || "Game") + " is suspended");
+            return Object.assign({}, l, { blocked: q.error });
           }
-          if (!(Number(q.price) > 1)) return l;
+          if (l.outcomeId && q.outcomeId && String(q.outcomeId) !== String(l.outcomeId)) {
+            bits.push((l.home || "Game") + " is not the price you tapped");
+            return Object.assign({}, l, { blocked: "Not the price you tapped" });
+          }
+          if (!(Number(q.price) > 1)) return Object.assign({}, l, { blocked: "" });
           if (Math.abs(Number(q.price) - Number(l.price)) >= 0.01) {
             bits.push((l.home || "Game") + " " + Number(l.price).toFixed(2) + " → " + Number(q.price).toFixed(2));
           }
@@ -199,7 +203,8 @@
             marketId: q.marketId || l.marketId,
             outcomeId: q.outcomeId || l.outcomeId,
             specifier: q.specifier || "",
-            probability: q.probability || l.probability || ""
+            probability: q.probability || l.probability || "",
+            blocked: ""
           });
         });
         j.save(next);
@@ -228,6 +233,7 @@
       var left = V.el("div");
       left.appendChild(V.teamsBlock(l.home, l.away));
       left.appendChild(V.el("div", "sel", l.label + " · " + Number(l.price).toFixed(2) +
+        (l.blocked ? " · suspended" : "") +
         (l.kickoff ? " · " + V.clock(l.kickoff) : "")));
       row.appendChild(left);
       var rm = V.el("button", "rm", "Remove");
@@ -317,8 +323,9 @@
           box.appendChild(sel);
         }
       }
-      var go = V.el("button", "primary", site.connected ? ("Place " + naira(stake) + " · " + pay[key]) : ("Connect " + name + " to place"));
-      go.disabled = !site.connected || (pay[key] === "gift" && !(site.gifts || []).length);
+      var blocked = legs.filter(function (l) { return l.blocked; });
+      var go = V.el("button", "primary", blocked.length ? (blocked.length + " suspended — take them off") : (site.connected ? ("Place " + naira(stake) + " · " + pay[key]) : ("Connect " + name + " to place")));
+      go.disabled = !site.connected || blocked.length || (pay[key] === "gift" && !(site.gifts || []).length);
       go.addEventListener("click", function () {
         go.disabled = true;
         go.textContent = "Placing…";
@@ -336,8 +343,9 @@
         });
       });
       box.appendChild(go);
-      var linkOnly = V.el("button", "ghost wide", "Load link only — no stake");
+      var linkOnly = V.el("button", "ghost wide", blocked.length ? "Take the suspended ones off first" : "Load link only — no stake");
       linkOnly.type = "button";
+      linkOnly.disabled = blocked.length > 0;
       linkOnly.addEventListener("click", function () {
         linkOnly.disabled = true;
         linkOnly.textContent = "Asking " + name + "…";

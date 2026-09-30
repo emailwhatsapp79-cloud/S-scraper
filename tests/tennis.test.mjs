@@ -305,4 +305,50 @@ test("a tennis set score books market 199 with its specifier", () => {
   assert.equal(game.call.score, "0:2");
   assert.equal(game.selectionRefs["0:2"].specifier, "variant=sr:correct_score:bestof:3");
   assert.equal(game.derived, false);
+  assert.equal(game.winOpen, true);
+  assert.equal(game.scoresOpen, true);
+});
+
+test("a suspended tennis price is shown and cannot be booked", () => {
+  const game = normaliseTennis({
+    eventId: "sr:match:9", gameId: "9", matchStatus: "Not start",
+    estimateStartTime: Date.now() + 3600000,
+    homeTeamName: "Zverev, Alexander", awayTeamName: "Norrie, Cameron",
+    markets: [
+      { id: "186", desc: "Winner", product: 3, status: 1, outcomes: [
+        { id: "4", desc: "Home", odds: "1.11", isActive: 1 },
+        { id: "5", desc: "Away", odds: "6.40", isActive: 1 },
+      ] },
+    ],
+  }, "ATP Beijing, China Men Singles");
+  assert.equal(game.suspended, true);
+  assert.equal(game.winOpen, false);
+  assert.equal(game.win.home, 1.11);
+  assert.equal(game.selectionRefs["1"], undefined);
+
+  const quoted = quote({
+    eventId: "sr:match:9",
+    matchStatus: "Not start",
+    sport: { id: "sr:sport:5" },
+    markets: [
+      { id: "186", desc: "Winner", product: 3, status: 1, lastOddsChangeTime: 9, outcomes: [
+        { id: "4", desc: "Home", odds: "1.11", isActive: 1 },
+      ] },
+      { id: "186", desc: "Winner", product: 3, status: 0, lastOddsChangeTime: 2, outcomes: [
+        { id: "4", desc: "Home", odds: "1.31", isActive: 1 },
+        { id: "5", desc: "Away", odds: "3.40", isActive: 1 },
+      ] },
+    ],
+  }, "1", { outcomeId: "4", sport: "tn" });
+  assert.equal(quoted.odds, 1.31);
+  assert.equal(quoted.sportId, "sr:sport:5");
+  assert.equal(quote({
+    eventId: "sr:match:9",
+    sport: { id: "sr:sport:5" },
+    markets: [
+      { id: "186", desc: "Winner", product: 3, status: 1, outcomes: [
+        { id: "4", desc: "Home", odds: "1.11", isActive: 1 },
+      ] },
+    ],
+  }, "1", { outcomeId: "4", sport: "tn" }), null);
 });

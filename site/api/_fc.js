@@ -437,66 +437,88 @@ function isTableLeg(leg) {
   return /setka|elite series|liga pro|tt cup|challenger series|table tennis/i.test(String(leg.league || ""));
 }
 
+function marketOpen(m) {
+  return !m || m.status == null || m.status === "" || Number(m.status) === 0;
+}
+
 function isTableEvent(ev) {
   if (!ev) return false;
-  if (ev.sport && ev.sport.id === TT_SPORT) return true;
+  const sportId = ev.sport && ev.sport.id;
+  if (sportId === "sr:sport:5") return false;
+  if (sportId === TT_SPORT) return true;
   return (ev.markets || []).some((m) => String(m.id) === "186" || /^winner$/i.test(String(m.desc || "")));
 }
 
-function quoteScore(ev, sel) {
+function quoteScore(ev, sel, hint = {}) {
   const markets = (ev.markets || []).filter((m) => String(m.id) === "199" || /correct score/i.test(String(m.desc || "")));
   const started = /^(1st set|2nd set|3rd set|set\s|Playing|LIVE)/i.test(String(ev.matchStatus || ""));
-  const open = markets.filter((m) => m.status == null || m.status === "" || Number(m.status) === 0);
+  const open = markets.filter(marketOpen);
   open.sort((a, b) => {
     const liveA = Number(a.product) === 1 ? 1 : 0;
     const liveB = Number(b.product) === 1 ? 1 : 0;
     if (liveA !== liveB) return started ? liveB - liveA : liveA - liveB;
     return (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0);
   });
+  const wantId = hint.outcomeId ? String(hint.outcomeId) : "";
+  const rows = [];
   for (const m of open) {
-    const o = (m.outcomes || []).find((x) => String(x.desc || "").replace("-", ":") === sel);
-    const odds = Number(o && o.odds);
-    if (!o || !(odds > 1) || o.isActive === 0) continue;
-    return {
-      eventId: String(ev.eventId),
-      sportId: (ev.sport && ev.sport.id) || "sr:sport:5",
-      marketId: String(m.id || "199"),
-      outcomeId: String(o.id || ""),
-      specifier: String(m.specifier || ""),
-      product: String(m.product ?? 3),
-      odds,
-      probability: o.probability != null ? String(o.probability) : "",
-    };
+    for (const o of m.outcomes || []) {
+      const desc = String(o.desc || "").replace("-", ":");
+      const id = String(o.id || "");
+      if (wantId ? id !== wantId : desc !== sel) continue;
+      const odds = Number(o.odds);
+      if (!(odds > 1) || o.isActive === 0) continue;
+      rows.push({ m, o, odds });
+    }
   }
-  return null;
+  // The tapped outcome is the only one that may be booked. A suspended copy
+  // at another price must not take its place.
+  if (wantId && !rows.length) return null;
+  const hit = rows[0];
+  if (!hit) return null;
+  return {
+    eventId: String(ev.eventId),
+    sportId: (ev.sport && ev.sport.id) || (hint.sport === "tn" ? "sr:sport:5" : "sr:sport:5"),
+    marketId: String(hit.m.id || "199"),
+    outcomeId: String(hit.o.id || ""),
+    specifier: String(hit.m.specifier || ""),
+    product: String(hit.m.product ?? 3),
+    odds: hit.odds,
+    probability: hit.o.probability != null ? String(hit.o.probability) : "",
+  };
 }
 
-export function quote(ev, selection) {
+export function quote(ev, selection, hint = {}) {
   const sel = String(selection || "");
-  if (/^\d+:\d+$/.test(sel)) return ev ? quoteScore(ev, sel) : null;
-  const tt = isTableEvent(ev);
+  if (/^\d+:\d+$/.test(sel)) return ev ? quoteScore(ev, sel, hint) : null;
+  const tennis = hint.sport === "tn" || (ev && ev.sport && ev.sport.id === "sr:sport:5");
+  const tt = !tennis && isTableEvent(ev);
   const want = tt
     ? (sel === "1" ? ["Winner", "Home"] : sel === "2" ? ["Winner", "Away"] : null)
     : WANT[sel];
   if (!ev || !want) return null;
   const [desc, outcome] = want;
-  const markets = (ev.markets || []).filter((m) => (
+  const markets = (ev.markets || []).filter((m) => marketOpen(m) && (
     tt
       ? (String(m.id) === "186" || /^winner$/i.test(String(m.desc || "")))
-      : String(m.desc || "") === desc
+      : tennis
+        ? (String(m.id) === "186" || /^winner$/i.test(String(m.desc || "")))
+        : String(m.desc || "") === desc
   ));
+  const started = /^(H1|H2|HT|LIVE|Playing|1st set|2nd set|3rd set|set\s)/i.test(String(ev.matchStatus || ""));
   markets.sort((a, b) => {
-    const liveA = a.product === 1 ? 1 : 0;
-    const liveB = b.product === 1 ? 1 : 0;
-    const started = /^(H1|H2|HT|LIVE|Playing|set\s)/i.test(String(ev.matchStatus || ""));
-    if (started && liveA !== liveB) return liveB - liveA;
-    if (!started && liveA !== liveB) return liveA - liveB;
+    const liveA = Number(a.product) === 1 ? 1 : 0;
+    const liveB = Number(b.product) === 1 ? 1 : 0;
+    if (liveA !== liveB) return started ? liveB - liveA : liveA - liveB;
     return (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0);
   });
+  const wantId = hint.outcomeId ? String(hint.outcomeId) : "";
+  const rows = [];
   for (const m of markets) {
     const o = (m.outcomes || []).find((x) => {
       const id = String(x.id || x.outcomeId || "");
-      if (tt) {
+      if (wantId) return id === wantId;
+      if (tt || tennis) {
         if (outcome === "Home") return /^home$/i.test(String(x.desc || "")) || id === "4";
         if (outcome === "Away") return /^away$/i.test(String(x.desc || "")) || id === "5";
       }
@@ -504,22 +526,24 @@ export function quote(ev, selection) {
     });
     const odds = Number(o && o.odds);
     if (!o || !(odds > 1) || o.isActive === 0) continue;
-    const sportId = (ev.sport && ev.sport.id) || (tt ? TT_SPORT : SPORT_ID);
-    const marketId = String(m.id || m.marketId);
-    const outcomeId = String(o.id || o.outcomeId);
-    const product = String(m.product ?? 3);
-    return {
-      eventId: String(ev.eventId),
-      sportId,
-      marketId,
-      outcomeId,
-      specifier: String(m.specifier || ""),
-      product,
-      odds,
-      probability: o.probability != null ? String(o.probability) : "",
-    };
+    rows.push({ m, o, odds });
   }
-  return null;
+  if (wantId && !rows.length) return null;
+  const hit = rows[0];
+  if (!hit) return null;
+  const sportId = tennis
+    ? "sr:sport:5"
+    : ((ev.sport && ev.sport.id) || (tt ? TT_SPORT : SPORT_ID));
+  return {
+    eventId: String(ev.eventId),
+    sportId,
+    marketId: String(hit.m.id || hit.m.marketId),
+    outcomeId: String(hit.o.id || hit.o.outcomeId),
+    specifier: String(hit.m.specifier || ""),
+    product: String(hit.m.product ?? 3),
+    odds: hit.odds,
+    probability: hit.o.probability != null ? String(hit.o.probability) : "",
+  };
 }
 
 export async function priceLeg(leg, book, opts = {}) {
@@ -529,17 +553,17 @@ export async function priceLeg(leg, book, opts = {}) {
   const score = /^\d+:\d+$/.test(String(leg.selection || ""));
   const tt = !score && (isTableLeg(leg) || leg.sport === "tn");
   let ev = await fetchEvent(leg.eventId, tt ? { marketId: "186" } : (score ? { marketId: "199" } : {}), base);
-  let q = quote(ev, leg.selection);
+  let q = quote(ev, leg.selection, { outcomeId: leg.outcomeId, sport: leg.sport });
   if (!q && sporty && score) {
     ev = await fetchEvent(leg.eventId, { marketId: "199" }, base);
-    q = quote(ev, leg.selection);
+    q = quote(ev, leg.selection, { outcomeId: leg.outcomeId, sport: leg.sport });
   }
   if (!q && sporty && !tt && !score && (leg.selection === "1" || leg.selection === "2")) {
     ev = await fetchEvent(leg.eventId, { marketId: "186" }, base);
-    q = quote(ev, leg.selection);
+    q = quote(ev, leg.selection, { outcomeId: leg.outcomeId, sport: leg.sport });
   }
   if (!q) {
-    throw new Error(`${leg.home} v ${leg.away} is not open on ${label}. Refresh the card.`);
+    throw new Error(`${leg.home} v ${leg.away} is suspended or not open. Take it off the slip.`);
   }
   if (!opts.keep && movedTooFar(leg.price, q.odds)) {
     throw new Error(

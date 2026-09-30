@@ -3,7 +3,7 @@ import { sql, rowToGame } from "./_db.js";
 import { fetchEvent, scoreOf, FOOTBALL_BASE } from "./_card.js";
 import { shareSelections } from "./_share.js";
 import { notifyBooked } from "./_push.js";
-import { placeOrder, loadGifts } from "./_fc.js";
+import { placeOrder, loadGifts, priceLeg } from "./_fc.js";
 import { readSession, writeSession } from "./_fc_session.js";
 
 let schemaReady = false;
@@ -258,7 +258,7 @@ export async function createSlip(stake, incoming, book, opts = {}) {
     return all.find((s) => s.id === id);
   }
 
-  const ids = [...new Set(raw.map((l) => String(l.gameId || l.id || "")).filter(Boolean))].slice(0, 12);
+  const ids = [...new Set(raw.map((l) => String(l.gameId || l.id || "")).filter(Boolean))];
   const eventIds = [...new Set(raw.map((l) => String(l.eventId || "")).filter(Boolean))];
   const rows = eventIds.length
     ? await sql`SELECT * FROM games WHERE event_id = ANY(${eventIds}) OR game_id = ANY(${ids})`
@@ -273,8 +273,9 @@ export async function createSlip(stake, incoming, book, opts = {}) {
     if (g.eventId) byEvent.set(String(g.eventId), g);
     byId.set(String(g.id), g);
   }
+  if (raw.length > 50) throw new Error(`SportyBet takes 50 games on one slip. This one has ${raw.length}.`);
   const legs = [];
-  for (const row of raw.slice(0, 12)) {
+  for (const row of raw) {
     const id = String(row.gameId || row.id || "");
     const eid = String(row.eventId || "");
     let g = row.sport === "tn" ? null : ((eid && byEvent.get(eid)) || byId.get(id));
@@ -346,6 +347,10 @@ export async function createSlip(stake, incoming, book, opts = {}) {
     placed = await placeOrder(current, legs, n, gift);
     if (placed.session && placed.session.cookie !== current.cookie) await writeSession(placed.session);
     booked = placed.legs;
+  } else {
+    const checked = [];
+    for (const leg of legs) checked.push(await priceLeg(leg, "sporty"));
+    booked = checked;
   }
   const share = await tryShare(booked);
   const combined = round2(booked.reduce((acc, l) => acc * l.price, 1));

@@ -53,6 +53,8 @@
   .tn-miss { color: var(--bad) }
   .tn.sim { box-shadow: inset 0 0 0 1px var(--bad) }
   .tn-sim { color: var(--bad); font-size: 10px; font-weight: 700; letter-spacing: .06em; border: 1px solid var(--bad); border-radius: 99px; padding: 1px 6px }
+  .tn-susp { color: var(--hold); font-size: 10px; font-weight: 700; letter-spacing: .06em; border: 1px solid var(--hold); border-radius: 99px; padding: 1px 6px }
+  .tn-cell.off { cursor: default; opacity: .45 }
   .tn-w, .tn-draw { color: var(--dim); font-size: 10px; font-weight: 700; letter-spacing: .06em; border: 1px solid var(--dim); border-radius: 99px; padding: 1px 6px }
 </style>
 </head>
@@ -111,7 +113,9 @@
     c.appendChild(V.el("b", null, price != null ? Number(price).toFixed(2) : label));
     c.appendChild(V.el("span", null, label));
     if (extra) c.appendChild(V.el("em", null, extra));
-    if (price != null && g.selectionRefs && g.selectionRefs[sel]) {
+    var bookable = price != null && g.selectionRefs && g.selectionRefs[sel];
+    if (!bookable) c.classList.add("off");
+    if (bookable) {
       c.addEventListener("click", function (e) {
         e.stopPropagation();
         V.toggleBook(V.makePick(gameOf(g), sel, price, label));
@@ -131,6 +135,7 @@
       box.className = "tn sim";
       top.appendChild(V.el("b", "tn-sim", "SIM"));
     }
+    if (g.suspended) top.appendChild(V.el("b", "tn-susp", "Suspended"));
     top.appendChild(V.el("span", "tn-tourn", g.tourn || "Tennis"));
     var t = V.until(g.start);
     var when = V.el("time", "tn-when", (t.text || V.clock(g.start) || "").trim() || V.clock(g.start));
@@ -193,7 +198,7 @@
     box.appendChild(bar);
 
     if (g.win) {
-      box.appendChild(V.el("div", "tn-lab", "Winner"));
+      box.appendChild(V.el("div", "tn-lab", g.winOpen === false ? "Winner · suspended" : "Winner"));
       var wg = V.el("div", "tn-g");
       wg.appendChild(cell(g, "1", g.win.home, lastName(g.home), false, pct(call.home)));
       wg.appendChild(cell(g, "2", g.win.away, lastName(g.away), false, pct(call.away)));
@@ -201,7 +206,7 @@
     }
     var scores = g.scores || [];
     if (scores.length) {
-      box.appendChild(V.el("div", "tn-lab", g.derived ? "Set score, estimated" : "Set score"));
+      box.appendChild(V.el("div", "tn-lab", g.derived ? "Set score, estimated" : (g.scoresOpen === false ? "Set score · suspended" : "Set score")));
       var sg = V.el("div", "tn-s" + (scores.length > 4 ? " six" : ""));
       var shortSel = "", shortOdds = 99;
       scores.forEach(function (s) {

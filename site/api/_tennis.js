@@ -98,19 +98,24 @@ export function tennisCall(scores) {
   };
 }
 
+function marketOpen(m) {
+  return m && (m.status == null || m.status === "" || Number(m.status) === 0);
+}
+
 function chooseMarket(markets) {
-  const list = markets || [];
-  const open = list.filter((m) => m.status == null || m.status === "" || Number(m.status) === 0);
-  const pre = (open.length ? open : list).filter((m) => Number(m.product) !== 1);
-  const pool = pre.length ? pre : (open.length ? open : list);
-  return pool.slice().sort((a, b) => (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0))[0] || null;
+  const open = (markets || []).filter(marketOpen);
+  if (!open.length) return null;
+  const pre = open.filter((m) => Number(m.product) !== 1);
+  const pool = pre.length ? pre : open;
+  return pool.slice().sort((a, b) => (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0))[0];
 }
 
 function winPrices(ev) {
   const markets = (ev.markets || []).filter((m) => String(m.id) === "186" || /^winner$/i.test(String(m.desc || "")));
-  const m = chooseMarket(markets);
+  const open = chooseMarket(markets);
+  const m = open || markets[0];
   if (!m) return null;
-  const out = { marketId: "186" };
+  const out = { marketId: "186", open: Boolean(open) };
   for (const o of m.outcomes || []) {
     const odds = Number(o.odds);
     if (!(odds > 1) || o.isActive === 0) continue;
@@ -130,7 +135,8 @@ function winPrices(ev) {
 
 function scoreRows(ev) {
   const markets = (ev.markets || []).filter((m) => String(m.id) === "199" || /correct score/i.test(String(m.desc || "")));
-  const m = chooseMarket(markets);
+  const open = chooseMarket(markets);
+  const m = open || markets[0];
   if (!m) return [];
   const rows = [];
   for (const o of m.outcomes || []) {
@@ -141,6 +147,7 @@ function scoreRows(ev) {
       rows.push({
         sel,
         odds,
+        open: Boolean(open),
         marketId: String(m.id || "199"),
         outcomeId: String(o.id || ""),
         specifier: String(m.specifier || ""),
@@ -194,19 +201,24 @@ export function normaliseTennis(ev, tourn, category) {
   const shares = scores.every((s) => s.p > 0) ? scores.map((s) => s.p) : fairShares(scores);
   const priced = scores.map((s, i) => ({ ...s, p: shares[i] }));
   const call = tennisCall(priced);
+  const matchHeld = /suspend|interrupt/i.test(String(ev.matchStatus || ""));
   const refs = {};
-  if (win) {
+  const winOpen = Boolean(win && win.open !== false) && !matchHeld;
+  if (win && winOpen) {
     refs["1"] = { marketId: "186", outcomeId: win.home.outcomeId, probability: win.home.probability };
     refs["2"] = { marketId: "186", outcomeId: win.away.outcomeId, probability: win.away.probability };
   }
-  for (const s of priced) {
-    if (!s.outcomeId) continue;
-    refs[s.sel] = {
-      marketId: s.marketId,
-      outcomeId: s.outcomeId,
-      probability: s.probability,
-      specifier: s.specifier,
-    };
+  const pricedOpen = priced.filter((s) => s.outcomeId && s.open !== false);
+  const scoresOpen = pricedOpen.length > 0 && !matchHeld;
+  if (scoresOpen) {
+    for (const s of pricedOpen) {
+      refs[s.sel] = {
+        marketId: s.marketId,
+        outcomeId: s.outcomeId,
+        probability: s.probability,
+        specifier: s.specifier,
+      };
+    }
   }
   return {
     id: String(ev.gameId || ev.eventId),
@@ -219,6 +231,9 @@ export function normaliseTennis(ev, tourn, category) {
     draw,
     start,
     status: ev.matchStatus || "",
+    suspended: matchHeld || ((Boolean(win) || priced.some((s) => s.outcomeId)) && !winOpen && !scoresOpen),
+    winOpen,
+    scoresOpen,
     derived,
     win: win ? { home: win.home.odds, away: win.away.odds } : null,
     call: {
