@@ -515,7 +515,7 @@ export function quote(ev, selection) {
   return null;
 }
 
-export async function priceLeg(leg, book) {
+export async function priceLeg(leg, book, opts = {}) {
   const sporty = book === "sporty";
   const label = sporty ? "SportyBet" : "Football.com";
   const base = sporty ? BASE : FOOTBALL_BASE;
@@ -534,9 +534,9 @@ export async function priceLeg(leg, book) {
   if (!q) {
     throw new Error(`${leg.home} v ${leg.away} is not open on ${label}. Refresh the card.`);
   }
-  if (movedTooFar(leg.price, q.odds)) {
+  if (!opts.keep && movedTooFar(leg.price, q.odds)) {
     throw new Error(
-      `${leg.home} v ${leg.away} moved from ${Number(leg.price).toFixed(2)} to ${q.odds.toFixed(2)}. Refresh, then place again.`,
+      `${leg.home} v ${leg.away} moved from ${Number(leg.price).toFixed(2)} to ${q.odds.toFixed(2)}. Refresh prices, then place again.`,
     );
   }
   return {
@@ -550,6 +550,27 @@ export async function priceLeg(leg, book) {
     price: q.odds,
     probability: q.probability,
   };
+}
+
+export async function quoteLegs(legs, book) {
+  const out = [];
+  for (const leg of legs || []) {
+    try {
+      const q = await priceLeg(leg, book, { keep: true });
+      out.push({
+        price: q.price,
+        marketId: q.marketId,
+        outcomeId: q.outcomeId,
+        specifier: q.specifier || "",
+        probability: q.probability || "",
+        product: q.product,
+        sportId: q.sportId,
+      });
+    } catch (e) {
+      out.push({ error: String(e?.message || e) });
+    }
+  }
+  return out;
 }
 
 export function buildOrder(legs, stake, gift, shareCode) {

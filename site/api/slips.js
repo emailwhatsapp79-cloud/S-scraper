@@ -3,6 +3,7 @@
 // inside Vercel's serverless-function cap.
 import { cors } from "./_db.js";
 import { listSlips, createSlip, refreshSlips, reshareSlip, clearSlip } from "./_slips.js";
+import { quoteLegs } from "./_fc.js";
 import { guard } from "./_gate.js";
 import account, { handle as accountHandle } from "./_fc_session.js";
 
@@ -18,6 +19,12 @@ export default async function handler(req, res) {
 
     if (req.method === "POST") {
       const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
+      if (body.quote) {
+        const book = body.book === "football" ? "football" : "sporty";
+        const legs = await quoteLegs(body.legs || [], book);
+        res.setHeader("Cache-Control", "no-store");
+        return res.status(200).json({ ok: true, tookMs: Date.now() - started, legs });
+      }
       const slip = body.slipId
         ? await reshareSlip(body.slipId)
         : await createSlip(body.stake, body.legs || body.gameIds, body.book, {

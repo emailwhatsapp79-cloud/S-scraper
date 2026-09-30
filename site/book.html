@@ -168,6 +168,54 @@
     });
   }
 
+  var priceNote = "";
+  function refreshPrices() {
+    var jobs = [];
+    var sporty = V.loadBook();
+    var foot = V.loadBookFc();
+    if (sporty.length) jobs.push({ book: "sporty", legs: sporty, save: V.saveBook });
+    if (foot.length) jobs.push({ book: "football", legs: foot, save: V.saveBookFc });
+    if (!jobs.length) return Promise.resolve();
+    return Promise.all(jobs.map(function (j) {
+      return fetch("/api/slips", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ quote: true, book: j.book, legs: legBody(j.legs, j.book) })
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d || !d.ok) throw new Error((d && d.error) || "Could not refresh prices");
+        var bits = [];
+        var next = j.legs.map(function (l, i) {
+          var q = (d.legs || [])[i] || {};
+          if (q.error) {
+            bits.push((l.home || "Game") + " is not open");
+            return l;
+          }
+          if (!(Number(q.price) > 1)) return l;
+          if (Math.abs(Number(q.price) - Number(l.price)) >= 0.01) {
+            bits.push((l.home || "Game") + " " + Number(l.price).toFixed(2) + " → " + Number(q.price).toFixed(2));
+          }
+          return Object.assign({}, l, {
+            price: q.price,
+            marketId: q.marketId || l.marketId,
+            outcomeId: q.outcomeId || l.outcomeId,
+            specifier: q.specifier || l.specifier || "",
+            probability: q.probability || l.probability || ""
+          });
+        });
+        j.save(next);
+        return bits;
+      });
+    })).then(function (all) {
+      var bits = [];
+      all.forEach(function (b) { if (b) bits = bits.concat(b); });
+      priceNote = bits.length ? bits.join(" · ") : "Prices are current.";
+      renderDraft();
+    }).catch(function (e) {
+      priceNote = e.message || "Could not refresh prices";
+      renderDraft();
+    });
+  }
+
   function paintSlip(box, legs, book, name, save) {
     box.appendChild(V.el("h2", "slips-h", name));
     var key = book === "football" ? "football" : "sporty";
@@ -190,6 +238,16 @@
       row.appendChild(rm);
       box.appendChild(row);
     });
+
+    var ref = V.el("button", "ghost wide", "Refresh prices");
+    ref.type = "button";
+    ref.addEventListener("click", function () {
+      ref.disabled = true;
+      ref.textContent = "Refreshing…";
+      refreshPrices();
+    });
+    box.appendChild(ref);
+    if (priceNote) box.appendChild(V.el("p", "note", priceNote));
 
     var cut = legs.filter(function (l) {
       return l.kickoff && Number(l.kickoff) < Date.now() - 60000;
@@ -343,6 +401,7 @@
 
   renderDraft();
   loadAcct();
+  refreshPrices();
   window.addEventListener("vfs-book", renderDraft);
   window.addEventListener("vfs-slips", function () { loadSlips(false); });
   loadSlips(false);
