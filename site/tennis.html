@@ -79,7 +79,7 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("tt");
-  var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", RECORD = null, BOOKED = null;
+  var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", RECORD = null, BOOKED = null, BOOKS = [], REC = "score";
 
   function lastName(s) {
     var t = String(s || "").trim();
@@ -260,42 +260,66 @@
     return line + " The gold box stays on until 12 have finished.";
   }
 
+  function countLine(rows, hitKey) {
+    var done = rows.filter(function (r) { return r[hitKey] != null; });
+    var hits = done.filter(function (r) { return r[hitKey]; }).length;
+    var open = rows.length - done.length;
+    if (!rows.length) return "None marked book yet.";
+    if (!done.length) return rows.length + " marked, none finished yet.";
+    return hits + " of " + done.length + " won." + (open ? " " + open + " still to play." : "");
+  }
   function renderRecord() {
     var out = document.getElementById("out");
     out.textContent = "";
     document.getElementById("head").textContent = "Record";
     document.getElementById("tourns").textContent = "";
-    var booked = BOOKED;
-    if (!booked) {
-      out.appendChild(V.el("div", "empty", "Checking what you booked…"));
+    var tabs = V.el("div", "chips");
+    [["score", "Correct score"], ["winner", "Winners"], ["booked", "Booked"]].forEach(function (pair) {
+      var b = V.el("button", "chip" + (REC === pair[0] ? " on" : ""), pair[1]);
+      b.addEventListener("click", function () { REC = pair[0]; render(); });
+      tabs.appendChild(b);
+    });
+    out.appendChild(tabs);
+    if (BOOKED == null && !BOOKS.length) {
+      out.appendChild(V.el("div", "empty", "Checking the record…"));
       return;
     }
-    out.appendChild(V.el("p", "lede", "Taken from the tennis you booked. Winners is the match. Correct score is 2–0, 2–1, 1–2 or 0–2."));
-    [["Winners", booked.winners], ["Correct score", booked.scores]].forEach(function (pair) {
-      var name = pair[0];
-      var block = pair[1] || { hits: 0, n: 0, open: 0, rows: [] };
-      var head = V.el("h2", "slips-h", name);
-      var line = block.n
-        ? (block.hits + " of " + block.n + " won" + (block.open ? ". " + block.open + " still to play." : "."))
-        : (block.open ? (block.open + " booked, none finished yet.") : "None booked yet.");
-      out.appendChild(head);
-      out.appendChild(V.el("p", "note", line));
-      (block.rows || []).forEach(function (row) {
-        var box = V.el("article", "tn");
-        var top = V.el("div", "tn-top");
-        top.appendChild(V.el("span", "tn-tourn", row.tourn || "Tennis"));
-        var state = row.hit == null ? "Waiting" : (row.hit ? "Won" : "Lost");
-        top.appendChild(V.el("span", row.hit == null ? "tn-when" : (row.hit ? "tn-hit" : "tn-miss"), state));
-        box.appendChild(top);
-        var call = V.el("div", "tn-call");
-        call.appendChild(V.el("b", null, lastName(row.home) + " vs " + lastName(row.away)));
-        call.appendChild(V.el("b", null, row.selection === "1" ? lastName(row.home) : (row.selection === "2" ? lastName(row.away) : row.selection)));
-        call.appendChild(V.el("span", null, row.price ? Number(row.price).toFixed(2) : ""));
-        box.appendChild(call);
-        if (row.result && /^\d+:\d+$/.test(row.result)) box.appendChild(V.el("div", "tn-note", "Finished " + row.result));
-        out.appendChild(box);
-      });
+    if (REC === "booked") {
+      var mine = (BOOKED && BOOKED.rows) || [];
+      var settled = mine.filter(function (r) { return r.hit != null; });
+      var won = settled.filter(function (r) { return r.hit; }).length;
+      out.appendChild(V.el("p", "lede", "Only the tennis you put on a slip yourself."));
+      out.appendChild(V.el("p", "note", mine.length
+        ? (settled.length ? (won + " of " + settled.length + " won.") : (mine.length + " booked, none finished yet."))
+        : "You have not booked a tennis yet."));
+      mine.forEach(function (row) { out.appendChild(recordCard(row, row.hit, row.selection === "1" ? lastName(row.home) : (row.selection === "2" ? lastName(row.away) : row.selection), row.price)); });
+      return;
+    }
+    var hitKey = REC === "winner" ? "winnerHit" : "scoreHit";
+    out.appendChild(V.el("p", "lede", "The same games that are marked book. " + BOOKS.length + " in correct score and " + BOOKS.length + " in winners."));
+    out.appendChild(V.el("p", "note", countLine(BOOKS, hitKey)));
+    BOOKS.forEach(function (row) {
+      var pick = REC === "winner"
+        ? (row.winner === "2" ? lastName(row.away) : lastName(row.home))
+        : row.score;
+      var price = REC === "winner" ? row.winnerOdds : row.scoreOdds;
+      out.appendChild(recordCard(row, row[hitKey], pick, price));
     });
+  }
+  function recordCard(row, hit, pick, price) {
+    var box = V.el("article", "tn");
+    var top = V.el("div", "tn-top");
+    top.appendChild(V.el("span", "tn-tourn", row.tourn || "Tennis"));
+    var state = hit == null ? "Waiting" : (hit ? "Won" : "Lost");
+    top.appendChild(V.el("span", hit == null ? "tn-when" : (hit ? "tn-hit" : "tn-miss"), state));
+    box.appendChild(top);
+    var call = V.el("div", "tn-call");
+    call.appendChild(V.el("b", null, lastName(row.home) + " vs " + lastName(row.away)));
+    call.appendChild(V.el("b", null, pick || ""));
+    if (price) call.appendChild(V.el("span", null, Number(price).toFixed(2)));
+    box.appendChild(call);
+    if (row.result && /^\d+:\d+$/.test(row.result)) box.appendChild(V.el("div", "tn-note", "Finished " + row.result));
+    return box;
   }
 
   function render() {
@@ -351,7 +375,8 @@
   function loadRecord() {
     return fetch("/api/tt?card=tennis&record=1").then(function (r) { return r.json(); }).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.error) || "Could not load the record");
-      BOOKED = d.booked || { winners: { hits: 0, n: 0, open: 0, rows: [] }, scores: { hits: 0, n: 0, open: 0, rows: [] } };
+      BOOKED = d.booked || { rows: [] };
+      BOOKS = d.books || [];
       if (VIEW === "record") render();
     }).catch(function (e) {
       if (VIEW !== "record") return;

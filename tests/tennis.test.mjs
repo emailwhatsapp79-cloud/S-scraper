@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toSelection } from "../site/api/_share.js";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent, drawOf, splitBooked } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent, drawOf, splitBooked, bookMark } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("the card shows the open SportyBet price, not the closed copy", () => {
@@ -307,6 +307,26 @@ test("a tennis set score books market 199 with its specifier", () => {
   assert.equal(game.derived, false);
   assert.equal(game.winOpen, true);
   assert.equal(game.scoresOpen, true);
+});
+
+test("a book mark is the same game for the score and the winner", () => {
+  const marked = bookMark({
+    eventId: "sr:match:1", sim: false, home: "A", away: "B",
+    withBook: { sel: "0:2" },
+    win: { home: 3.4, away: 1.28 },
+    scores: [{ sel: "0:2", odds: 1.55 }],
+  });
+  assert.equal(marked.score, "0:2");
+  assert.equal(marked.winner, "2");
+  assert.equal(marked.winnerOdds, 1.28);
+  assert.equal(bookMark({ eventId: "sr:match:2", ahead: { sel: "2:0" }, withBook: { sel: "2:0" } }), null);
+  const plain = bookMark({
+    eventId: "sr:match:3", home: "C", away: "D",
+    win: { home: 1.2, away: 4 },
+    scores: [{ sel: "2:0", odds: 1.5 }, { sel: "0:2", odds: 6 }],
+  });
+  assert.equal(plain.score, "2:0");
+  assert.equal(plain.winner, "1");
 });
 
 test("booked tennis splits into winners and correct score", () => {

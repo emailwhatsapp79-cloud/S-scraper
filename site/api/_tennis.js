@@ -993,6 +993,19 @@ async function ensureCalls() {
     logged_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
   callsReady = true;
+  await sql`CREATE TABLE IF NOT EXISTS tn_books (
+    event_id TEXT PRIMARY KEY,
+    home TEXT, away TEXT, tourn TEXT,
+    start_at BIGINT,
+    score TEXT,
+    winner TEXT,
+    score_odds DOUBLE PRECISION,
+    winner_odds DOUBLE PRECISION,
+    result TEXT,
+    score_hit BOOLEAN,
+    winner_hit BOOLEAN,
+    logged_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
   return sql;
 }
 
@@ -1039,7 +1052,22 @@ export function splitBooked(rows) {
       })),
     };
   }
-  return { winners: pack("winner"), scores: pack("score") };
+  return {
+    winners: pack("winner"),
+    scores: pack("score"),
+    rows: list.slice(0, 40).map((r) => ({
+      eventId: r.eventId || r.event_id || "",
+      home: r.home || "",
+      away: r.away || "",
+      tourn: r.tourn || r.league || "",
+      start: r.start || (r.kickoff ? Number(r.kickoff) : null),
+      selection: String(r.selection || ""),
+      label: r.label || r.selection_label || String(r.selection || ""),
+      price: r.price == null ? null : Number(r.price),
+      result: r.result || r.set_score || r.setScore || null,
+      hit: r.won == null ? null : (r.won === "yes" || r.won === true),
+    })),
+  };
 }
 
 export async function bookedTennisRecord() {
@@ -1086,24 +1114,51 @@ export async function bookedTennisRecord() {
   return splitBooked(rows);
 }
 
-export async function trackTennis(games) {
+export function bookMark(g) {
+  if (!g || g.sim || g.ahead || g.called || !g.eventId) return null;
+  let score = g.withBook && g.withBook.sel;
+  if (!score && !g.context) {
+    let short = 99;
+    let sel = "";
+    for (const s of g.scores || []) {
+      const o = Number(s.odds);
+      if (o > 1 && o < short) { short = o; sel = s.sel; }
+    }
+    if (short <= 1.7) score = sel;
+  }
+  if (score !== "2:0" && score !== "2:1" && score !== "1:2" && score !== "0:2") return null;
+  const homeSide = score === "2:0" || score === "2:1";
+  const scoreRow = (g.scores || []).find((s) => s.sel === score);
+  const winnerOdds = Number(homeSide ? g.win && g.win.home : g.win && g.win.away);
+  const scoreOdds = Number(scoreRow && scoreRow.odds);
+  return {
+    score,
+    winner: homeSide ? "1" : "2",
+    winnerName: homeSide ? g.home : g.away,
+    scoreOdds: scoreOdds > 1 ? scoreOdds : null,
+    winnerOdds: winnerOdds > 1 ? winnerOdds : null,
+  };
+}
+
+export async function trackBooks(games) {
   const { sql } = await import("./_db.js");
   await ensureCalls();
+  await sql`DELETE FROM tn_calls`;
   for (const g of games || []) {
-    if (!g.ahead || !g.eventId) continue;
-    const oddsRow = (g.scores || []).find((s) => s.sel === g.ahead.sel);
-    const odds = oddsRow && Number(oddsRow.odds) > 1 ? Number(oddsRow.odds) : null;
+    const mark = bookMark(g);
+    if (!mark) continue;
     await sql`
-      INSERT INTO tn_calls (event_id, home, away, tourn, start_at, score, ours, book, odds)
+      INSERT INTO tn_books (
+        event_id, home, away, tourn, start_at, score, winner, score_odds, winner_odds)
       VALUES (
         ${String(g.eventId)}, ${g.home || ""}, ${g.away || ""}, ${g.tourn || ""},
-        ${Number(g.start) || null}, ${g.ahead.sel}, ${Number(g.ahead.ours) || null},
-        ${Number(g.ahead.book) || null}, ${odds}
+        ${Number(g.start) || null}, ${mark.score}, ${mark.winner},
+        ${mark.scoreOdds}, ${mark.winnerOdds}
       )
       ON CONFLICT (event_id) DO NOTHING`;
   }
   const due = await sql`
-    SELECT event_id, score FROM tn_calls
+    SELECT event_id, score, winner FROM tn_books
     WHERE result IS NULL AND start_at IS NOT NULL AND start_at < ${Date.now() - 90 * 60 * 1000}
     ORDER BY start_at ASC
     LIMIT 12`;
@@ -1111,37 +1166,43 @@ export async function trackTennis(games) {
     const { fetchEvent } = await import("./_card.js");
     for (const row of due) {
       try {
-        const ev = await fetchEvent(row.event_id, { marketId: "199" });
+        const ev = await fetchEvent(row.event_id, { marketId: "186" });
         const fin = finishedSets(ev);
-        if (!fin) continue;
-        const hit = fin.hitOf(row.score);
-        await sql`UPDATE tn_calls SET result = ${fin.result}, hit = ${hit} WHERE event_id = ${row.event_id}`;
-      } catch { /* one missed result can wait */ }
+        if (!fin || !/^\d+:\d+$/.test(String(fin.result || ""))) continue;
+        const [hs, as] = String(fin.result).split(":").map(Number);
+        const scoreHit = fin.result === row.score;
+        const winnerHit = row.winner === "1" ? hs > as : as > hs;
+        await sql`
+          UPDATE tn_books
+          SET result = ${fin.result}, score_hit = ${scoreHit}, winner_hit = ${winnerHit}
+          WHERE event_id = ${row.event_id}`;
+      } catch { /* one result can wait */ }
     }
   }
-  const settled = await sql`SELECT ours, book, hit FROM tn_calls WHERE hit IS NOT NULL`;
   const recent = await sql`
-    SELECT event_id, home, away, tourn, start_at, score, ours, book, odds, result, hit
-    FROM tn_calls ORDER BY start_at DESC NULLS LAST LIMIT 40`;
-  const verdict = recordVerdict(settled.map((r) => ({
-    ours: Number(r.ours), book: Number(r.book), hit: r.hit === true,
-  })));
-  verdict.open = Number((await sql`SELECT COUNT(*)::int AS n FROM tn_calls WHERE result IS NULL`)[0]?.n || 0);
-  applyRecord(games, verdict);
-  return {
-    ...verdict,
-    rows: recent.map((r) => ({
-      eventId: r.event_id,
-      home: r.home,
-      away: r.away,
-      tourn: r.tourn || "",
-      start: r.start_at ? Number(r.start_at) : null,
-      score: r.score,
-      ours: r.ours == null ? null : Number(r.ours),
-      book: r.book == null ? null : Number(r.book),
-      odds: r.odds == null ? null : Number(r.odds),
-      result: r.result || null,
-      hit: r.hit == null ? null : r.hit === true,
-    })),
-  };
+    SELECT event_id, home, away, tourn, start_at, score, winner, score_odds, winner_odds,
+           result, score_hit, winner_hit
+    FROM tn_books ORDER BY start_at DESC NULLS LAST LIMIT 80`;
+  return recent.map((r) => ({
+    eventId: r.event_id,
+    home: r.home,
+    away: r.away,
+    tourn: r.tourn || "",
+    start: r.start_at ? Number(r.start_at) : null,
+    score: r.score,
+    winner: r.winner,
+    scoreOdds: r.score_odds == null ? null : Number(r.score_odds),
+    winnerOdds: r.winner_odds == null ? null : Number(r.winner_odds),
+    result: r.result || null,
+    scoreHit: r.score_hit == null ? null : r.score_hit === true,
+    winnerHit: r.winner_hit == null ? null : r.winner_hit === true,
+  }));
+}
+
+export async function trackTennis(games) {
+  const { sql } = await import("./_db.js");
+  await ensureCalls();
+  await sql`DELETE FROM tn_calls`;
+  applyRecord(games, { n: 0, hits: 0, open: 0, used: "early" });
+  return { n: 0, hits: 0, open: 0, used: "early", rows: [] };
 }

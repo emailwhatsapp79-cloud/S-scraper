@@ -5,7 +5,7 @@
 // the daily poll, so the card never waits on that. Gated like the rest.
 import { guard } from "./_gate.js";
 import { fetchTTCard, normalise, storeTT, listUpcomingTT, listRecentResultsTT, countsTT, getModelMeta } from "./_tt.js";
-import { fetchTennisCard, enrichTennis, trackTennis, bookedTennisRecord } from "./_tennis.js";
+import { fetchTennisCard, enrichTennis, trackTennis, trackBooks, bookedTennisRecord } from "./_tennis.js";
 
 function queryOf(req) {
   if (req.query) return req.query;
@@ -21,8 +21,9 @@ export default async function handler(req, res) {
   if (String(q.card || "") === "tennis" && String(q.record || "") === "1") {
     try {
       const booked = await bookedTennisRecord();
+      const books = await trackBooks([]);
       res.setHeader("Cache-Control", "no-store");
-      res.status(200).json({ ok: true, booked });
+      res.status(200).json({ ok: true, booked, books });
     } catch (e) {
       res.status(200).json({ ok: false, error: String(e?.message || e), booked: null });
     }
@@ -34,7 +35,8 @@ export default async function handler(req, res) {
       let record = null;
       if (String(q.fresh || "") !== "1") {
         try { await enrichTennis(games); } catch { /* book prices still stand */ }
-        try { record = await trackTennis(games); } catch { record = null; }
+        try { await trackTennis(games); } catch { /* ahead history stays cleared */ }
+        try { await trackBooks(games); } catch { /* the card still loads */ }
       }
       res.setHeader("Cache-Control", "no-store");
       res.status(200).json({ ok: true, tookMs: Date.now() - started, count: games.length, games, record });
