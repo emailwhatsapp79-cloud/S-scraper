@@ -7,23 +7,25 @@ import { guard } from "./_gate.js";
 import { fetchTTCard, normalise, storeTT, listUpcomingTT, listRecentResultsTT, countsTT, getModelMeta } from "./_tt.js";
 import { fetchTennisCard, enrichTennis, trackTennis } from "./_tennis.js";
 
-function wantedCard(req) {
-  if (req.query && req.query.card) return String(req.query.card);
+function queryOf(req) {
+  if (req.query) return req.query;
   const raw = String(req.url || "");
   const i = raw.indexOf("?");
-  if (i < 0) return "";
-  return new URLSearchParams(raw.slice(i + 1)).get("card") || "";
+  return new URLSearchParams(i < 0 ? "" : raw.slice(i + 1));
 }
 
 export default async function handler(req, res) {
   if (guard(req, res)) return;
   const started = Date.now();
-  if (wantedCard(req) === "tennis") {
+  const q = queryOf(req);
+  if (String(q.card || "") === "tennis") {
     try {
       const games = await fetchTennisCard();
-      try { await enrichTennis(games); } catch { /* book prices still stand */ }
       let record = null;
-      try { record = await trackTennis(games); } catch { record = null; }
+      if (String(q.fresh || "") !== "1") {
+        try { await enrichTennis(games); } catch { /* book prices still stand */ }
+        try { record = await trackTennis(games); } catch { record = null; }
+      }
       res.setHeader("Cache-Control", "no-store");
       res.status(200).json({ ok: true, tookMs: Date.now() - started, count: games.length, games, record });
     } catch (e) {

@@ -306,18 +306,67 @@
     V.tick();
   }
 
-  function load() {
-    return fetch("/api/tt?card=tennis").then(function (r) { return r.json(); }).then(function (d) {
+  function priceOf(g, sel) {
+    if (!g) return null;
+    if (sel === "1" && g.win) return Number(g.win.home);
+    if (sel === "2" && g.win) return Number(g.win.away);
+    var row = (g.scores || []).filter(function (s) { return s.sel === sel; })[0];
+    return row ? Number(row.odds) : null;
+  }
+  function syncBook(games) {
+    var legs = V.loadBook();
+    var changed = false;
+    var next = legs.map(function (l) {
+      if (l.sport !== "tn") return l;
+      var g = null;
+      for (var i = 0; i < games.length; i++) {
+        if (games[i].eventId && games[i].eventId === l.eventId) g = games[i];
+      }
+      if (!g) return l;
+      var ref = g.selectionRefs && g.selectionRefs[l.selection];
+      if (!ref) return Object.assign({}, l, { blocked: "Suspended" });
+      var price = priceOf(g, l.selection);
+      if (!(price > 1)) return l;
+      if (Math.abs(price - Number(l.price)) < 0.01 && !l.blocked) return l;
+      changed = true;
+      return Object.assign({}, l, {
+        price: price,
+        marketId: ref.marketId || l.marketId,
+        outcomeId: ref.outcomeId || l.outcomeId,
+        specifier: ref.specifier || "",
+        blocked: ""
+      });
+    });
+    if (changed) V.saveBook(next);
+  }
+  function load(fresh) {
+    return fetch("/api/tt?card=tennis" + (fresh ? "&fresh=1" : "")).then(function (r) { return r.json(); }).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.error) || "Could not load tennis");
-      LAST = d.games || [];
-      RECORD = d.record || null;
+      var games = d.games || [];
+      if (fresh && LAST.length) {
+        var prev = {};
+        LAST.forEach(function (g) { prev[g.eventId] = g; });
+        games.forEach(function (g) {
+          var old = prev[g.eventId];
+          if (!old) return;
+          if (!g.context && old.context) g.context = old.context;
+          if (!g.ahead && old.ahead) g.ahead = old.ahead;
+          if (!g.called && old.called) g.called = old.called;
+          if (!g.withBook && old.withBook) g.withBook = old.withBook;
+        });
+      }
+      LAST = games;
+      if (d.record) RECORD = d.record;
+      syncBook(LAST);
       render();
     }).catch(function (e) {
+      if (fresh) return;
       document.getElementById("out").textContent = "";
       document.getElementById("out").appendChild(V.el("div", "empty", e.message));
     });
   }
-  load();
+  load(false);
+  setInterval(function () { if (VIEW === "matches") load(true); }, 30000);
   document.getElementById("v-matches").addEventListener("click", function () { VIEW = "matches"; ONLY = ""; render(); });
   document.getElementById("v-book").addEventListener("click", function () { VIEW = "matches"; ONLY = "book"; render(); });
   document.getElementById("v-record").addEventListener("click", function () { VIEW = "record"; ONLY = ""; render(); });
