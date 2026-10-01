@@ -473,8 +473,14 @@
     });
     if (changed) V.saveBook(next);
   }
+  function readJson(r) {
+    return r.text().then(function (text) {
+      try { return JSON.parse(text); }
+      catch (e) { throw new Error("The list did not come back. Try again."); }
+    });
+  }
   function loadRecord() {
-    return fetch("/api/tt?card=tennis&record=1").then(function (r) { return r.json(); }).then(function (d) {
+    return fetch("/api/tt?card=tennis&record=1").then(readJson).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.error) || "Could not load the record");
       BOOKED = d.booked || { rows: [] };
       BOOKS = d.books || [];
@@ -486,7 +492,7 @@
     });
   }
   function load(fresh) {
-    return fetch("/api/tt?card=tennis" + (fresh ? "&fresh=1" : "")).then(function (r) { return r.json(); }).then(function (d) {
+    return fetch("/api/tt?card=tennis" + (fresh ? "&fresh=1" : "")).then(readJson).then(function (d) {
       if (!d || !d.ok) throw new Error((d && d.error) || "Could not load tennis");
       var games = d.games || [];
       if (fresh && LAST.length) {
@@ -506,11 +512,12 @@
       syncBook(LAST);
       render();
     }).catch(function (e) {
-      if (fresh) return;
+      if (fresh || LAST.length) return;
       document.getElementById("out").textContent = "";
       document.getElementById("out").appendChild(V.el("div", "empty", e.message));
     });
   }
+  load(true);
   load(false);
   setInterval(function () { if (VIEW === "matches") load(true); }, 30000);
   document.getElementById("v-matches").addEventListener("click", function () { VIEW = "matches"; ONLY = ""; render(); });

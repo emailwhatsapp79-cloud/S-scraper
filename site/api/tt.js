@@ -20,8 +20,10 @@ export default async function handler(req, res) {
   const q = queryOf(req);
   if (String(q.card || "") === "tennis" && String(q.record || "") === "1") {
     try {
-      const booked = await bookedTennisRecord();
-      const books = await trackBooks([]);
+      const [booked, books] = await Promise.all([
+        bookedTennisRecord(),
+        trackBooks([], { settle: true }),
+      ]);
       res.setHeader("Cache-Control", "no-store");
       res.status(200).json({ ok: true, booked, books });
     } catch (e) {
@@ -36,8 +38,8 @@ export default async function handler(req, res) {
       if (String(q.fresh || "") !== "1") {
         try { await enrichTennis(games); } catch { /* book prices still stand */ }
         try { await trackTennis(games); } catch { /* ahead history stays cleared */ }
-        try { await trackBooks(games); } catch { /* the card still loads */ }
       }
+      try { await trackBooks(games, { settle: false }); } catch { /* the card still loads */ }
       res.setHeader("Cache-Control", "no-store");
       res.status(200).json({ ok: true, tookMs: Date.now() - started, count: games.length, games, record });
     } catch (e) {

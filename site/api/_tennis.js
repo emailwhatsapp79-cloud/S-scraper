@@ -253,31 +253,37 @@ export function normaliseTennis(ev, tourn, category) {
 }
 
 export async function fetchTennisCard() {
-  const found = [];
-  const seen = new Set();
-  // option 1 is the short board and skips most matches inside 11 hours.
-  // option 2 with a 24h window is the list SportyBet shows for today.
-  for (let page = 1; page <= 6; page++) {
+  async function page(n) {
     const data = await getJson({
       sportId: SPORT, marketId: "186,199", option: "2", timeline: "24",
-      pageSize: "100", pageNum: String(page),
+      pageSize: "100", pageNum: String(n),
     });
     let count = 0;
+    const batch = [];
     for (const t of data?.tournaments || []) {
       for (const ev of t.events || []) {
         count++;
-        const id = String(ev.eventId || ev.gameId || "");
-        if (!id || seen.has(id)) continue;
         const game = normaliseTennis(ev, t.name || "", t.categoryName || "");
-        if (!game) continue;
-        seen.add(id);
-        found.push(game);
+        if (game) batch.push(game);
       }
     }
-    if (count < 100) break;
+    return { count, batch };
   }
-  found.sort((a, b) => (a.start || 0) - (b.start || 0));
-  return found;
+  const first = await page(1);
+  const found = first.batch.slice();
+  if (first.count >= 100) {
+    const rest = await Promise.all([2, 3, 4, 5, 6].map((n) => page(n).catch(() => ({ count: 0, batch: [] }))));
+    for (const part of rest) found.push(...part.batch);
+  }
+  const seen = new Set();
+  const games = [];
+  for (const game of found) {
+    if (!game.eventId || seen.has(game.eventId)) continue;
+    seen.add(game.eventId);
+    games.push(game);
+  }
+  games.sort((a, b) => (a.start || 0) - (b.start || 0));
+  return games;
 }
 
 function pct1(x) { return Math.round(x * 1000) / 10; }
@@ -1155,44 +1161,40 @@ export async function bookedTennisRecord() {
     if (!fin || !/^\d+:\d+$/.test(String(fin.result || ""))) return { pending: true };
     return { done: true, result: fin.result, status: ev.matchStatus || "Ended" };
   }
-  for (const row of due.slice(0, 16)) {
-    try {
-      const fin = await readFinish(row.event_id);
-      if (!fin || !fin.done) continue;
-      const [hs, as] = String(fin.result).split(":").map(Number);
-      for (const leg of rows) {
-        if (leg.event_id !== row.event_id || leg.won != null) continue;
-        let hit = null;
-        if (/^\d+:\d+$/.test(String(leg.selection || ""))) hit = leg.selection === fin.result;
-        else if (leg.selection === "1") hit = hs > as;
-        else if (leg.selection === "2") hit = as > hs;
-        if (hit == null) continue;
-        leg.won = hit ? "yes" : "no";
-        leg.set_score = fin.result;
-        await sql`
-          UPDATE slip_legs SET won = ${leg.won}, set_score = ${fin.result}, match_status = ${fin.status}
-          WHERE slip_id = ${leg.slip_id} AND game_id = ${leg.game_id}`;
-      }
-    } catch { /* one result can wait */ }
-  }
+  await pool(due.slice(0, 6), 6, async (row) => {
+    const fin = await readFinish(row.event_id);
+    if (!fin || !fin.done) return;
+    const [hs, as] = String(fin.result).split(":").map(Number);
+    for (const leg of rows) {
+      if (leg.event_id !== row.event_id || leg.won != null) continue;
+      let hit = null;
+      if (/^\d+:\d+$/.test(String(leg.selection || ""))) hit = leg.selection === fin.result;
+      else if (leg.selection === "1") hit = hs > as;
+      else if (leg.selection === "2") hit = as > hs;
+      if (hit == null) continue;
+      leg.won = hit ? "yes" : "no";
+      leg.set_score = fin.result;
+      await sql`
+        UPDATE slip_legs SET won = ${leg.won}, set_score = ${fin.result}, match_status = ${fin.status}
+        WHERE slip_id = ${leg.slip_id} AND game_id = ${leg.game_id}`;
+    }
+  });
   const cleared = new Set();
-  for (const row of suspect.slice(0, 16)) {
-    try {
-      const fin = await readFinish(row.event_id);
-      if (!fin || !fin.playing) continue;
-      for (const leg of rows) {
-        if (leg.event_id !== row.event_id) continue;
-        leg.won = null;
-        leg.set_score = null;
-        leg.match_status = fin.status;
-        cleared.add(leg.slip_id);
-        await sql`
-          UPDATE slip_legs
-          SET won = NULL, set_score = NULL, match_status = ${fin.status}, ft_home = NULL, ft_away = NULL
-          WHERE slip_id = ${leg.slip_id} AND game_id = ${leg.game_id}`;
-      }
-    } catch { /* leave a real result alone if the feed fails */ }
-  }
+  await pool(suspect.slice(0, 6), 6, async (row) => {
+    const fin = await readFinish(row.event_id);
+    if (!fin || !fin.playing) return;
+    for (const leg of rows) {
+      if (leg.event_id !== row.event_id) continue;
+      leg.won = null;
+      leg.set_score = null;
+      leg.match_status = fin.status;
+      cleared.add(leg.slip_id);
+      await sql`
+        UPDATE slip_legs
+        SET won = NULL, set_score = NULL, match_status = ${fin.status}, ft_home = NULL, ft_away = NULL
+        WHERE slip_id = ${leg.slip_id} AND game_id = ${leg.game_id}`;
+    }
+  });
   for (const id of cleared) {
     await sql`
       UPDATE slips SET status = 'live', returned = NULL, settled_at = NULL
@@ -1227,7 +1229,7 @@ export function bookMark(g) {
   };
 }
 
-export async function trackBooks(games) {
+export async function trackBooks(games, opts = {}) {
   const { sql } = await import("./_db.js");
   await ensureCalls();
   await sql`DELETE FROM tn_calls`;
@@ -1250,32 +1252,30 @@ export async function trackBooks(games) {
       AND start_at > ${Date.now() - 36 * 60 * 60 * 1000}
       AND (result IS NULL OR score_hit IS NOT NULL)
     ORDER BY start_at ASC
-    LIMIT 24`;
-  if (due.length) {
+    LIMIT 8`;
+  if (opts.settle !== false && due.length) {
     const { fetchEvent } = await import("./_card.js");
-    for (const row of due) {
-      try {
-        const ev = await fetchEvent(row.event_id, { marketId: "186" });
-        if (!ev) continue;
-        if (stillPlaying(ev)) {
-          const hold = holdOf(ev);
-          await sql`
-            UPDATE tn_books
-            SET result = NULL, score_hit = NULL, winner_hit = NULL, hold = ${hold || null}
-            WHERE event_id = ${row.event_id}`;
-          continue;
-        }
-        const fin = finishedSets(ev);
-        if (!fin || !/^\d+:\d+$/.test(String(fin.result || ""))) continue;
-        const [hs, as] = String(fin.result).split(":").map(Number);
-        const scoreHit = fin.result === row.score;
-        const winnerHit = row.winner === "1" ? hs > as : as > hs;
+    await pool(due.slice(0, 6), 6, async (row) => {
+      const ev = await fetchEvent(row.event_id, { marketId: "186" });
+      if (!ev) return;
+      if (stillPlaying(ev)) {
+        const hold = holdOf(ev);
         await sql`
           UPDATE tn_books
-          SET result = ${fin.result}, score_hit = ${scoreHit}, winner_hit = ${winnerHit}, hold = NULL
+          SET result = NULL, score_hit = NULL, winner_hit = NULL, hold = ${hold || null}
           WHERE event_id = ${row.event_id}`;
-      } catch { /* one result can wait */ }
-    }
+        return;
+      }
+      const fin = finishedSets(ev);
+      if (!fin || !/^\d+:\d+$/.test(String(fin.result || ""))) return;
+      const [hs, as] = String(fin.result).split(":").map(Number);
+      const scoreHit = fin.result === row.score;
+      const winnerHit = row.winner === "1" ? hs > as : as > hs;
+      await sql`
+        UPDATE tn_books
+        SET result = ${fin.result}, score_hit = ${scoreHit}, winner_hit = ${winnerHit}, hold = NULL
+        WHERE event_id = ${row.event_id}`;
+    });
   }
   const recent = await sql`
     SELECT event_id, home, away, tourn, start_at, score, winner, score_odds, winner_odds,
