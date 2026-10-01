@@ -233,6 +233,47 @@
     return box;
   }
 
+  function bookish() { return ONLY === "book" || ONLY === "ms" || ONLY === "ws"; }
+  function isDoubles(g) {
+    if (!g) return false;
+    if (g.draw === "doubles") return true;
+    return /\bdoubles\b/i.test(g.tourn || "") || /\s\/\s/.test((g.home || "") + " " + (g.away || ""));
+  }
+  function isWoman(g) {
+    if (!g) return false;
+    if (g.women) return true;
+    return /\bWTA\b|\bwomen\b|\bITF\s+W\d+/i.test(g.tourn || "");
+  }
+  function sinceYesterday(ts) {
+    var d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - 1);
+    return Number(ts) >= d.getTime();
+  }
+  function cutOf(rows, key) {
+    var done = rows.filter(function (r) { return r[key] === true || r[key] === false; });
+    var won = done.filter(function (r) { return r[key] === true; }).length;
+    return { won: won, n: done.length, lost: done.length - won };
+  }
+  function bookCuts() {
+    var rows = BOOKS.filter(function (r) { return sinceYesterday(r.start); });
+    function bucket(doubles, woman) {
+      return rows.filter(function (r) { return isDoubles(r) === doubles && isWoman(r) === woman; });
+    }
+    var groups = [
+      ["Men singles", bucket(false, false)],
+      ["Women singles", bucket(false, true)],
+      ["Men doubles", bucket(true, false)],
+      ["Women doubles", bucket(true, true)]
+    ];
+    return groups.map(function (pair) {
+      return { name: pair[0], score: cutOf(pair[1], "scoreHit"), winner: cutOf(pair[1], "winnerHit") };
+    });
+  }
+  function cutLine(c) {
+    if (!c.n) return "0 finished";
+    return c.won + " won, " + c.lost + " lost, of " + c.n;
+  }
   function hasBook(g) {
     if (!g || g.sim || g.ahead || g.called) return false;
     if (g.withBook && g.withBook.sel) return true;
@@ -448,17 +489,44 @@
   }
 
   function render() {
-    document.getElementById("v-matches").className = "chip" + (VIEW === "matches" && !ONLY ? " on" : "");
-    document.getElementById("v-book").className = "chip" + (VIEW === "matches" && ONLY === "book" ? " on" : "");
+    document.getElementById("v-matches").className = "chip" + (VIEW === "matches" && !bookish() ? " on" : "");
+    document.getElementById("v-book").className = "chip" + (VIEW === "matches" && bookish() ? " on" : "");
     document.getElementById("v-record").className = "chip" + (VIEW === "record" ? " on" : "");
     if (VIEW === "record") { renderRecord(); return; }
     var out = document.getElementById("out");
     out.textContent = "";
     var list = LAST.filter(function (g) { return LEAGUE === "All" || g.tourn === LEAGUE; });
-    if (ONLY === "book") list = list.filter(hasBook);
-    document.getElementById("head").textContent = (ONLY === "book" ? "Book — " : "Upcoming — ") + list.length;
+    if (bookish()) {
+      var kinds = V.el("div", "chips");
+      [["book", "All"], ["ms", "Men singles"], ["ws", "Women singles"]].forEach(function (pair) {
+        var b = V.el("button", "chip" + (ONLY === pair[0] ? " on" : ""), pair[1]);
+        b.addEventListener("click", function () { ONLY = pair[0]; render(); });
+        kinds.appendChild(b);
+      });
+      out.appendChild(kinds);
+      var cuts = bookCuts();
+      var box = V.el("div", "tn-note");
+      var scoreN = 0, scoreWon = 0, winN = 0, winWon = 0;
+      cuts.forEach(function (c) {
+        scoreN += c.score.n; scoreWon += c.score.won;
+        winN += c.winner.n; winWon += c.winner.won;
+        box.appendChild(V.el("div", null, c.name + " · score " + cutLine(c.score) + " · winner " + cutLine(c.winner)));
+      });
+      var verdict = "No finished book mark since yesterday yet.";
+      if (scoreN || winN) {
+        if (winN && scoreN && (winWon / winN) > (scoreWon / scoreN)) verdict = "Winners landed more often than the correct score.";
+        else if (winN && scoreN && (scoreWon / scoreN) > (winWon / winN)) verdict = "The correct score landed more often than the winner.";
+        else verdict = "The winner and the correct score landed at the same rate.";
+      }
+      box.appendChild(V.el("b", null, verdict));
+      out.appendChild(box);
+      list = list.filter(hasBook);
+      if (ONLY === "ms") list = list.filter(function (g) { return !isDoubles(g) && !isWoman(g); });
+      if (ONLY === "ws") list = list.filter(function (g) { return !isDoubles(g) && isWoman(g); });
+    }
+    document.getElementById("head").textContent = (bookish() ? "Book — " : "Upcoming — ") + list.length;
     if (!list.length) {
-      out.appendChild(V.el("div", "empty", ONLY === "book" ? "No book mark in this list." : (LAST.length ? "Nothing in that tournament." : "No upcoming tennis on SportyBet right now.")));
+      out.appendChild(V.el("div", "empty", bookish() ? "No book mark in this list." : (LAST.length ? "Nothing in that tournament." : "No upcoming tennis on SportyBet right now.")));
     } else list.forEach(function (g, i) { out.appendChild(card(g, i + 1)); });
     tourns(LAST);
     V.tick();
@@ -508,7 +576,7 @@
       if (!d || !d.ok) throw new Error((d && d.error) || "Could not load the record");
       BOOKED = d.booked || { rows: [] };
       BOOKS = d.books || [];
-      if (VIEW === "record") render();
+      if (VIEW === "record" || bookish()) render();
     }).catch(function (e) {
       if (VIEW !== "record") return;
       document.getElementById("out").textContent = "";
@@ -545,7 +613,7 @@
   load(false);
   setInterval(function () { if (VIEW === "matches") load(true); }, 30000);
   document.getElementById("v-matches").addEventListener("click", function () { VIEW = "matches"; ONLY = ""; render(); });
-  document.getElementById("v-book").addEventListener("click", function () { VIEW = "matches"; ONLY = "book"; render(); });
+  document.getElementById("v-book").addEventListener("click", function () { VIEW = "matches"; ONLY = "book"; render(); loadRecord(); });
   document.getElementById("v-record").addEventListener("click", function () { VIEW = "record"; ONLY = ""; render(); loadRecord(); });
   window.addEventListener("vfs-book", render);
 })();
