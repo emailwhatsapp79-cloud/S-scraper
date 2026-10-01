@@ -1279,6 +1279,184 @@ export function bookMark(g) {
   };
 }
 
+function prematchMarket(ev, id) {
+  const markets = (ev.markets || []).filter((m) => String(m.id) === id && Number(m.product) !== 1);
+  if (!markets.length) return null;
+  return markets.slice().sort((a, b) => (Number(b.lastOddsChangeTime) || 0) - (Number(a.lastOddsChangeTime) || 0))[0];
+}
+
+export function prematchBook(ev) {
+  if (!ev || !ev.eventId) return null;
+  const scoreM = prematchMarket(ev, "199");
+  const winM = prematchMarket(ev, "186");
+  if (!scoreM) return null;
+  let short = 99;
+  let score = "";
+  for (const o of scoreM.outcomes || []) {
+    const sel = String(o.desc || "").replace("-", ":");
+    const odds = Number(o.odds);
+    if (!/^(2:0|2:1|1:2|0:2)$/.test(sel) || !(odds > 1) || odds >= short) continue;
+    short = odds;
+    score = sel;
+  }
+  if (!(short <= 1.7) || !score) return null;
+  const homeSide = score === "2:0" || score === "2:1";
+  let winnerOdds = null;
+  for (const o of (winM && winM.outcomes) || []) {
+    const desc = String(o.desc || "");
+    const id = String(o.id || "");
+    const slot = /^home$/i.test(desc) || id === "4" ? "home" : /^away$/i.test(desc) || id === "5" ? "away" : "";
+    if (slot !== (homeSide ? "home" : "away")) continue;
+    const odds = Number(o.odds);
+    if (odds > 1) winnerOdds = odds;
+  }
+  return {
+    score,
+    winner: homeSide ? "1" : "2",
+    scoreOdds: short,
+    winnerOdds,
+  };
+}
+
+function endedScore(ev) {
+  if (!ev || !/end|finish|final|retir|walkover/i.test(String(ev.matchStatus || ""))) return null;
+  const m = String(ev.setScore || "").trim().match(/^(\d+)\s*[:\-]\s*(\d+)$/);
+  if (!m) return null;
+  const hs = Number(m[1]);
+  const as = Number(m[2]);
+  if ((hs < 2 && as < 2) || hs > 3 || as > 3) return null;
+  return hs + ":" + as;
+}
+
+async function resultPage(start, end, page) {
+  const q = new URLSearchParams({
+    sportId: SPORT,
+    startTime: String(start),
+    endTime: String(end),
+    pageSize: "100",
+    pageNum: String(page),
+  });
+  const ac = new AbortController();
+  const to = setTimeout(() => ac.abort(), 8000);
+  try {
+    const r = await fetch(`${BASE}/eventResultList?${q}`, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+      signal: ac.signal,
+    });
+    if (!r.ok) return [];
+    const body = await r.json();
+    if (body.bizCode !== 10000) return [];
+    const out = [];
+    for (const t of body.data?.tournaments || []) {
+      for (const ev of t.events || []) out.push(ev);
+    }
+    return out;
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(to);
+  }
+}
+
+export async function backfillBooks() {
+  const { sql } = await import("./_db.js");
+  const { fetchEvent } = await import("./_card.js");
+  await ensureCalls();
+  await sql`CREATE TABLE IF NOT EXISTS tn_priced (event_id TEXT PRIMARY KEY)`;
+  const from = Date.now() - 36 * 60 * 60 * 1000;
+  const days = [];
+  let day = Date.UTC(new Date(from).getUTCFullYear(), new Date(from).getUTCMonth(), new Date(from).getUTCDate());
+  while (day < Date.now() + 86400000 && days.length < 3) {
+    days.push(day);
+    day += 86400000;
+  }
+  const listed = [];
+  for (const start of days) {
+    for (let page = 1; page <= 6; page++) {
+      const batch = await resultPage(start, start + 86400000, page);
+      listed.push(...batch);
+      if (batch.length < 100) break;
+    }
+  }
+  const want = [];
+  const seenList = new Set();
+  for (const ev of listed) {
+    const start = Number(ev.estimateStartTime) || 0;
+    if (!ev.eventId || start < from || start > Date.now() + 60 * 60 * 1000) continue;
+    const tourn = ev.sport?.category?.tournament?.name || "";
+    const cat = ev.sport?.category?.name || "";
+    if (isSimEvent(ev, tourn, cat)) continue;
+    if (seenList.has(ev.eventId)) continue;
+    seenList.add(ev.eventId);
+    want.push({ ...ev, tourn });
+  }
+  const known = await sql`SELECT event_id FROM tn_priced`;
+  const have = new Set(known.map((r) => r.event_id));
+  const already = await sql`SELECT event_id FROM tn_books`;
+  for (const r of already) have.add(r.event_id);
+  const todo = want.filter((ev) => !have.has(ev.eventId));
+  const deadline = Date.now() + 14000;
+  const found = [];
+  const priced = [];
+  let saved = 0;
+  let lock = Promise.resolve();
+  async function flush() {
+    const rows = found.splice(0, found.length);
+    const ids = priced.splice(0, priced.length);
+    if (rows.length) {
+      const values = rows.map((_, j) => {
+        const b = j * 12;
+        return "(" + Array.from({ length: 12 }, (_, k) => "$" + (b + k + 1)).join(",") + ")";
+      }).join(",");
+      await sql(
+        `INSERT INTO tn_books (
+           event_id, home, away, tourn, start_at, score, winner, score_odds, winner_odds,
+           result, score_hit, winner_hit)
+         VALUES ${values}
+         ON CONFLICT (event_id) DO NOTHING`,
+        rows.flat(),
+      );
+      saved += rows.length;
+    }
+    if (ids.length) {
+      const values = ids.map((_, j) => "($" + (j + 1) + ")").join(",");
+      await sql(
+        `INSERT INTO tn_priced (event_id) VALUES ${values} ON CONFLICT (event_id) DO NOTHING`,
+        ids,
+      );
+    }
+  }
+  await pool(todo, 12, async (ev) => {
+    if (Date.now() > deadline) return;
+    const full = await fetchEvent(ev.eventId, { marketId: "186,199" });
+    if (!full || !full.markets) return;
+    const mark = prematchBook(full);
+    const fin = endedScore(ev);
+    if (mark) {
+      const [hs, as] = fin ? fin.split(":").map(Number) : [0, 0];
+      found.push([
+        String(ev.eventId),
+        full.homeTeamName || ev.homeTeamName || "",
+        full.awayTeamName || ev.awayTeamName || "",
+        ev.tourn || "",
+        Number(ev.estimateStartTime) || null,
+        mark.score,
+        mark.winner,
+        mark.scoreOdds,
+        mark.winnerOdds,
+        fin,
+        fin ? fin === mark.score : null,
+        fin ? (mark.winner === "1" ? hs > as : as > hs) : null,
+      ]);
+    }
+    priced.push(String(ev.eventId));
+    if (priced.length >= 30) lock = lock.then(flush);
+  });
+  await lock;
+  await flush();
+  return { looked: todo.length, saved };
+}
+
 export async function trackBooks(games, opts = {}) {
   const { sql } = await import("./_db.js");
   await ensureCalls();
@@ -1339,7 +1517,7 @@ export async function trackBooks(games, opts = {}) {
   const recent = await sql`
     SELECT event_id, home, away, tourn, start_at, score, winner, score_odds, winner_odds,
            result, score_hit, winner_hit, hold
-    FROM tn_books ORDER BY start_at DESC NULLS LAST LIMIT 200`;
+    FROM tn_books ORDER BY start_at DESC NULLS LAST LIMIT 500`;
   return recent.map((r) => ({
     eventId: r.event_id,
     home: r.home,

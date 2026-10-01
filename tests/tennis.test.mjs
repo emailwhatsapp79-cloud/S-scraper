@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toSelection } from "../site/api/_share.js";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent, drawOf, splitBooked, bookMark, finishedSets } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent, drawOf, splitBooked, bookMark, finishedSets, prematchBook } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("the card shows the open SportyBet price, not the closed copy", () => {
@@ -395,4 +395,33 @@ test("a suspended tennis price is shown and cannot be booked", () => {
       ] },
     ],
   }, "1", { outcomeId: "4", sport: "tn" }), null);
+});
+
+test("a finished match uses the pre-match price, not the live one", () => {
+  const mark = prematchBook({
+    eventId: "sr:match:1",
+    markets: [
+      { id: "199", product: 1, status: 3, outcomes: [
+        { desc: "0:2", odds: "1.05" },
+        { desc: "2:0", odds: "8.00" },
+      ] },
+      { id: "199", product: 3, status: 3, outcomes: [
+        { desc: "2:0", odds: "1.46" },
+        { desc: "2:1", odds: "3.40" },
+        { desc: "1:2", odds: "5.10" },
+        { desc: "0:2", odds: "6.20" },
+      ] },
+      { id: "186", product: 3, status: 3, outcomes: [
+        { id: "4", desc: "Home", odds: "1.17" },
+        { id: "5", desc: "Away", odds: "4.80" },
+      ] },
+    ],
+  });
+  assert.equal(mark.score, "2:0");
+  assert.equal(mark.winner, "1");
+  assert.equal(mark.scoreOdds, 1.46);
+  assert.equal(prematchBook({
+    eventId: "sr:match:2",
+    markets: [{ id: "199", product: 3, status: 3, outcomes: [{ desc: "0:2", odds: "1.92" }] }],
+  }), null);
 });

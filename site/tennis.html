@@ -244,36 +244,6 @@
     if (g.women) return true;
     return /\bWTA\b|\bwomen\b|\bITF\s+W\d+/i.test(g.tourn || "");
   }
-  function sinceYesterday(ts) {
-    var d = new Date();
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() - 1);
-    return Number(ts) >= d.getTime();
-  }
-  function cutOf(rows, key) {
-    var done = rows.filter(function (r) { return r[key] === true || r[key] === false; });
-    var won = done.filter(function (r) { return r[key] === true; }).length;
-    return { won: won, n: done.length, lost: done.length - won };
-  }
-  function bookCuts() {
-    var rows = BOOKS.filter(function (r) { return sinceYesterday(r.start); });
-    function bucket(doubles, woman) {
-      return rows.filter(function (r) { return isDoubles(r) === doubles && isWoman(r) === woman; });
-    }
-    var groups = [
-      ["Men singles", bucket(false, false)],
-      ["Women singles", bucket(false, true)],
-      ["Men doubles", bucket(true, false)],
-      ["Women doubles", bucket(true, true)]
-    ];
-    return groups.map(function (pair) {
-      return { name: pair[0], score: cutOf(pair[1], "scoreHit"), winner: cutOf(pair[1], "winnerHit") };
-    });
-  }
-  function cutLine(c) {
-    if (!c.n) return "0 finished";
-    return c.won + " won, " + c.lost + " lost, of " + c.n;
-  }
   function hasBook(g) {
     if (!g || g.sim || g.ahead || g.called) return false;
     if (g.withBook && g.withBook.sel) return true;
@@ -502,22 +472,6 @@
         kinds.appendChild(b);
       });
       out.appendChild(kinds);
-      var cuts = bookCuts();
-      var box = V.el("div", "tn-note");
-      var scoreN = 0, scoreWon = 0, winN = 0, winWon = 0;
-      cuts.forEach(function (c) {
-        scoreN += c.score.n; scoreWon += c.score.won;
-        winN += c.winner.n; winWon += c.winner.won;
-        box.appendChild(V.el("div", null, c.name + " · score " + cutLine(c.score) + " · winner " + cutLine(c.winner)));
-      });
-      var verdict = "No finished book mark since yesterday yet.";
-      if (scoreN || winN) {
-        if (winN && scoreN && (winWon / winN) > (scoreWon / scoreN)) verdict = "Winners landed more often than the correct score.";
-        else if (winN && scoreN && (scoreWon / scoreN) > (winWon / winN)) verdict = "The correct score landed more often than the winner.";
-        else verdict = "The winner and the correct score landed at the same rate.";
-      }
-      box.appendChild(V.el("b", null, verdict));
-      out.appendChild(box);
       list = list.filter(hasBook);
       if (ONLY === "ms") list = list.filter(function (g) { return !isDoubles(g) && !isWoman(g); });
       if (ONLY === "ws") list = list.filter(function (g) { return !isDoubles(g) && isWoman(g); });
