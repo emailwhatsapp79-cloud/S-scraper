@@ -1009,31 +1009,31 @@ async function ensureCalls() {
   return sql;
 }
 
-function setTally(ev) {
-  const raw = String(ev.setScore || "").trim();
-  const direct = raw.match(/^(\d+)\s*[:\-]\s*(\d+)$/);
-  if (direct) {
-    const hs = Number(direct[1]);
-    const as = Number(direct[2]);
-    if ((hs >= 2 || as >= 2) && hs + as <= 5) return hs + ":" + as;
-  }
-  const gs = Array.isArray(ev.gameScore) ? ev.gameScore : [];
-  let h = 0;
-  let a = 0;
-  for (const g of gs) {
-    const p = String(g).match(/(\d+)\s*[:\-]\s*(\d+)/);
-    if (!p) continue;
-    const gh = Number(p[1]);
-    const ga = Number(p[2]);
-    if (gh === ga) continue;
-    if (gh > ga) h++;
-    else a++;
-  }
-  if (h >= 2 || a >= 2) return h + ":" + a;
-  return null;
+function matchOver(status) {
+  const s = String(status || "").trim();
+  if (!s) return false;
+  if (/^(set\s*\d|not\s*start|interrupt|playing|live|1st|2nd|3rd|4th|5th)/i.test(s)) return false;
+  return /^(end|finish|final|retir|walkover|abandon|closed|cancel)/i.test(s);
 }
 
-function finishedSets(ev) {
+function stillPlaying(ev) {
+  if (!ev) return false;
+  return /^(set\s*\d|not\s*start|interrupt|playing|live|1st|2nd|3rd|4th|5th)/i.test(String(ev.matchStatus || ""));
+}
+
+function setTally(ev) {
+  if (!matchOver(ev && ev.matchStatus)) return null;
+  const raw = String(ev.setScore || "").trim();
+  const direct = raw.match(/^(\d+)\s*[:\-]\s*(\d+)$/);
+  if (!direct) return null;
+  const hs = Number(direct[1]);
+  const as = Number(direct[2]);
+  if (hs < 2 && as < 2) return null;
+  if (hs > 3 || as > 3) return null;
+  return hs + ":" + as;
+}
+
+export function finishedSets(ev) {
   if (!ev) return null;
   const sel = setTally(ev);
   if (!sel) return null;
@@ -1120,19 +1120,32 @@ export async function bookedTennisRecord() {
     LIMIT 80`;
   const rows = raw.map((r) => ({ ...r }));
   const due = [];
+  const suspect = [];
   const seen = new Set();
   for (const row of rows) {
-    if (row.won != null || !row.event_id || seen.has(row.event_id)) continue;
-    if (!(Number(row.kickoff) > 0) || Number(row.kickoff) > Date.now() - 45 * 60 * 1000) continue;
-    seen.add(row.event_id);
-    due.push(row);
-    if (due.length >= 12) break;
+    if (!row.event_id || seen.has(row.event_id)) continue;
+    const started = Number(row.kickoff) > 0 && Number(row.kickoff) <= Date.now() - 20 * 60 * 1000;
+    const recent = !(Number(row.kickoff) > 0) || Number(row.kickoff) > Date.now() - 36 * 60 * 60 * 1000;
+    if (row.won == null && started) {
+      seen.add(row.event_id);
+      due.push(row);
+    } else if (row.won != null && recent) {
+      seen.add(row.event_id);
+      suspect.push(row);
+    }
   }
-  for (const row of due) {
+  async function readFinish(eventId) {
+    const ev = await fetchEvent(eventId, { marketId: "186" });
+    if (!ev) return null;
+    if (stillPlaying(ev)) return { playing: true, status: ev.matchStatus || "" };
+    const fin = finishedSets(ev);
+    if (!fin || !/^\d+:\d+$/.test(String(fin.result || ""))) return { pending: true };
+    return { done: true, result: fin.result, status: ev.matchStatus || "Ended" };
+  }
+  for (const row of due.slice(0, 16)) {
     try {
-      const ev = await fetchEvent(row.event_id, { marketId: "186" });
-      const fin = finishedSets(ev);
-      if (!fin || !/^\d+:\d+$/.test(String(fin.result || ""))) continue;
+      const fin = await readFinish(row.event_id);
+      if (!fin || !fin.done) continue;
       const [hs, as] = String(fin.result).split(":").map(Number);
       for (const leg of rows) {
         if (leg.event_id !== row.event_id || leg.won != null) continue;
@@ -1144,10 +1157,32 @@ export async function bookedTennisRecord() {
         leg.won = hit ? "yes" : "no";
         leg.set_score = fin.result;
         await sql`
-          UPDATE slip_legs SET won = ${leg.won}, set_score = ${fin.result}, match_status = ${"Ended"}
+          UPDATE slip_legs SET won = ${leg.won}, set_score = ${fin.result}, match_status = ${fin.status}
           WHERE slip_id = ${leg.slip_id} AND game_id = ${leg.game_id}`;
       }
     } catch { /* one result can wait */ }
+  }
+  const cleared = new Set();
+  for (const row of suspect.slice(0, 16)) {
+    try {
+      const fin = await readFinish(row.event_id);
+      if (!fin || !fin.playing) continue;
+      for (const leg of rows) {
+        if (leg.event_id !== row.event_id) continue;
+        leg.won = null;
+        leg.set_score = null;
+        cleared.add(leg.slip_id);
+        await sql`
+          UPDATE slip_legs
+          SET won = NULL, set_score = NULL, match_status = ${fin.status}, ft_home = NULL, ft_away = NULL
+          WHERE slip_id = ${leg.slip_id} AND game_id = ${leg.game_id}`;
+      }
+    } catch { /* leave a real result alone if the feed fails */ }
+  }
+  for (const id of cleared) {
+    await sql`
+      UPDATE slips SET status = 'live', returned = NULL, settled_at = NULL
+      WHERE id = ${id} AND status IN ('won', 'lost')`;
   }
   return splitBooked(rows);
 }
@@ -1196,8 +1231,10 @@ export async function trackBooks(games) {
       ON CONFLICT (event_id) DO NOTHING`;
   }
   const due = await sql`
-    SELECT event_id, score, winner FROM tn_books
-    WHERE result IS NULL AND start_at IS NOT NULL AND start_at < ${Date.now() - 20 * 60 * 1000}
+    SELECT event_id, score, winner, result FROM tn_books
+    WHERE start_at IS NOT NULL AND start_at < ${Date.now() - 20 * 60 * 1000}
+      AND start_at > ${Date.now() - 36 * 60 * 60 * 1000}
+      AND (result IS NULL OR score_hit IS NOT NULL)
     ORDER BY start_at ASC
     LIMIT 24`;
   if (due.length) {
@@ -1205,6 +1242,16 @@ export async function trackBooks(games) {
     for (const row of due) {
       try {
         const ev = await fetchEvent(row.event_id, { marketId: "186" });
+        if (!ev) continue;
+        if (stillPlaying(ev)) {
+          if (row.result) {
+            await sql`
+              UPDATE tn_books
+              SET result = NULL, score_hit = NULL, winner_hit = NULL
+              WHERE event_id = ${row.event_id}`;
+          }
+          continue;
+        }
         const fin = finishedSets(ev);
         if (!fin || !/^\d+:\d+$/.test(String(fin.result || ""))) continue;
         const [hs, as] = String(fin.result).split(":").map(Number);

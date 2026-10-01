@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { toSelection } from "../site/api/_share.js";
-import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent, drawOf, splitBooked, bookMark } from "../site/api/_tennis.js";
+import { fairShares, scoresFromWin, tennisCall, normaliseTennis, shiftCall, nameKey, scoreEdge, recordVerdict, applyRecord, stanceOf, parsePredix, parseTpTips, readOutside, applyOutside, isSimEvent, isWomenEvent, drawOf, splitBooked, bookMark, finishedSets } from "../site/api/_tennis.js";
 import { quote, buildOrder } from "../site/api/_fc.js";
 
 test("the card shows the open SportyBet price, not the closed copy", () => {
@@ -307,6 +307,13 @@ test("a tennis set score books market 199 with its specifier", () => {
   assert.equal(game.derived, false);
   assert.equal(game.winOpen, true);
   assert.equal(game.scoresOpen, true);
+});
+
+test("a live second set is not a finished match", () => {
+  const live = { matchStatus: "set 2", setScore: "1:0", gameScore: ["6:3", "4:0"] };
+  assert.equal(finishedSets(live), null);
+  const done = { matchStatus: "Ended", setScore: "2:0", gameScore: ["6:3", "6:4"] };
+  assert.equal(finishedSets(done).result, "2:0");
 });
 
 test("a book mark is the same game for the score and the winner", () => {
