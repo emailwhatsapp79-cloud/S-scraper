@@ -365,8 +365,10 @@
       label: kind === "winner" ? who : (row.score || ""),
       price: Number(kind === "winner" ? row.winnerOdds : row.scoreOdds) || 0,
       kickoff: row.start,
-      sport: "tn"
+      sport: "tn",
+      status: row.hold || ""
     };
+    if (row.hold) return pick;
     if (!done) return pick;
     pick.won = hit === true;
     pick.status = "Ended";
@@ -382,8 +384,10 @@
         label: row.label || row.selection,
         price: Number(row.price) || 0,
         kickoff: row.start, sport: "tn",
-        selection: row.selection, gameId: row.eventId
+        selection: row.selection, gameId: row.eventId,
+        status: row.status || ""
       };
+      if (row.status) return leg;
       if (done) {
         leg.won = row.hit === true;
         leg.status = "Ended";

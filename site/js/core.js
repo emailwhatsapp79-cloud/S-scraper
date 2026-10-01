@@ -1489,7 +1489,12 @@
       /setka|elite series|liga pro|tt cup|challenger series|table tennis/i.test(l.league || "");
   }
 
+  function isHeld(l) {
+    return /interrupt|suspend|delay|postpon/i.test(String(l.status || ""));
+  }
+
   function matchState(l) {
+    if (isHeld(l) && l.won !== true && l.won !== false) return "held";
     if (l.won === true || l.won === false || /^(end|finish|retir|walkover|abandon|closed)/i.test(l.status || "")) return "ended";
     if (isTT(l) && /^(set\s*\d|Playing|LIVE)/i.test(l.status || "")) return "live";
     if (!isTT(l) && /^(H1|H2|HT|1H|2H|LIVE)/i.test(l.status || "")) return "live";
@@ -1512,6 +1517,7 @@
   }
 
   function phaseLabel(l, st) {
+    if (st === "held") return l.status || "Interrupted";
     if (st === "ended") return isTT(l) ? "FT" : "FT";
     var status = l.status || "LIVE";
     if (isTT(l)) return status;
@@ -1551,6 +1557,9 @@
       mid.appendChild(el("div", "kick", clock(l.kickoff) || "—"));
       var t = until(l.kickoff);
       if (t.text && t.text !== "kicked off") mid.appendChild(el("div", "phase", t.text));
+    } else if (st === "held") {
+      mid.appendChild(el("div", "scoreboard", pair ? (pair[0] + " – " + pair[1]) : "–"));
+      mid.appendChild(el("div", "phase", phaseLabel(l, st)));
     } else {
       var pts = isTT(l) && st === "live" ? pointsPair(l) : null;
       var a, b;
@@ -1570,6 +1579,7 @@
     var mark;
     if (l.won === true) mark = el("div", "yes", "Yes");
     else if (l.won === false) mark = el("div", "no", "No");
+    else if (st === "held") mark = el("div", "held-pill", "Held");
     else if (st === "live") mark = el("div", "live-pill", "LIVE");
     else mark = el("div", "wait-pill", "Wait");
     row.appendChild(mark);

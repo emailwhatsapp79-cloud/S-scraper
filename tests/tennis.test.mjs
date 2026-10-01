@@ -312,6 +312,7 @@ test("a tennis set score books market 199 with its specifier", () => {
 test("a live second set is not a finished match", () => {
   const live = { matchStatus: "set 2", setScore: "1:0", gameScore: ["6:3", "4:0"] };
   assert.equal(finishedSets(live), null);
+  assert.equal(finishedSets({ matchStatus: "Interrupted", setScore: "1:0", gameScore: ["6:3", "4:0"] }), null);
   const done = { matchStatus: "Ended", setScore: "2:0", gameScore: ["6:3", "6:4"] };
   assert.equal(finishedSets(done).result, "2:0");
 });

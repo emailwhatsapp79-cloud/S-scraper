@@ -1004,8 +1004,10 @@ async function ensureCalls() {
     result TEXT,
     score_hit BOOLEAN,
     winner_hit BOOLEAN,
+    hold TEXT,
     logged_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
+  await sql`ALTER TABLE tn_books ADD COLUMN IF NOT EXISTS hold TEXT`;
   return sql;
 }
 
@@ -1018,7 +1020,17 @@ function matchOver(status) {
 
 function stillPlaying(ev) {
   if (!ev) return false;
-  return /^(set\s*\d|not\s*start|interrupt|playing|live|1st|2nd|3rd|4th|5th)/i.test(String(ev.matchStatus || ""));
+  const s = String(ev.matchStatus || "");
+  if (/interrupt|suspend|delay|postpon/i.test(s)) return true;
+  return /^(set\s*\d|not\s*start|playing|live|1st|2nd|3rd|4th|5th)/i.test(s);
+}
+
+function holdOf(ev) {
+  const s = String(ev && ev.matchStatus || "");
+  if (/interrupt/i.test(s)) return "Interrupted";
+  if (/suspend/i.test(s)) return "Suspended";
+  if (/delay|postpon/i.test(s)) return "Delayed";
+  return "";
 }
 
 function setTally(ev) {
@@ -1090,6 +1102,7 @@ function mapBooked(r) {
     label: r.label || r.selection_label || String(r.selection || ""),
     price: r.price == null ? null : Number(r.price),
     result: r.result || r.set_score || r.setScore || null,
+    status: /interrupt|suspend|delay|postpon/i.test(String(r.match_status || "")) ? String(r.match_status) : "",
     hit: r.won == null ? null : (r.won === "yes" || r.won === true),
     slipId: r.slipId || r.slip_id || "",
     code: r.code || r.share_code || "",
@@ -1110,7 +1123,7 @@ export async function bookedTennisRecord() {
   await ensureCalls();
   const raw = await sql`
     SELECT l.event_id, l.home, l.away, l.league, l.kickoff, l.selection, l.selection_label,
-           l.price, l.won, l.set_score, l.slip_id, l.game_id, l.pos,
+           l.price, l.won, l.set_score, l.match_status, l.slip_id, l.game_id, l.pos,
            s.share_code, s.share_url, s.created_at, s.stake, s.potential, s.returned,
            s.order_id, s.pay_with
     FROM slip_legs l
@@ -1171,6 +1184,7 @@ export async function bookedTennisRecord() {
         if (leg.event_id !== row.event_id) continue;
         leg.won = null;
         leg.set_score = null;
+        leg.match_status = fin.status;
         cleared.add(leg.slip_id);
         await sql`
           UPDATE slip_legs
@@ -1244,12 +1258,11 @@ export async function trackBooks(games) {
         const ev = await fetchEvent(row.event_id, { marketId: "186" });
         if (!ev) continue;
         if (stillPlaying(ev)) {
-          if (row.result) {
-            await sql`
-              UPDATE tn_books
-              SET result = NULL, score_hit = NULL, winner_hit = NULL
-              WHERE event_id = ${row.event_id}`;
-          }
+          const hold = holdOf(ev);
+          await sql`
+            UPDATE tn_books
+            SET result = NULL, score_hit = NULL, winner_hit = NULL, hold = ${hold || null}
+            WHERE event_id = ${row.event_id}`;
           continue;
         }
         const fin = finishedSets(ev);
@@ -1259,14 +1272,14 @@ export async function trackBooks(games) {
         const winnerHit = row.winner === "1" ? hs > as : as > hs;
         await sql`
           UPDATE tn_books
-          SET result = ${fin.result}, score_hit = ${scoreHit}, winner_hit = ${winnerHit}
+          SET result = ${fin.result}, score_hit = ${scoreHit}, winner_hit = ${winnerHit}, hold = NULL
           WHERE event_id = ${row.event_id}`;
       } catch { /* one result can wait */ }
     }
   }
   const recent = await sql`
     SELECT event_id, home, away, tourn, start_at, score, winner, score_odds, winner_odds,
-           result, score_hit, winner_hit
+           result, score_hit, winner_hit, hold
     FROM tn_books ORDER BY start_at DESC NULLS LAST LIMIT 200`;
   return recent.map((r) => ({
     eventId: r.event_id,
@@ -1279,6 +1292,7 @@ export async function trackBooks(games) {
     scoreOdds: r.score_odds == null ? null : Number(r.score_odds),
     winnerOdds: r.winner_odds == null ? null : Number(r.winner_odds),
     result: r.result || null,
+    hold: r.hold || "",
     scoreHit: r.score_hit == null ? null : r.score_hit === true,
     winnerHit: r.winner_hit == null ? null : r.winner_hit === true,
   }));
