@@ -107,7 +107,7 @@ export default async function handler(req, res) {
     const setkaNames = games.filter((g) => /setka/i.test(g.tourn || ""))
       .flatMap((g) => [g.home, g.away]).filter(Boolean);
     let s24 = null, setka = null, setkaSweep = null;
-    try { s24 = await pullScores24(names, { skipHtml: false, more: true, pages: 5, first: 50, days: 400, players: 0, deadlineMs: 14000 }); }
+    try { s24 = await pullScores24(names, { skipHtml: true, latestOnly: true, pages: 2, first: 40, days: 14, players: 0 }); }
     catch (e) { s24 = { error: String(e?.message || e) }; }
     // Broad Setka firehose. Payload is ~13s/day, so sweep the most recent day
     // or two each run; older days are marked done and never re-fetched.

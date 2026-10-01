@@ -50,25 +50,30 @@ export default async function handler(req, res) {
   }
 
   const started = Date.now();
-  let slips = null;
-  try { slips = await refreshSlips(); }
-  catch (e) { slips = { error: String(e?.message || e) }; }
+  // Newest finished games first. The deep history walk was blowing the 30s
+  // limit, so today's results never got saved or trained.
   let s24 = null, counts = { total: 0, settled: 0 };
   try {
     s24 = await pullScores24([], {
-      skipHtml: true, more: true, pages: 5, first: 50, days: 400,
-      players: 0, deadlineMs: 20000,
+      skipHtml: true, latestOnly: true, pages: 4, first: 40, days: 21,
+      players: 0,
     });
   } catch (e) { s24 = { error: String(e?.message || e) }; }
-  try { counts = await countsTT(); } catch (e) { logErr("nudge.counts", e); }
   let pack = null;
   try { pack = await rebuildPack(); } catch (e) { logErr("nudge.pack", e); pack = { error: String(e?.message || e) }; }
+  try { counts = await countsTT(); } catch (e) { logErr("nudge.counts", e); }
+  let slips = null;
+  if (Date.now() - started < 24000) {
+    try { slips = await refreshSlips(); }
+    catch (e) { slips = { error: String(e?.message || e) }; }
+  }
   await touchHealth("nudge", { settled: counts.settled, s24: s24 && !s24.error, pack: pack && !pack.error });
   res.setHeader("Cache-Control", "no-store");
   return res.status(200).json({
-    ok: !slips?.error,
+    ok: !s24?.error && !pack?.error,
     tookMs: Date.now() - started,
     slips, s24, pack,
+    stored: counts.total,
     settled: counts.settled,
   });
 }

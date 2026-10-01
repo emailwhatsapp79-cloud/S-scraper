@@ -434,6 +434,59 @@ async function fromPlayers(names, byLast, limit, pages) {
   return { rows, used };
 }
 
+async function pullRecent(byLast, pages, first, days) {
+  const now = Date.now();
+  const from = stamp(now - days * 24 * 3600 * 1000);
+  const to = stamp(now + 2 * 3600 * 1000);
+  await sql`CREATE TABLE IF NOT EXISTS tt_s24_state (
+    k TEXT PRIMARY KEY,
+    cursor TEXT,
+    updated TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  const parts = await Promise.all(CORE.map(async (slug) => {
+    const rows = [];
+    const errors = [];
+    try {
+      const latest = await endedPage(slug, first, from, to, "");
+      takeRows(latest?.data?.edges, slug, byLast, rows);
+      const k = "fr|" + slug;
+      const st = await sql`SELECT cursor FROM tt_s24_state WHERE k = ${k}`;
+      let after = (st[0] && st[0].cursor) || "";
+      if (after !== "DONE") {
+        if (!after) after = (latest?.data?.pageInfo || {}).endCursor || "";
+        for (let p = 0; p < pages && after; p++) {
+          const data = await endedPage(slug, first, from, to, after);
+          const edges = data?.data?.edges || [];
+          const info = data?.data?.pageInfo || {};
+          takeRows(edges, slug, byLast, rows);
+          if (!edges.length || info.hasNextPage === false || !info.endCursor) {
+            after = "DONE";
+            break;
+          }
+          after = info.endCursor;
+        }
+        await sql`INSERT INTO tt_s24_state (k, cursor) VALUES (${k}, ${after || "DONE"})
+          ON CONFLICT (k) DO UPDATE SET cursor = ${after || "DONE"}, updated = now()`;
+      }
+    } catch (e) {
+      errors.push(slug + ": " + (e?.message || e));
+    }
+    return { rows, errors };
+  }));
+  const rows = [];
+  const seen = new Set();
+  const errors = [];
+  for (const p of parts) {
+    errors.push(...p.errors);
+    for (const r of p.rows) {
+      if (seen.has(r.id)) continue;
+      seen.add(r.id);
+      rows.push(r);
+    }
+  }
+  return { rows, errors };
+}
+
 export async function pullScores24(names, opts = {}) {
   await ensure();
   if (!names.length) {
@@ -467,7 +520,20 @@ export async function pullScores24(names, opts = {}) {
     }
   }
 
-  if (all.length < 80 || opts.more) {
+  if (opts.latestOnly) {
+    try {
+      const extra = await pullRecent(byLast, opts.pages ?? 4, first, days);
+      notes.push("recent " + extra.rows.length);
+      if (extra.errors.length) notes.push(extra.errors.join("; "));
+      for (const r of extra.rows) {
+        if (seen.has(r.id)) continue;
+        seen.add(r.id);
+        all.push(r);
+      }
+    } catch (e) {
+      notes.push("recent " + (e?.message || e));
+    }
+  } else if (all.length < 80 || opts.more) {
     try {
       const extra = await fromRapi(byLast, pages, first, days, opts.deadlineMs);
       notes.push((extra.slug || "rapi") + " " + extra.rows.length + (extra.hasMore ? " more…" : " done"));
