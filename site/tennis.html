@@ -441,17 +441,6 @@
         selection: row.selection, gameId: row.eventId,
         status: row.status || ""
       };
-      if (slip.id && row.eventId && row.selection) {
-        leg.onDrop = function () {
-          fetch("/api/slips?id=" + encodeURIComponent(slip.id) + "&event=" + encodeURIComponent(row.eventId) + "&sel=" + encodeURIComponent(row.selection), { method: "DELETE" })
-            .then(readJson)
-            .then(function (d) {
-              if (!d || !d.ok) throw new Error((d && d.error) || "Could not delete");
-              loadRecord();
-            })
-            .catch(function (e) { window.alert(e.message); });
-        };
-      }
       if (row.status) return leg;
       if (done) {
         leg.won = row.hit === true;
@@ -476,7 +465,16 @@
       shareUrl: slip.url || "",
       orderId: slip.orderId || "",
       payWith: slip.payWith || "",
-      createdAt: slip.at
+      createdAt: slip.at,
+      onDrop: slip.id ? function () {
+        fetch("/api/slips?id=" + encodeURIComponent(slip.id) + "&tennis=slip", { method: "DELETE" })
+          .then(readJson)
+          .then(function (d) {
+            if (!d || !d.ok) throw new Error((d && d.error) || "Could not delete");
+            loadRecord();
+          })
+          .catch(function (e) { window.alert(e.message); });
+      } : null
     };
   }
   function groupDays(out, items, dateOf, cardOf) {

@@ -1537,17 +1537,6 @@
       sel.appendChild(el("span", "pick", l.label));
       sel.appendChild(document.createTextNode(" @ " + Number(l.price).toFixed(2)));
       left.appendChild(sel);
-      if (typeof l.onDrop === "function") {
-        var dropLeg = el("button", "drop-leg", "Delete");
-        dropLeg.type = "button";
-        dropLeg.addEventListener("click", function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          dropLeg.disabled = true;
-          l.onDrop();
-        });
-        left.appendChild(dropLeg);
-      }
       if (st === "live" && l.livePrice != null && isFinite(l.livePrice)) {
         var live = el("div", "live-odds");
         live.appendChild(el("span", "lo-l", "Live odds"));
@@ -1698,6 +1687,18 @@
           });
       });
       card.appendChild(drop);
+    }
+    if (typeof sp.onDrop === "function") {
+      var gone = el("button", "rebet", "Delete slip");
+      gone.type = "button";
+      gone.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        gone.disabled = true;
+        gone.textContent = "Deleting…";
+        sp.onDrop();
+      });
+      card.appendChild(gone);
     }
     return card;
   }
