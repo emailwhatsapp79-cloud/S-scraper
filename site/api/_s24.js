@@ -152,12 +152,13 @@ async function timedFetch(url, opts, timeoutMs = 8000) {
 
 async function fetchS24(target, accept) {
   const errors = [];
-  for (const origin of proxyOrigins()) {
+  const origin = proxyOrigins()[0];
+  if (origin) {
     try {
       const u = target.includes("/rapi/")
         ? origin + "/api/s24-proxy?kind=rapi&u=" + encodeURIComponent(target)
         : origin + "/api/s24-proxy";
-      const r = await timedFetch(u, { headers: { "x-fill-key": fillKey(), Accept: accept || "*/*" } });
+      const r = await timedFetch(u, { headers: { "x-fill-key": fillKey(), Accept: accept || "*/*" } }, 5000);
       if (r.ok) return r;
       errors.push("edge " + r.status);
     } catch (e) {
@@ -166,7 +167,7 @@ async function fetchS24(target, accept) {
   }
   const r = await timedFetch(target, {
     headers: { ...HDR, Accept: accept || HDR.Accept },
-  });
+  }, 4000);
   if (!r.ok) throw new Error((errors[0] ? errors[0] + " · " : "") + "direct HTTP " + r.status);
   return r;
 }

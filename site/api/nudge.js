@@ -3,7 +3,6 @@
 // (ON CONFLICT match_id — already-there rows are not duplicated).
 import { logErr } from "./_db.js";
 import { requireFill } from "./_gate.js";
-import { refreshSlips } from "./_slips.js";
 import { pullScores24, bulkInsert } from "./_s24.js";
 import { countsTT, rebuildPack } from "./_tt.js";
 import { touchHealth } from "./_health.js";
@@ -50,29 +49,36 @@ export default async function handler(req, res) {
   }
 
   const started = Date.now();
-  // Newest finished games first. The deep history walk was blowing the 30s
-  // limit, so today's results never got saved or trained.
+  const only = String(req.query?.only || "");
+  if (only === "train") {
+    let pack = null;
+    try { pack = await rebuildPack(); } catch (e) { pack = { error: String(e?.message || e) }; }
+    let counts = { total: 0, settled: 0 };
+    try { counts = await countsTT(); } catch (e) { logErr("nudge.counts", e); }
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).json({
+      ok: !pack?.error, tookMs: Date.now() - started, pack,
+      stored: counts.total, settled: counts.settled,
+    });
+  }
   let s24 = null, counts = { total: 0, settled: 0 };
   try {
     s24 = await pullScores24([], {
-      skipHtml: true, latestOnly: true, pages: 4, first: 40, days: 21,
+      skipHtml: true, latestOnly: true, pages: 2, first: 40, days: 21,
       players: 0,
     });
   } catch (e) { s24 = { error: String(e?.message || e) }; }
-  let pack = null;
-  try { pack = await rebuildPack(); } catch (e) { logErr("nudge.pack", e); pack = { error: String(e?.message || e) }; }
   try { counts = await countsTT(); } catch (e) { logErr("nudge.counts", e); }
-  let slips = null;
-  if (Date.now() - started < 24000) {
-    try { slips = await refreshSlips(); }
-    catch (e) { slips = { error: String(e?.message || e) }; }
+  let pack = null;
+  if (only !== "pull" && Date.now() - started < 14000) {
+    try { pack = await rebuildPack(); } catch (e) { pack = { error: String(e?.message || e) }; }
   }
-  await touchHealth("nudge", { settled: counts.settled, s24: s24 && !s24.error, pack: pack && !pack.error });
+  await touchHealth("nudge", { settled: counts.settled, s24: s24 && !s24.error, pack: !!(pack && !pack.error) });
   res.setHeader("Cache-Control", "no-store");
   return res.status(200).json({
-    ok: !s24?.error && !pack?.error,
+    ok: !s24?.error,
     tookMs: Date.now() - started,
-    slips, s24, pack,
+    s24, pack,
     stored: counts.total,
     settled: counts.settled,
   });
