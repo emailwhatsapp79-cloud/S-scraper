@@ -492,6 +492,27 @@ export async function refreshSlips() {
   return { updated, pushed };
 }
 
+export async function dropTennisLeg(slipId, eventId, selection) {
+  await ensureSlips();
+  await sql`
+    DELETE FROM slip_legs
+    WHERE slip_id = ${slipId} AND event_id = ${eventId} AND selection = ${selection} AND sport = 'tn'`;
+  const left = await sql`SELECT count(*)::int AS n FROM slip_legs WHERE slip_id = ${slipId}`;
+  if (!left[0] || !left[0].n) await sql`DELETE FROM slips WHERE id = ${slipId}`;
+  return { id: slipId };
+}
+
+export async function dropAllTennisBooked() {
+  await ensureSlips();
+  const ids = await sql`SELECT DISTINCT slip_id FROM slip_legs WHERE sport = 'tn'`;
+  await sql`DELETE FROM slip_legs WHERE sport = 'tn'`;
+  for (const row of ids) {
+    const left = await sql`SELECT count(*)::int AS n FROM slip_legs WHERE slip_id = ${row.slip_id}`;
+    if (!left[0] || !left[0].n) await sql`DELETE FROM slips WHERE id = ${row.slip_id}`;
+  }
+  return { n: ids.length };
+}
+
 export async function clearSlip(id) {
   await ensureSlips();
   const rows = await sql`

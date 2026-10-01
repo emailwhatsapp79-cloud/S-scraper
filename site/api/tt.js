@@ -5,7 +5,7 @@
 // the daily poll, so the card never waits on that. Gated like the rest.
 import { guard } from "./_gate.js";
 import { fetchTTCard, normalise, storeTT, listUpcomingTT, listRecentResultsTT, countsTT, getModelMeta } from "./_tt.js";
-import { fetchTennisCard, enrichTennis, trackTennis, trackBooks, bookedTennisRecord } from "./_tennis.js";
+import { fetchTennisCard, enrichTennis, trackTennis, trackBooks, bookedTennisRecord, liveBookGames } from "./_tennis.js";
 
 function queryOf(req) {
   if (req.query) return req.query;
@@ -20,9 +20,13 @@ export default async function handler(req, res) {
   const q = queryOf(req);
   if (String(q.card || "") === "tennis" && String(q.record || "") === "1") {
     try {
+      const [card, live] = await Promise.all([
+        fetchTennisCard().catch(() => []),
+        liveBookGames().catch(() => []),
+      ]);
       const [booked, books] = await Promise.all([
         bookedTennisRecord(),
-        trackBooks([], { settle: true }),
+        trackBooks(card.concat(live), { settle: true }),
       ]);
       res.setHeader("Cache-Control", "no-store");
       res.status(200).json({ ok: true, booked, books });

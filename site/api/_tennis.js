@@ -252,6 +252,49 @@ export function normaliseTennis(ev, tourn, category) {
   };
 }
 
+function gameForBook(ev, tourn, category) {
+  const start = ev.estimateStartTime ? Number(ev.estimateStartTime) : null;
+  const status = String(ev.matchStatus || "");
+  if (/^(end|finish|final|retir|walkover|abandon|closed|cancel)/i.test(status)) return null;
+  const started = start > 0 && start <= Date.now();
+  const fake = started
+    ? { ...ev, matchStatus: "Not start", estimateStartTime: Date.now() + 60000 }
+    : ev;
+  const game = normaliseTennis(fake, tourn, category);
+  if (!game) return null;
+  if (started) game.start = start;
+  return game;
+}
+
+export async function liveBookGames() {
+  const ac = new AbortController();
+  const to = setTimeout(() => ac.abort(), 8000);
+  try {
+    const r = await fetch(`${BASE}/configurableLiveOrPrematchEvents?sportId=${SPORT}&marketId=186,199&pageSize=100&pageNum=1`, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+      signal: ac.signal,
+    });
+    if (!r.ok) return [];
+    const body = await r.json();
+    if (body.bizCode !== 10000) return [];
+    const games = [];
+    const since = Date.now() - 36 * 60 * 60 * 1000;
+    for (const t of body.data || []) {
+      for (const ev of t.events || []) {
+        const start = Number(ev.estimateStartTime) || 0;
+        if (start && start < since) continue;
+        const game = gameForBook(ev, t.name || "", t.categoryName || "");
+        if (game) games.push(game);
+      }
+    }
+    return games;
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(to);
+  }
+}
+
 export async function fetchTennisCard() {
   async function page(n) {
     const data = await getJson({
@@ -1078,7 +1121,14 @@ export function splitBooked(rows) {
       rows: mine.slice(0, 80).map(mapBooked),
     };
   }
-  const mapped = list.slice(0, 80).map(mapBooked);
+  const mapped = [];
+  const seenLeg = new Set();
+  for (const r of list.map(mapBooked)) {
+    const key = (r.slipId || "one") + "|" + (r.eventId || "") + "|" + r.selection;
+    if (seenLeg.has(key)) continue;
+    seenLeg.add(key);
+    mapped.push(r);
+  }
   const slips = [];
   const by = new Map();
   for (const r of mapped) {
@@ -1134,9 +1184,9 @@ export async function bookedTennisRecord() {
            s.order_id, s.pay_with
     FROM slip_legs l
     JOIN slips s ON s.id = l.slip_id
-    WHERE l.sport = 'tn'
+    WHERE l.sport = 'tn' AND COALESCE(s.status, '') <> 'removed'
     ORDER BY s.created_at DESC NULLS LAST, l.pos ASC
-    LIMIT 80`;
+    LIMIT 400`;
   const rows = raw.map((r) => ({ ...r }));
   const due = [];
   const suspect = [];
@@ -1233,18 +1283,27 @@ export async function trackBooks(games, opts = {}) {
   const { sql } = await import("./_db.js");
   await ensureCalls();
   await sql`DELETE FROM tn_calls`;
+  const marks = [];
   for (const g of games || []) {
     const mark = bookMark(g);
     if (!mark) continue;
-    await sql`
-      INSERT INTO tn_books (
-        event_id, home, away, tourn, start_at, score, winner, score_odds, winner_odds)
-      VALUES (
-        ${String(g.eventId)}, ${g.home || ""}, ${g.away || ""}, ${g.tourn || ""},
-        ${Number(g.start) || null}, ${mark.score}, ${mark.winner},
-        ${mark.scoreOdds}, ${mark.winnerOdds}
-      )
-      ON CONFLICT (event_id) DO NOTHING`;
+    marks.push([
+      String(g.eventId), g.home || "", g.away || "", g.tourn || "",
+      Number(g.start) || null, mark.score, mark.winner, mark.scoreOdds, mark.winnerOdds,
+    ]);
+  }
+  for (let i = 0; i < marks.length; i += 40) {
+    const chunk = marks.slice(i, i + 40);
+    const values = chunk.map((_, j) => {
+      const b = j * 9;
+      return "(" + Array.from({ length: 9 }, (_, k) => "$" + (b + k + 1)).join(",") + ")";
+    }).join(",");
+    await sql(
+      `INSERT INTO tn_books (event_id, home, away, tourn, start_at, score, winner, score_odds, winner_odds)
+       VALUES ${values}
+       ON CONFLICT (event_id) DO NOTHING`,
+      chunk.flat(),
+    );
   }
   const due = await sql`
     SELECT event_id, score, winner, result FROM tn_books

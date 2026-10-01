@@ -297,12 +297,25 @@
     if (REC === "booked") {
       var slips = [];
       var legs = [];
-      ((BOOKED && BOOKED.slips) || []).forEach(function (slip) {
-        var rows = (slip.rows || []).filter(function (r) {
-          return WHEN === "done" ? r.hit != null : r.hit == null;
+      var wipe = V.el("button", "chip", "Delete all");
+      wipe.addEventListener("click", function () {
+        if (!window.confirm("Delete every booked tennis slip?")) return;
+        wipe.disabled = true;
+        fetch("/api/slips?tennis=all", { method: "DELETE" }).then(readJson).then(function (d) {
+          if (!d || !d.ok) throw new Error((d && d.error) || "Could not delete");
+          loadRecord();
+        }).catch(function (e) {
+          wipe.disabled = false;
+          wipe.textContent = e.message;
         });
+      });
+      out.appendChild(wipe);
+      ((BOOKED && BOOKED.slips) || []).forEach(function (slip) {
+        var rows = slip.rows || [];
         if (!rows.length) return;
-        var card = toSlip(slip, rows, WHEN === "done");
+        var open = rows.some(function (r) { return r.hit == null; });
+        if (WHEN === "done" ? open : !open) return;
+        var card = toSlip(slip, rows, !open);
         slips.push(card);
         legs = legs.concat(card.legs);
       });
@@ -387,6 +400,17 @@
         selection: row.selection, gameId: row.eventId,
         status: row.status || ""
       };
+      if (slip.id && row.eventId && row.selection) {
+        leg.onDrop = function () {
+          fetch("/api/slips?id=" + encodeURIComponent(slip.id) + "&event=" + encodeURIComponent(row.eventId) + "&sel=" + encodeURIComponent(row.selection), { method: "DELETE" })
+            .then(readJson)
+            .then(function (d) {
+              if (!d || !d.ok) throw new Error((d && d.error) || "Could not delete");
+              loadRecord();
+            })
+            .catch(function (e) { window.alert(e.message); });
+        };
+      }
       if (row.status) return leg;
       if (done) {
         leg.won = row.hit === true;

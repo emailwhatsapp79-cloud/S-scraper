@@ -625,6 +625,15 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
   border-radius: 4px;
   text-align: center;
 }
+.drop-leg {
+  margin-top: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--bad);
+  font-size: 12px;
+  font-weight: 700;
+}
 .wait-pill {
   justify-self: center;
   font-size: 11px;
