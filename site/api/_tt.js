@@ -407,7 +407,11 @@ export function forecastTT(pack, g) {
     const gap = p - book.home;
     if (Math.abs(gap) > 0.12) p = p - gap * 0.55;
   }
-  p = Math.min(0.72, Math.max(0.28, p));
+  // The old 72% ceiling sat under every short favourite (the book had 1.20
+  // shots at 81%), so our number could never agree with one and the Strong /
+  // Good tags never reached them. Shrinkage on thin records and the pull back
+  // toward the book above stay; only the hard ceiling moves out.
+  p = Math.min(0.88, Math.max(0.12, p));
 
   return {
     pHome: p, pAway: 1 - p,
