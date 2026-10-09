@@ -173,7 +173,7 @@ export function scoreOf(ev) {
   const isTT = sportId === "sr:sport:20" || /^set\s*\d/i.test(status);
   const live = isTT
     ? /^(set\s*\d|Playing|LIVE)/i.test(status)
-    : /^(H1|H2|HT|1H|2H|LIVE)/i.test(status);
+    : /^(H1|H2|HT|1H|2H|LIVE|Q[1-4]|OT|Overtime)/i.test(status);
   const pts = isTT && live ? currentPoints(ev, ft) : null;
   const prices = isTT ? { ...pricesOf(ev), ...ttWinnerPrices(ev) } : pricesOf(ev);
   return {

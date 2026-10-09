@@ -7,6 +7,7 @@ export const HOST = "https://www.football.com";
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const SPORT_ID = "sr:sport:202120001";
 export const TT_SPORT = "sr:sport:20";
+export const EB_SPORT = "sr:sport:153";
 
 export const SPORTY = {
   book: "sporty",
@@ -492,14 +493,17 @@ export function quote(ev, selection, hint = {}) {
   const sel = String(selection || "");
   if (/^\d+:\d+$/.test(sel)) return ev ? quoteScore(ev, sel, hint) : null;
   const tennis = hint.sport === "tn" || (ev && ev.sport && ev.sport.id === "sr:sport:5");
-  const tt = !tennis && isTableEvent(ev);
-  const want = tt
+  const eb = !tennis && (hint.sport === "eb" || (ev && ev.sport && ev.sport.id === EB_SPORT));
+  const tt = !tennis && !eb && isTableEvent(ev);
+  const want = (tt || eb)
     ? (sel === "1" ? ["Winner", "Home"] : sel === "2" ? ["Winner", "Away"] : null)
     : WANT[sel];
   if (!ev || !want) return null;
   const [desc, outcome] = want;
   const markets = (ev.markets || []).filter((m) => marketOpen(m) && (
-    tt
+    eb
+      ? String(m.id) === "219"
+      : tt
       ? (String(m.id) === "186" || /^winner$/i.test(String(m.desc || "")))
       : tennis
         ? (String(m.id) === "186" || /^winner$/i.test(String(m.desc || "")))
@@ -518,7 +522,7 @@ export function quote(ev, selection, hint = {}) {
     const o = (m.outcomes || []).find((x) => {
       const id = String(x.id || x.outcomeId || "");
       if (wantId) return id === wantId;
-      if (tt || tennis) {
+      if (tt || tennis || eb) {
         if (outcome === "Home") return /^home$/i.test(String(x.desc || "")) || id === "4";
         if (outcome === "Away") return /^away$/i.test(String(x.desc || "")) || id === "5";
       }
@@ -533,7 +537,7 @@ export function quote(ev, selection, hint = {}) {
   if (!hit) return null;
   const sportId = tennis
     ? "sr:sport:5"
-    : ((ev.sport && ev.sport.id) || (tt ? TT_SPORT : SPORT_ID));
+    : eb ? EB_SPORT : ((ev.sport && ev.sport.id) || (tt ? TT_SPORT : SPORT_ID));
   return {
     eventId: String(ev.eventId),
     sportId,
@@ -551,14 +555,15 @@ export async function priceLeg(leg, book, opts = {}) {
   const label = sporty ? "SportyBet" : "Football.com";
   const base = sporty ? BASE : FOOTBALL_BASE;
   const score = /^\d+:\d+$/.test(String(leg.selection || ""));
-  const tt = !score && (isTableLeg(leg) || leg.sport === "tn");
-  let ev = await fetchEvent(leg.eventId, tt ? { marketId: "186" } : (score ? { marketId: "199" } : {}), base);
+  const eb = leg.sport === "eb";
+  const tt = !score && !eb && (isTableLeg(leg) || leg.sport === "tn");
+  let ev = await fetchEvent(leg.eventId, eb ? { marketId: "219" } : tt ? { marketId: "186" } : (score ? { marketId: "199" } : {}), base);
   let q = quote(ev, leg.selection, { outcomeId: leg.outcomeId, sport: leg.sport });
   if (!q && sporty && score) {
     ev = await fetchEvent(leg.eventId, { marketId: "199" }, base);
     q = quote(ev, leg.selection, { outcomeId: leg.outcomeId, sport: leg.sport });
   }
-  if (!q && sporty && !tt && !score && (leg.selection === "1" || leg.selection === "2")) {
+  if (!q && sporty && !tt && !eb && !score && (leg.selection === "1" || leg.selection === "2")) {
     ev = await fetchEvent(leg.eventId, { marketId: "186" }, base);
     q = quote(ev, leg.selection, { outcomeId: leg.outcomeId, sport: leg.sport });
   }

@@ -15,6 +15,11 @@ export const OUTCOMES = {
   X2:   { marketId: "10", outcomeId: "11" },
 };
 
+export const EB_OUTCOMES = {
+  "1": { marketId: "219", outcomeId: "4" },
+  "2": { marketId: "219", outcomeId: "5" },
+};
+
 export const TT_OUTCOMES = {
   "1": { marketId: "186", outcomeId: "4" },
   "2": { marketId: "186", outcomeId: "5" },
@@ -30,14 +35,15 @@ export function toSelection(leg) {
   const sel = String(leg.selection || "");
   const football = leg.sport === "fc" || leg.source === "football";
   const tennis = leg.sport === "tn";
+  const eb = leg.sport === "eb";
   if (!leg.eventId) {
     throw new Error(`${leg.home} v ${leg.away} is missing an event id — refresh ${football ? "Football.com" : "Matches"} first`);
   }
   let marketId = leg.marketId ? String(leg.marketId) : null;
   let outcomeId = leg.outcomeId ? String(leg.outcomeId) : null;
   if (!marketId || !outcomeId) {
-    let map = (tennis || isTT(leg)) ? TT_OUTCOMES[sel] : OUTCOMES[sel];
-    if (!map && !tennis && !isTT(leg)) {
+    let map = eb ? EB_OUTCOMES[sel] : (tennis || isTT(leg)) ? TT_OUTCOMES[sel] : OUTCOMES[sel];
+    if (!map && !tennis && !eb && !isTT(leg)) {
       const m = sel.match(/^(\d+):(\d+)$/);
       if (m) {
         const h = Number(m[1]), a = Number(m[2]);
@@ -61,7 +67,7 @@ export function toSelection(leg) {
   };
   if (leg.probability) row.probability = String(leg.probability);
   if (leg.specifier) row.specifier = String(leg.specifier);
-  const sportId = leg.sportId || (tennis ? "sr:sport:5" : (isTT(leg) ? "sr:sport:20" : SPORT_ID));
+  const sportId = leg.sportId || (tennis ? "sr:sport:5" : eb ? "sr:sport:153" : (isTT(leg) ? "sr:sport:20" : SPORT_ID));
   row.sportId = sportId;
   if (football && !isTT(leg)) {
     const product = String(leg.product || "3");

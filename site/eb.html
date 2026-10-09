@@ -15,6 +15,7 @@
 <style>
   .eb-card { background: var(--card); box-shadow: var(--shadow); border-radius: var(--r); margin-bottom: 10px; padding: 13px 14px }
   .eb-top { display: flex; align-items: center; gap: 8px; margin-bottom: 9px }
+  .eb-top .str { margin-left: 6px }
   .eb-tourn { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .eb-when { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--dim); flex: none }
   .eb-when.soon { color: var(--hold) } .eb-when.now { color: var(--bad) }
@@ -24,7 +25,11 @@
   .eb-row b { display: block; font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .eb-row .n { font-size: 11px; color: var(--faint); font-weight: 600; margin-left: 6px }
   .eb-row .team { display: block; font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-  .eb-row .rt { text-align: right }
+  .eb-row .rt { text-align: right; border-radius: var(--r3); padding: 5px 8px; margin: -5px -8px }
+  .eb-row .rt.tap { cursor: pointer; background: var(--bg); box-shadow: var(--shadow); margin: 0 }
+  .eb-row .rt.tap:active { transform: scale(.97) }
+  .eb-row .rt.on { background: var(--go); color: #04140a }
+  .eb-row .rt.on .px, .eb-row .rt.on .pc { color: #04140a }
   .eb-row .px { display: block; font-family: var(--mono); font-size: 15px; font-weight: 600 }
   .eb-row .pc { display: block; font-family: var(--mono); font-size: 11px; color: var(--dim); white-space: nowrap }
   .eb-row.pick b, .eb-row.pick .px { color: var(--go) }
@@ -48,7 +53,7 @@
     <div class="stat go"><b id="s-graded">—</b><span>Graded before the result</span></div>
   </div>
   <p class="note" id="rec-note"></p>
-  <h2 class="lab-h">Upcoming · paper only</h2>
+  <h2 class="lab-h">Upcoming</h2>
   <div id="out"><div class="skel"></div><div class="skel"></div></div>
 </main>
 <script src="/js/core.js"></script>
@@ -66,8 +71,9 @@
 
   function note(d) {
     var r = d.record, el = document.getElementById("rec-note");
+    var tail = "Tap a price to add it to the Betslip. Strong / Good = how far our number sits above the book's, not a proven edge yet.";
     if (!r || !r.n) {
-      el.textContent = "Learning. Every finished game is graded on the % we had before it started; picks stay off until that record makes money.";
+      el.textContent = "Learning: every finished game is graded on the % we had before tip-off. Strong / Good tags appear once gamers have 20+ games each. " + tail;
       return;
     }
     var p = r.picks || {};
@@ -76,15 +82,45 @@
       bits.push(r.brier < r.bookBrier ? "sharper than the book" : "not sharper than the book yet");
     }
     if (p.n) {
-      bits.push("paper picks " + p.hits + "/" + p.n + " hit " + pct(p.hit)
+      bits.push("tagged games " + p.hits + "/" + p.n + " hit " + pct(p.hit)
         + " (needs " + pct(p.breakEven) + ")"
         + " · return " + (p.roi >= 0 ? "+" : "") + Math.round(p.roi * 100) + "%");
     }
-    bits.push(r.proven ? "picks on" : "picks stay off until 100+ picks make money");
-    el.textContent = bits.join(" · ");
+    bits.push(r.proven ? "proven: the tags have made money over 100+ games" : "not proven yet");
+    el.textContent = bits.join(" · ") + ". " + tail;
   }
 
-  function row(name, price, n, ours, book, isPick) {
+  // Strong: our number 7+ points over the book's, both gamers 40+ games.
+  // Good: any tagged game (4+ points over, both 20+ games, price 3.00 or less).
+  function levelOf(g) {
+    var pk = g.pick;
+    if (!pk) return null;
+    return (pk.ours - pk.book >= 0.07 && Math.min(g.nH || 0, g.nA || 0) >= 40) ? "strong" : "good";
+  }
+
+  function gameOf(g) {
+    return {
+      id: g.id, eventId: g.eventId, home: g.home, away: g.away,
+      league: (g.tourn || "eBasketball").replace(/\s*\(.*?\)\s*/g, " ").trim(),
+      kickoff: g.start, sport: "eb",
+      selectionRefs: { "1": { marketId: "219", outcomeId: "4" }, "2": { marketId: "219", outcomeId: "5" } }
+    };
+  }
+  function current(g) {
+    var legs = V.loadBook();
+    for (var i = 0; i < legs.length; i++) {
+      if ((g.eventId && legs[i].eventId === g.eventId) || legs[i].id === g.id) return legs[i].selection;
+    }
+    return null;
+  }
+
+  function row(g, sel, isPick) {
+    var home = sel === "1";
+    var name = home ? g.home : g.away;
+    var price = home ? g.win.home : g.win.away;
+    var n = home ? g.nH : g.nA;
+    var ours = g.ours == null ? null : (home ? g.ours : 100 - g.ours);
+    var book = g.book == null ? null : (home ? g.book : 100 - g.book);
     var r = V.el("div", "eb-row" + (isPick ? " pick" : ""));
     var s = split(name);
     var who = V.el("div", "who");
@@ -93,41 +129,68 @@
     who.appendChild(b);
     if (s.gamer) who.appendChild(V.el("span", "team", s.team));
     r.appendChild(who);
-    var rt = V.el("div", "rt");
+    var can = g.eventId && price > 1;
+    var rt = V.el("div", "rt" + (can ? " tap" : "") + (current(g) === sel ? " on" : ""));
     rt.appendChild(V.el("span", "px", odds(price)));
     rt.appendChild(V.el("span", "pc", "ours " + (ours == null ? "—" : Math.round(ours) + "%") + " · book " + (book == null ? "—" : Math.round(book) + "%")));
+    if (can) {
+      rt.setAttribute("role", "button");
+      rt.tabIndex = 0;
+      var go = function (e) {
+        e.stopPropagation();
+        V.toggleBook(V.makePick(gameOf(g), sel, price, (s.gamer || s.team) + " to win"));
+        render(LAST);
+      };
+      rt.addEventListener("click", go);
+      rt.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } });
+    }
     r.appendChild(rt);
     return r;
   }
 
+  var LAST = null, STR = "";
   function render(d) {
     var out = document.getElementById("out");
     out.innerHTML = "";
-    var games = d.games || [];
+    var games = (d && d.games) || [];
+    var chips = V.el("div", "chips");
+    var nS = games.filter(function (g) { return levelOf(g) === "strong"; }).length;
+    var nG = games.filter(function (g) { return !!levelOf(g); }).length;
+    [["", "All " + games.length], ["strong", "Strong " + nS], ["good", "Strong + good " + nG]].forEach(function (c) {
+      var b = V.el("button", "chip" + (STR === c[0] ? " on" : ""), c[1]);
+      b.type = "button";
+      b.addEventListener("click", function () { STR = c[0]; render(LAST); });
+      chips.appendChild(b);
+    });
+    out.appendChild(chips);
+    if (STR) games = games.filter(function (g) { var l = levelOf(g); return STR === "strong" ? l === "strong" : !!l; });
     if (!games.length) {
-      out.appendChild(V.el("p", "note", "No priced eBasketball games right now. Prices show about an hour before tip-off."));
+      out.appendChild(V.el("p", "note", STR
+        ? "Nothing " + (STR === "strong" ? "strong" : "strong or good") + " on the card right now."
+        : "No priced eBasketball games right now. Prices show about an hour before tip-off."));
       return;
     }
     games.forEach(function (g) {
       var c = V.el("div", "eb-card");
       var top = V.el("div", "eb-top");
       top.appendChild(V.el("span", "eb-tourn", (g.tourn || "").replace(/\s*\(.*?\)\s*/g, " ").trim()));
+      var lvl = levelOf(g);
+      if (lvl) top.appendChild(V.strengthTag(lvl));
       var t = V.until(g.start);
       top.appendChild(V.el("time", "eb-when " + (t.cls || ""), t.text || V.clock(g.start)));
       c.appendChild(top);
       var pk = g.pick;
-      c.appendChild(row(g.home, g.win.home, g.nH, g.ours, g.book, pk && pk.side === "home"));
-      c.appendChild(row(g.away, g.win.away, g.nA,
-        g.ours == null ? null : 100 - g.ours, g.book == null ? null : 100 - g.book, pk && pk.side === "away"));
+      c.appendChild(row(g, "1", pk && pk.side === "home"));
+      c.appendChild(row(g, "2", pk && pk.side === "away"));
       if (pk) {
         var tag = V.el("div", "eb-tag");
-        tag.appendChild(V.el("b", "", (pk.live ? "Pick " : "Watching ") + (pk.side === "home" ? split(g.home).gamer : split(g.away).gamer) + " @ " + odds(pk.price)));
-        tag.appendChild(document.createTextNode(" · ours " + pct(pk.ours) + " vs book " + pct(pk.book)
-          + (pk.live ? "" : " · not proven, paper only")));
+        tag.appendChild(V.el("b", "", (pk.side === "home" ? split(g.home).gamer : split(g.away).gamer) + " @ " + odds(pk.price)));
+        tag.appendChild(document.createTextNode(" · ours " + pct(pk.ours) + " vs book " + pct(pk.book)));
         c.appendChild(tag);
       }
       out.appendChild(c);
     });
+    V.tick && V.tick();
   }
 
   function load() {
@@ -135,6 +198,7 @@
       if (!d || d.locked) return;
       document.getElementById("s-up").textContent = String((d.games || []).length);
       document.getElementById("s-graded").textContent = String((d.counts && d.counts.graded) || 0);
+      LAST = d;
       note(d);
       render(d);
     }).catch(function () {

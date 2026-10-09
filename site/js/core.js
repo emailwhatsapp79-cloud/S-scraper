@@ -130,6 +130,23 @@
     };
   }
 
+  // Strong / Good: how firmly our number backs one side next to the book.
+  // ours and book are the % on our side; n is the fewer games either player
+  // has on record (null when the sport doesn't count them). It is the model's
+  // confidence, not a promise of profit: each page shows its record beside it.
+  // bar lifts both cut-offs for a sport whose favourites run shorter.
+  function strength(ours, book, n, bar) {
+    ours = Number(ours); book = Number(book);
+    var s = (bar && bar.strong) || 65, g = (bar && bar.good) || 60;
+    if (!isFinite(ours) || !isFinite(book) || book < 50) return null;
+    if (ours >= s && ours - book >= 3 && (n == null || n >= 30)) return "strong";
+    if (ours >= g && ours - book >= 0 && (n == null || n >= 15)) return "good";
+    return null;
+  }
+  function strengthTag(level) {
+    return el("span", "str " + level, level === "strong" ? "Strong" : "Good");
+  }
+
   function makePick(g, selection, price, label) {
     return {
       id: g.id,
@@ -1818,6 +1835,7 @@
     usedMap: usedMap, markUsed: markUsed, mergeUsedFromSlips: mergeUsedFromSlips, isUsed: isUsed,
     rebetSlip: rebetSlip,
     card: card, compactRow: compactRow,
+    strength: strength, strengthTag: strengthTag,
     until: until, clock: clock, dayLabel: dayLabel, byKick: byKick,
     leagueKey: leagueKey, teamsBlock: teamsBlock, crest: crest,
     fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips, fetchPicks: fetchPicks,

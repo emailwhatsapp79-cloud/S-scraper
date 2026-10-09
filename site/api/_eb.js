@@ -218,7 +218,7 @@ export async function listEB(proven) {
   await ensure();
   const now = Date.now();
   const rows = await sql`
-    SELECT match_id, home, away, tourn, start_at, win_home, win_away
+    SELECT match_id, event_id, home, away, tourn, start_at, win_home, win_away
     FROM eb_games WHERE start_at > ${now} AND win_home IS NOT NULL
     ORDER BY start_at ASC LIMIT 200`;
   const ratings = await loadRatings(rows.flatMap((g) => [gamerKey(g.home, g.tourn), gamerKey(g.away, g.tourn)]));
@@ -230,7 +230,7 @@ export async function listEB(proven) {
     const ours = predict(book, H, A);
     const pick = pickOf(ours, book, win, H.n, A.n);
     return {
-      id: g.match_id, home: g.home, away: g.away, tourn: g.tourn,
+      id: g.match_id, eventId: g.event_id || null, home: g.home, away: g.away, tourn: g.tourn,
       start: Number(g.start_at), win,
       book: book == null ? null : Math.round(book * 1000) / 10,
       ours: ours == null ? null : Math.round(ours * 1000) / 10,

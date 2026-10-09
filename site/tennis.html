@@ -85,7 +85,7 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("tt");
-  var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", RECORD = null, BOOKED = null, BOOKS = [], REC = "score", WHEN = "wait";
+  var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", STR = "", RECORD = null, BOOKED = null, BOOKS = [], REC = "score", WHEN = "wait";
 
   // "Cerundolo, Francisco" -> Cerundolo; "Stevens B" -> Stevens;
   // a doubles pair "Krawietz K / Puetz T" -> Krawietz / Puetz.
@@ -133,6 +133,17 @@
     }
     return c;
   }
+  // Strong / Good on our winner, with the book's favourite the same player.
+  function levelOf(g) {
+    var c = g.call;
+    if (!c || g.sim || g.suspended) return null;
+    // g.book only exists when form or news moved our call off the price;
+    // otherwise our call is the book's own % with the margin taken out.
+    var b = g.book || c;
+    var away = c.side === "away";
+    return V.strength(away ? c.away : c.home, away ? b.away : b.home, null, { strong: 78, good: 75 });
+  }
+
   function card(g, n) {
     var box = V.el("article", "tn");
     box.appendChild(V.el("span", "tn-num", String(n)));
@@ -145,6 +156,8 @@
       top.appendChild(V.el("b", "tn-sim", "SIM"));
     }
     if (g.suspended) top.appendChild(V.el("b", "tn-susp", "Suspended"));
+    var lvl = levelOf(g);
+    if (lvl) top.appendChild(V.strengthTag(lvl));
     top.appendChild(V.el("span", "tn-tourn", g.tourn || "Tennis"));
     var t = V.until(g.start);
     var when = V.el("time", "tn-when", (t.text || V.clock(g.start) || "").trim() || V.clock(g.start));
@@ -479,6 +492,17 @@
       list = list.filter(hasBook);
       if (ONLY === "ms") list = list.filter(function (g) { return !isDoubles(g) && !isWoman(g); });
       if (ONLY === "ws") list = list.filter(function (g) { return !isDoubles(g) && isWoman(g); });
+    } else {
+      var lv = V.el("div", "chips");
+      var nS = list.filter(function (g) { return levelOf(g) === "strong"; }).length;
+      var nG = list.filter(function (g) { return !!levelOf(g); }).length;
+      [["", "All"], ["strong", "Strong " + nS], ["good", "Strong + good " + nG]].forEach(function (pair) {
+        var b = V.el("button", "chip" + (STR === pair[0] ? " on" : ""), pair[1]);
+        b.addEventListener("click", function () { STR = pair[0]; render(); });
+        lv.appendChild(b);
+      });
+      out.appendChild(lv);
+      if (STR) list = list.filter(function (g) { var l = levelOf(g); return STR === "strong" ? l === "strong" : !!l; });
     }
     document.getElementById("head").textContent = (bookish() ? "Book — " : "Upcoming — ") + list.length;
     if (!list.length) {
