@@ -9,6 +9,7 @@ import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT, rebuild
 import { pullScores24 } from "./_s24.js";
 import { pullSetka, pullSetkaDays } from "./_setka.js";
 import { rebuildVF } from "./_vf_model.js";
+import { refreshEB } from "./_eb.js";
 import { requireFill } from "./_gate.js";
 import { touchHealth } from "./_health.js";
 // Sofascore history is disabled: its API 403s every server request, so it banked
@@ -69,6 +70,15 @@ export default async function handler(req, res) {
   if (requireFill(req, res)) return;
 
   const url = new URL(req.url, "http://x");
+  // eBasketball prices only show for the next hour or two, so an outside pinger
+  // should hit ?eb=1 every 10–15 minutes or most games are never priced.
+  if (url.searchParams.get("eb") === "1") {
+    let out;
+    try { out = { ok: true, ...(await refreshEB()) }; }
+    catch (e) { out = { ok: false, error: String(e?.message || e) }; }
+    res.setHeader("Cache-Control", "no-store");
+    return res.status(200).json(out);
+  }
   if (url.searchParams.get("vf") === "1") {
     const out = await vfHeartbeat();
     res.setHeader("Cache-Control", "no-store");
@@ -96,6 +106,10 @@ export default async function handler(req, res) {
     settled = await settlePicks(25);
     gamesSettled = (await settleGames(25)).settled;
   } catch (e) { logErr("poll.picks", e); pickError = String(e?.message || e); }
+
+  let eb = null;
+  try { eb = await refreshEB(); }
+  catch (e) { logErr("poll.eb", e); eb = { error: String(e?.message || e) }; }
 
   let tt = null;
   try {
@@ -138,6 +152,7 @@ export default async function handler(req, res) {
     gamesSettled,
     pickError,
     tt,
+    eb,
     saveError,
     feedErrors: errors.length ? errors : null,
   });

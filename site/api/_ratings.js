@@ -5,6 +5,7 @@
 // pack, no full retrain, and a new result shows the instant it's trained.
 import { sql } from "./_db.js";
 import { forecastTT, winPctBook } from "./_tt.js";
+import { gradeHoldout } from "./_grade.js";
 
 // Must fold identically to _tt.js nameKey, or card lookups miss.
 function foldToken(t) {
@@ -45,6 +46,9 @@ async function ensure() {
   )`;
   await sql`CREATE TABLE IF NOT EXISTS tt_rating_meta (k TEXT PRIMARY KEY, data TEXT)`;
   await sql`ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS trained BOOLEAN NOT NULL DEFAULT FALSE`;
+  // Our home % for the game, written by trainBatch from the ratings as they
+  // stood BEFORE that game's result was learned. The holdout reads only this.
+  await sql`ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS pre_home INT`;
   await sql`CREATE INDEX IF NOT EXISTS tt_games_untrained
     ON tt_games (start_at) WHERE trained IS NOT TRUE`;
   ready = true;
@@ -85,7 +89,7 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
   await ensure();
   const deadline = Date.now() + deadlineMs;
   const games = await sql`
-    SELECT match_id, home, away, tourn, start_at, r_home, r_away
+    SELECT match_id, home, away, tourn, start_at, r_home, r_away, win_home, win_away
     FROM tt_games
     WHERE r_home IS NOT NULL AND r_away IS NOT NULL AND trained IS NOT TRUE
     ORDER BY start_at ASC NULLS LAST
@@ -113,7 +117,9 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
 
   const meta = await loadMeta();
   const bt = meta.bt || { n: 0, hit: 0, brier: 0, strongN: 0, strongW: 0 };
+  const ha = homeAdv(meta);
   const done = [];
+  const pre = [];
   for (const g of games) {
     if (Date.now() > deadline) break;
     const kH = nameKey(g.home), kA = nameKey(g.away);
@@ -126,6 +132,16 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
     const need = Math.max(rh, ra) || 3;
     const margin = Math.abs(rh - ra) / need;
     const exp = 1 / (1 + 10 ** ((A.elo - H.elo) / 400));
+    const st0 = g.start_at ? Number(g.start_at) : 0;
+    // Score the game the way the card would have, before learning its result.
+    // A copy of this match banked from another feed may already be in the
+    // record; then the result has leaked and the game is not graded.
+    const wh = Number(g.win_home), wa = Number(g.win_away);
+    if (wh > 1 && wa > 1 && !alreadySeen(H.rec, kA, st0) && !alreadySeen(A.rec, kH, st0)) {
+      const one = { home: g.home, away: g.away, tourn: g.tourn, start: st0, win: { home: wh, away: wa } };
+      scoreOne({ [kH]: H, [kA]: A }, ha, one);
+      if (one.ours) pre.push([g.match_id, one.ours.home]);
+    }
     // walk-forward self-check, before the update
     if (H.n >= 5 && A.n >= 5) {
       const y = hw ? 1 : 0;
@@ -173,6 +189,13 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
   meta.bt = bt;
   await sql`INSERT INTO tt_rating_meta (k, data) VALUES ('main', ${JSON.stringify(meta)})
     ON CONFLICT (k) DO UPDATE SET data = ${JSON.stringify(meta)}`;
+  for (let i = 0; i < pre.length; i += 200) {
+    const part = pre.slice(i, i + 200);
+    await sql`UPDATE tt_games t SET pre_home = v.p
+      FROM (SELECT unnest(${part.map((x) => x[0])}::text[]) AS id,
+                   unnest(${part.map((x) => x[1])}::int[]) AS p) v
+      WHERE t.match_id = v.id`;
+  }
   for (let i = 0; i < done.length; i += 200) {
     await sql`UPDATE tt_games SET trained = TRUE WHERE match_id = ANY(${done.slice(i, i + 200)})`;
   }
@@ -235,39 +258,47 @@ async function loadCardPlayers(games) {
   return players;
 }
 
-/** Forecast the upcoming card off the rating store. Sets the same fields the
- *  page reads (pct / ours / book / nH / nA / h2hRec / formH / formA). */
+function homeAdv(meta) {
+  return meta.homeN >= 200 ? Math.min(0.05, Math.max(-0.05, (meta.homeW / meta.homeN) - 0.5)) : 0;
+}
+
+// True when the record already holds this pairing within 15 minutes of start —
+// the same match, banked under another feed's id.
+function alreadySeen(rec, oppKey, start) {
+  if (!start) return false;
+  return (rec || []).some((x) => x.vs === oppKey && Math.abs((Number(x.t) || 0) - start) < 15 * 60000);
+}
+
+// Sets the fields the page reads (pct / ours / book / nH / nA / h2hRec /
+// formH / formA) on one game, from whatever player rows it is handed.
+function scoreOne(players, ha, g) {
+  const kH = nameKey(g.home), kA = nameKey(g.away);
+  const H = players[kH];
+  const h2h = {};
+  if (H && H.rec) h2h[kH + ">" + kA] = h2hFromRec(H.rec, kA, g.start, g.tourn);
+  const f = forecastTT({ players, h2h, ha }, g);
+  const book = g.win ? winPctBook(g.win.home, g.win.away) : null;
+  const h2hN = f.h2hRec ? f.h2hRec.n : 0;
+  const hasForm = !!(f.formH && f.formA);
+  const evidence = (f.nH || 0) + (f.nA || 0) + 3 * h2hN + (hasForm ? 6 : 0);
+  const pHome = Math.min(0.97, Math.max(0.03, f.pHome));
+  const ours = { home: Math.round(pHome * 100), away: Math.round((1 - pHome) * 100) };
+  const thin = ((f.nH || 0) < 15 || (f.nA || 0) < 15) && h2hN < 5;
+  g.pct = !thin && evidence >= 1 ? ours : null;
+  g.ours = !thin && evidence >= 1 ? ours : null;
+  g.book = book ? { home: Math.round(book.home * 100), away: Math.round(book.away * 100) } : null;
+  g.nH = f.nH; g.nA = f.nA;
+  g.h2hRec = f.h2hRec;
+  g.formH = f.formH; g.formA = f.formA;
+  return g;
+}
+
+/** Forecast the upcoming card off the rating store. */
 export async function forecastCard(games) {
   await ensure();
   const players = await loadCardPlayers(games);
-  const meta = await loadMeta();
-  const ha = meta.homeN >= 200 ? Math.min(0.05, Math.max(-0.05, (meta.homeW / meta.homeN) - 0.5)) : 0;
-
-  // h2h map for exactly the pairs on the card, derived from recent record.
-  const h2h = {};
-  for (const g of games) {
-    const kH = nameKey(g.home), kA = nameKey(g.away);
-    const H = players[kH];
-    if (H && H.rec) h2h[kH + ">" + kA] = h2hFromRec(H.rec, kA, g.start, g.tourn);
-  }
-  const pack = { players, h2h, ha };
-
-  for (const g of games) {
-    const f = forecastTT(pack, g);
-    const book = g.win ? winPctBook(g.win.home, g.win.away) : null;
-    const h2hN = f.h2hRec ? f.h2hRec.n : 0;
-    const hasForm = !!(f.formH && f.formA);
-    const evidence = (f.nH || 0) + (f.nA || 0) + 3 * h2hN + (hasForm ? 6 : 0);
-    const pHome = Math.min(0.97, Math.max(0.03, f.pHome));
-    const ours = { home: Math.round(pHome * 100), away: Math.round((1 - pHome) * 100) };
-    const thin = ((f.nH || 0) < 15 || (f.nA || 0) < 15) && h2hN < 5;
-    g.pct = !thin && evidence >= 1 ? ours : null;
-    g.ours = !thin && evidence >= 1 ? ours : null;
-    g.book = book ? { home: Math.round(book.home * 100), away: Math.round(book.away * 100) } : null;
-    g.nH = f.nH; g.nA = f.nA;
-    g.h2hRec = f.h2hRec;
-    g.formH = f.formH; g.formA = f.formA;
-  }
+  const ha = homeAdv(await loadMeta());
+  for (const g of games) scoreOne(players, ha, g);
   return games;
 }
 
@@ -292,86 +323,39 @@ export async function ratingsMeta() {
   };
 }
 
-function wilsonLo(w, n) {
-  if (!n) return 0;
-  const z = 1.96, z2 = z * z, p = w / n;
-  const den = 1 + z2 / n;
-  const centre = p + z2 / (2 * n);
-  const marg = z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n);
-  return (centre - marg) / den;
-}
-
-/** Last N days of finished SportyBet games with odds. Score them with the
- *  current model. "Beat the book" = our favourite ≥60% AND ≥5pp above the
- *  book's % on that same side. Proven only if that bucket actually hits. */
+/** Last N days of finished SportyBet games, graded on the % we wrote down
+ *  before each result was learned (pre_home) — never on today's ratings, which
+ *  have already trained on those same games. "Beat the book" = our favourite
+ *  ≥60% AND ≥5pp above the book's % on that side. Proven only if backing that
+ *  bucket at the posted price made money, and the hit rate's lower bound clears
+ *  the rate those prices need to break even. */
 export async function scoreHoldout(days = 14, opts = {}) {
   await ensure();
   if (!opts.force) {
     try {
       const prev = await sql`SELECT data FROM tt_rating_meta WHERE k = 'holdout'`;
       const cur = prev[0] && prev[0].data ? JSON.parse(prev[0].data) : null;
-      if (cur && cur.v === 2 && cur.at && Date.now() - Date.parse(cur.at) < 6 * 3600 * 1000) return cur;
+      if (cur && cur.v === 3 && cur.at && Date.now() - Date.parse(cur.at) < 6 * 3600 * 1000) return cur;
     } catch { /* score */ }
   }
   const cutoff = Date.now() - days * 86400000;
   const rows = await sql`
-    SELECT home, away, tourn, start_at, r_home, r_away, win_home, win_away
+    SELECT pre_home, r_home, r_away, win_home, win_away
     FROM tt_games
-    WHERE r_home IS NOT NULL AND r_away IS NOT NULL
+    WHERE pre_home IS NOT NULL
+      AND r_home IS NOT NULL AND r_away IS NOT NULL
       AND win_home IS NOT NULL AND win_away IS NOT NULL
       AND start_at >= ${cutoff}
-      AND match_id NOT LIKE ${"s24:%"}
-      AND match_id NOT LIKE ${"sofa:%"}
     ORDER BY start_at ASC
-    LIMIT 2000`;
-  const games = rows.map((r) => ({
-    home: r.home, away: r.away, tourn: r.tourn || "",
-    start: r.start_at ? Number(r.start_at) : 0,
+    LIMIT 5000`;
+  const out = gradeHoldout(rows.map((r) => ({
+    pre: Number(r.pre_home),
     win: { home: Number(r.win_home), away: Number(r.win_away) },
     res: { home: Number(r.r_home), away: Number(r.r_away) },
-  })).filter((g) => g.res.home !== g.res.away && g.win.home > 1 && g.win.away > 1);
-
-  const scored = games.length ? await forecastCard(games) : [];
-  let n = 0, hits = 0;
-  const beat = { n: 0, hits: 0, edge: 0 };
-  const copy = { n: 0, hits: 0 };
-  for (const g of scored) {
-    const ours = g.pct || g.ours, book = g.book;
-    if (!ours || !book) continue;
-    const wonHome = g.res.home > g.res.away;
-    const ourH = ours.home >= ours.away;
-    const bookH = book.home >= book.away;
-    const oursP = ourH ? ours.home : ours.away;
-    const bookP = ourH ? book.home : book.away;
-    const hit = ourH ? wonHome : !wonHome;
-    n++; if (hit) hits++;
-    if (ourH === bookH && oursP >= 60) {
-      const edge = oursP - bookP;
-      if (edge >= 5) {
-        beat.n++; if (hit) beat.hits++; beat.edge += edge;
-      } else {
-        copy.n++; if (hit) copy.hits++;
-      }
-    }
-  }
-  const out = {
-    v: 2,
-    days,
-    at: new Date().toISOString(),
-    n,
-    hit: n ? hits / n : null,
-    beat: {
-      n: beat.n, hits: beat.hits,
-      hit: beat.n ? beat.hits / beat.n : null,
-      wilson: wilsonLo(beat.hits, beat.n),
-      edge: beat.n ? beat.edge / beat.n : null,
-    },
-    copy: {
-      n: copy.n, hits: copy.hits,
-      hit: copy.n ? copy.hits / copy.n : null,
-    },
-  };
-  out.proven = out.beat.n >= 20 && out.beat.hit >= 0.55 && out.beat.wilson >= 0.50;
+  })));
+  out.v = 3;
+  out.days = days;
+  out.at = new Date().toISOString();
   await sql`
     INSERT INTO tt_rating_meta (k, data) VALUES ('holdout', ${JSON.stringify(out)})
     ON CONFLICT (k) DO UPDATE SET data = ${JSON.stringify(out)}`;

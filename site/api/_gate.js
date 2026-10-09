@@ -5,7 +5,10 @@ import { loadPinHash } from "./_vault.js";
 
 const SALT = "vfs-gate-v1";
 const PIN_HASH = "a1130bfe4270bc67bed0b71f0ae687df544ee38a5b342a468b15549612e9629f";
-const SECRET = process.env.GATE_SECRET || process.env.CRON_SECRET || "vfs-dev-only";
+// With neither secret set, sign with a key derived from the database URL —
+// private to this deployment — rather than a string anyone can read here.
+const SECRET = process.env.GATE_SECRET || process.env.CRON_SECRET ||
+  createHash("sha256").update("vfs-gate-key:" + (process.env.DATABASE_URL || "")).digest("hex");
 export const TTL_MS = 30 * 60 * 1000;
 export const LOCK_MINS = [30, 60, 120, 180, 240, 300, 360, 1440];
 
@@ -129,8 +132,11 @@ export function fillOk(req) {
   if (bearer && eqStr(bearer, want)) return true;
   const cron = process.env.CRON_SECRET;
   if (cron && bearer && eqStr(bearer, cron)) return true;
+  // Vercel's cron sends "Authorization: Bearer $CRON_SECRET" once CRON_SECRET is
+  // set, which the check above already takes. A user-agent can be typed by
+  // anyone, so it only counts while no CRON_SECRET exists to check instead.
   const ua = String(header(req, "user-agent") || "");
-  if (/^vercel-cron\b/i.test(ua)) return true;
+  if (!cron && /^vercel-cron\b/i.test(ua)) return true;
   return false;
 }
 

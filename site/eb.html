@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B0E12">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>eBasketball · Vantage</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/css/app.css">
+<style>
+  .eb-card { background: var(--card); box-shadow: var(--shadow); border-radius: var(--r); margin-bottom: 10px; padding: 13px 14px }
+  .eb-top { display: flex; align-items: center; gap: 8px; margin-bottom: 9px }
+  .eb-tourn { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .eb-when { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--dim); flex: none }
+  .eb-when.soon { color: var(--hold) } .eb-when.now { color: var(--bad) }
+  .eb-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 4px 0 }
+  .eb-row b { font-size: 15px; font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .eb-row b i { font-style: normal; color: var(--dim); font-weight: 600 }
+  .eb-row .n { font-size: 11px; color: var(--faint); font-weight: 600; margin-left: 6px }
+  .eb-row .px { font-family: var(--mono); font-size: 14px; font-weight: 600 }
+  .eb-row .pc { font-family: var(--mono); font-size: 12px; color: var(--dim); min-width: 92px; text-align: right }
+  .eb-row.pick b, .eb-row.pick .px { color: var(--go) }
+  .eb-tag { margin-top: 8px; font-size: 12px; color: var(--dim) }
+  .eb-tag b { color: var(--go) }
+  .seg { display: inline-flex; background: var(--card); box-shadow: var(--shadow); border-radius: 999px; padding: 3px; gap: 3px; margin-bottom: 12px }
+  .seg a { color: var(--dim); font-weight: 600; font-size: 13px; padding: 6px 14px; border-radius: 999px; text-decoration: none }
+  .seg a.on { background: var(--bg); color: var(--ink); box-shadow: var(--shadow) }
+  .stats { grid-template-columns: 1fr 1fr }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <div class="stats">
+    <div class="stat"><b id="s-up">—</b><span>On the card</span></div>
+    <div class="stat go"><b id="s-graded">—</b><span>Graded before the result</span></div>
+  </div>
+  <p class="note" id="rec-note"></p>
+  <div class="seg">
+    <a href="/tt">Table tennis</a>
+    <a href="/tennis">Tennis</a>
+    <a href="/eb" class="on">eBasketball</a>
+  </div>
+  <h2 class="lab-h">Upcoming · paper only</h2>
+  <div id="out"><div class="skel"></div><div class="skel"></div></div>
+</main>
+<script src="/js/core.js"></script>
+<script>
+(function () {
+  var V = window.VFS;
+  V.injectChrome("tt");
+
+  function pct(x) { return x == null ? "—" : Math.round(x * 100) + "%"; }
+  function odds(v) { return (v == null || !isFinite(Number(v))) ? "—" : Number(v).toFixed(2); }
+  function split(s) {
+    var m = String(s || "").match(/^(.*?)\s*\(([^()]+)\)\s*$/);
+    return m ? { team: m[1], gamer: m[2] } : { team: String(s || ""), gamer: "" };
+  }
+
+  function note(d) {
+    var r = d.record, el = document.getElementById("rec-note");
+    if (!r || !r.n) {
+      el.textContent = "Learning. Every finished game is graded on the % we had before it started; picks stay off until that record makes money.";
+      return;
+    }
+    var p = r.picks || {};
+    var bits = [r.n + " graded games"];
+    if (r.brier != null && r.bookBrier != null) {
+      bits.push(r.brier < r.bookBrier ? "sharper than the book" : "not sharper than the book yet");
+    }
+    if (p.n) {
+      bits.push("paper picks " + p.hits + "/" + p.n + " hit " + pct(p.hit)
+        + " (needs " + pct(p.breakEven) + ")"
+        + " · return " + (p.roi >= 0 ? "+" : "") + Math.round(p.roi * 100) + "%");
+    }
+    bits.push(r.proven ? "picks on" : "picks stay off until 100+ picks make money");
+    el.textContent = bits.join(" · ");
+  }
+
+  function row(name, price, n, ours, book, isPick) {
+    var r = V.el("div", "eb-row" + (isPick ? " pick" : ""));
+    var s = split(name);
+    var b = V.el("b");
+    b.appendChild(document.createTextNode(s.gamer || s.team));
+    if (s.gamer) { b.appendChild(document.createTextNode(" ")); b.appendChild(V.el("i", "", s.team)); }
+    b.appendChild(V.el("span", "n", n + "g"));
+    r.appendChild(b);
+    r.appendChild(V.el("span", "pc", "ours " + (ours == null ? "—" : Math.round(ours) + "%") + " · book " + (book == null ? "—" : Math.round(book) + "%")));
+    r.appendChild(V.el("span", "px", odds(price)));
+    return r;
+  }
+
+  function render(d) {
+    var out = document.getElementById("out");
+    out.innerHTML = "";
+    var games = d.games || [];
+    if (!games.length) {
+      out.appendChild(V.el("p", "note", "No priced eBasketball games right now. Prices show about an hour before tip-off."));
+      return;
+    }
+    games.forEach(function (g) {
+      var c = V.el("div", "eb-card");
+      var top = V.el("div", "eb-top");
+      top.appendChild(V.el("span", "eb-tourn", (g.tourn || "").replace(/\s*\(.*?\)\s*/g, " ").trim()));
+      var t = V.until(g.start);
+      top.appendChild(V.el("time", "eb-when " + (t.cls || ""), t.text || V.clock(g.start)));
+      c.appendChild(top);
+      var pk = g.pick;
+      c.appendChild(row(g.home, g.win.home, g.nH, g.ours, g.book, pk && pk.side === "home"));
+      c.appendChild(row(g.away, g.win.away, g.nA,
+        g.ours == null ? null : 100 - g.ours, g.book == null ? null : 100 - g.book, pk && pk.side === "away"));
+      if (pk) {
+        var tag = V.el("div", "eb-tag");
+        tag.appendChild(V.el("b", "", (pk.live ? "Pick " : "Watching ") + (pk.side === "home" ? split(g.home).gamer : split(g.away).gamer) + " @ " + odds(pk.price)));
+        tag.appendChild(document.createTextNode(" · ours " + pct(pk.ours) + " vs book " + pct(pk.book)
+          + (pk.live ? "" : " · not proven, paper only")));
+        c.appendChild(tag);
+      }
+      out.appendChild(c);
+    });
+  }
+
+  function load() {
+    return fetch("/api/tt?card=eb").then(function (r) { return r.json(); }).then(function (d) {
+      if (!d || d.locked) return;
+      document.getElementById("s-up").textContent = String((d.games || []).length);
+      document.getElementById("s-graded").textContent = String((d.counts && d.counts.graded) || 0);
+      note(d);
+      render(d);
+    }).catch(function () {
+      document.getElementById("out").innerHTML = "";
+      document.getElementById("out").appendChild(V.el("p", "note", "Could not reach the card. Pull to refresh."));
+    });
+  }
+
+  load();
+  // Keep banking prices while the page is open; games are only priced shortly before tip-off.
+  setInterval(function () { if (document.visibilityState === "visible") load(); }, 120000);
+})();
+</script>
+</body>
+</html>

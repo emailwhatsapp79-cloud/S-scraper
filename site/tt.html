@@ -93,6 +93,7 @@
   <div class="seg">
     <a href="/tt" class="on">Table tennis</a>
     <a href="/tennis">Tennis</a>
+    <a href="/eb">eBasketball</a>
   </div>
   <div class="seg" id="seg">
     <button type="button" data-mode="up" class="on">Upcoming</button>
@@ -440,8 +441,10 @@
     if (h && h.beat) {
       var bn = h.beat.n || 0, bh = h.beat.hits || 0;
       var pct = bn ? Math.round((h.beat.hit || 0) * 100) + "%" : "—";
-      parts.push("Last " + (h.days || 14) + " days · beat-the-book " + bh + "/" + bn + " hit " + pct
-        + (h.proven ? " · 60%+ on" : " · 60%+ stays off"));
+      var roi = (h.beat.roi == null || !isFinite(h.beat.roi)) ? "" : " · return " + (h.beat.roi >= 0 ? "+" : "") + Math.round(h.beat.roi * 100) + "%";
+      var need = (h.beat.breakEven == null) ? "" : " (needs " + Math.round(h.beat.breakEven * 100) + "%)";
+      parts.push("Last " + (h.days || 14) + " days, graded before each result · beat-the-book " + bh + "/" + bn + " hit " + pct
+        + need + roi + (h.proven ? " · 60%+ on" : " · 60%+ stays off"));
     } else if (b && b.n) {
       parts.push("Scoring last 2 weeks…");
     }
