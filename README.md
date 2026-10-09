@@ -33,9 +33,10 @@ between named gamers, ~250 a day. The gamer is the name in brackets; the team
 changes game to game. Each gamer carries a number that moves on *result minus
 the book's %*, so it measures who keeps beating the book, not who is good (the
 book already knows that). Picks show as "watching" until 100+ graded paper
-picks have made money. Prices only appear an hour or so before tip-off, so point
-an outside pinger at `/api/poll?eb=1` every 10–15 minutes or most games are
-never priced.
+picks have made money. Prices only appear an hour or so before tip-off, so
+`.github/workflows/eb-bank.yml` calls `/api/poll?eb=1` every 10 minutes, and any
+open page of the app banks it every 5. That route needs no key — it only reads
+public odds — and skips if it ran in the last 4 minutes.
 
 ## The vFootball screen
 
