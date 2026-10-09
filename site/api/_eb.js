@@ -125,7 +125,7 @@ export async function settleEB(hours = 6) {
       for (const ev of t.events || []) {
         count++;
         const s = finalScore(ev);
-        if (s && ev.gameId) found.push([String(ev.gameId), s.home, s.away]);
+        if (s && ev.gameId) found.push([String(ev.gameId), s.home, s.away, String(ev.eventId || "")]);
       }
     }
     if (count < 100) break;
@@ -135,8 +135,9 @@ export async function settleEB(hours = 6) {
     UPDATE eb_games t SET r_home = v.h, r_away = v.a, settled_at = now()
     FROM (SELECT unnest(${found.map((x) => x[0])}::text[]) AS id,
                  unnest(${found.map((x) => x[1])}::int[]) AS h,
-                 unnest(${found.map((x) => x[2])}::int[]) AS a) v
-    WHERE t.match_id = v.id AND t.r_home IS NULL
+                 unnest(${found.map((x) => x[2])}::int[]) AS a,
+                 unnest(${found.map((x) => x[3])}::text[]) AS ev) v
+    WHERE (t.match_id = v.id OR (v.ev <> '' AND t.event_id = v.ev)) AND t.r_home IS NULL
     RETURNING t.match_id`;
   return { settled: rows.length };
 }
