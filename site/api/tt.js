@@ -21,6 +21,13 @@ export default async function handler(req, res) {
   const q = queryOf(req);
   // eBasketball, paper only. Rides this function rather than its own so the
   // deployment does not grow another serverless function.
+  if (String(q.card || "") === "eb" && String(q.bank || "") === "1") {
+    let pass;
+    try { pass = await refreshEB(); } catch (e) { pass = { error: String(e?.message || e) }; }
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json({ ok: !pass.error, tookMs: Date.now() - started, pass });
+    return;
+  }
   if (String(q.card || "") === "eb") {
     let pass = null, record = null, games = [], counts = null, error = null;
     try { pass = await refreshEB(); } catch (e) { pass = { error: String(e?.message || e) }; }
