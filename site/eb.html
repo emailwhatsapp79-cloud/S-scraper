@@ -43,11 +43,6 @@
 </head>
 <body>
 <main class="wrap">
-  <div class="seg">
-    <a href="/tt">Table tennis</a>
-    <a href="/tennis">Tennis</a>
-    <a href="/eb" class="on">eBasketball</a>
-  </div>
   <div class="stats">
     <div class="stat"><b id="s-up">—</b><span>On the card</span></div>
     <div class="stat go"><b id="s-graded">—</b><span>Graded before the result</span></div>
@@ -60,7 +55,7 @@
 <script>
 (function () {
   var V = window.VFS;
-  V.injectChrome("tt");
+  V.injectChrome("eb");
 
   function pct(x) { return x == null ? "—" : Math.round(x * 100) + "%"; }
   function odds(v) { return (v == null || !isFinite(Number(v))) ? "—" : Number(v).toFixed(2); }

@@ -943,48 +943,47 @@
     if (tab) tab.classList.toggle("full", n > 0);
   }
 
+  // Header: menu, brand, the page's own buttons. Every page lives in the side
+  // drawer (Bet / Records / More); the bottom bar keeps the five used most.
   function injectChrome(active, extra) {
     extra = extra || "";
     if (!document.querySelector(".top")) {
       var top = document.createElement("header");
       top.className = "top";
       top.innerHTML =
-        '<div class="mark" aria-hidden="true"><svg viewBox="0 0 100 100" width="20" height="20" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M27 43 L45 67 L75 23"/></svg></div>' +
+        '<button class="gear-btn menu-btn" type="button" id="vfs-menu" aria-label="Menu" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>' +
         '<div class="brand"><b>Vantage</b><span>SportyBet screener</span></div>' +
-        extra +
-        '<a class="gear-btn" href="/ledger" data-nav="ledger" aria-label="History" title="History">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>' +
-        '</a>' +
-        '<a class="gear-btn" href="/rules" data-nav="rules" aria-label="Rules" title="Rules">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' +
-        '</a>' +
-        '<button class="ghost lock-btn" type="button" id="vfs-lock" aria-label="Lock">Lock</button>';
+        extra;
       document.body.insertBefore(top, document.body.firstChild);
+    }
+    if (!document.querySelector(".drawer")) {
+      var bg = document.createElement("div");
+      bg.className = "drawer-bg";
+      var dr = document.createElement("aside");
+      dr.className = "drawer";
+      dr.setAttribute("aria-label", "Menu");
+      dr.innerHTML = '<div class="drawer-head"><div class="mark" aria-hidden="true"><svg viewBox="0 0 100 100" width="20" height="20" fill="none" stroke="currentColor" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"><path d="M27 43 L45 67 L75 23"/></svg></div><div class="brand"><b>Vantage</b><span>Menu</span></div></div><div class="drawer-sec">Bet</div><a href="/" data-nav="matches"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg><span>vFootball matches</span></a><a href="/tt" data-nav="tt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="9" r="6"/><path d="M6 13.2 3.4 19.6"/><circle cx="17.6" cy="15.4" r="1.3" fill="currentColor" stroke="none"/></svg><span>Table tennis</span></a><a href="/tennis" data-nav="tennis"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6c3.2 3.2 3.2 9.6 0 12.8M18.4 5.6c-3.2 3.2-3.2 9.6 0 12.8"/></svg><span>Tennis</span></a><a href="/eb" data-nav="eb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.6 5.6c2.4 2 3.4 4 3.4 6.4s-1 4.4-3.4 6.4M18.4 5.6c-2.4 2-3.4 4-3.4 6.4s1 4.4 3.4 6.4"/></svg><span>eBasketball</span></a><a href="/book" data-nav="book"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v16l-3.2-1.6-3.3 1.6-3.3-1.6L5.5 21V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M9 8h6M9 12h6M9 16h3.5"/></svg><span>Betslip</span></a><div class="drawer-sec">Records</div><a href="/ledger" data-nav="ledger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>History</span></a><div class="drawer-sec">More</div><a href="/card" data-nav="card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg><span>Card · every vFootball game</span></a><a href="/lab" data-nav="lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6l-5 8a2 2 0 0 0 1.8 3h12.4a2 2 0 0 0 1.8-3l-5-8V3"/><path d="M8 3h8M8 13h8"/></svg><span>Lab · backtest the screen</span></a><a href="/rules" data-nav="rules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><span>Rules & settings</span></a><button type="button" class="drawer-lock" id="vfs-lock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Lock</span></button>';
+      document.body.appendChild(bg);
+      document.body.appendChild(dr);
+      var setOpen = function (on) {
+        document.body.classList.toggle("drawer-open", on);
+        var mb = document.getElementById("vfs-menu");
+        if (mb) mb.setAttribute("aria-expanded", on ? "true" : "false");
+      };
+      document.getElementById("vfs-menu").addEventListener("click", function () {
+        setOpen(!document.body.classList.contains("drawer-open"));
+      });
+      bg.addEventListener("click", function () { setOpen(false); });
+      document.addEventListener("keydown", function (e) { if (e.key === "Escape") setOpen(false); });
     }
     if (!document.querySelector(".nav")) {
       var nav = document.createElement("nav");
       nav.className = "nav";
       nav.setAttribute("aria-label", "Primary");
-      nav.innerHTML =
-        '<a href="/" data-nav="matches">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>' +
-          "Matches</a>" +
-        '<a href="/card" data-nav="card">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 9h8M8 13h5"/></svg>' +
-          "Card</a>" +
-        '<a href="/book" class="slip-tab" data-nav="book" aria-label="Betslip">' +
-          '<span class="n"></span>' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v16l-3.2-1.6-3.3 1.6-3.3-1.6L5.5 21V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M9 8h6M9 12h6M9 16h3.5"/></svg>' +
-          "Betslip</a>" +
-        '<a href="/lab" data-nav="lab">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v6l-5 8a2 2 0 0 0 1.8 3h12.4a2 2 0 0 0 1.8-3l-5-8V3"/><path d="M8 3h8M8 13h8"/></svg>' +
-          "Lab</a>" +
-        '<a href="/tt" data-nav="tt">' +
-          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="9" r="6"/><path d="M6 13.2 3.4 19.6"/><circle cx="17.6" cy="15.4" r="1.3" fill="currentColor" stroke="none"/></svg>' +
-          "Sports</a>";
+      nav.innerHTML = '<a href="/" data-nav="matches"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>Matches</a><a href="/tt" data-nav="tt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="9" r="6"/><path d="M6 13.2 3.4 19.6"/><circle cx="17.6" cy="15.4" r="1.3" fill="currentColor" stroke="none"/></svg>Table tennis</a><a href="/book" class="slip-tab" data-nav="book" aria-label="Betslip"><span class="n"></span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3.5h10a1.5 1.5 0 0 1 1.5 1.5v16l-3.2-1.6-3.3 1.6-3.3-1.6L5.5 21V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M9 8h6M9 12h6M9 16h3.5"/></svg>Betslip</a><a href="/tennis" data-nav="tennis"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6c3.2 3.2 3.2 9.6 0 12.8M18.4 5.6c-3.2 3.2-3.2 9.6 0 12.8"/></svg>Tennis</a><a href="/eb" data-nav="eb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.6 5.6c2.4 2 3.4 4 3.4 6.4s-1 4.4-3.4 6.4M18.4 5.6c-2.4 2-3.4 4-3.4 6.4s1 4.4 3.4 6.4"/></svg>eBasket</a>';
       document.body.appendChild(nav);
     }
-    document.querySelectorAll(".nav a, .gear-btn").forEach(function (a) {
+    document.querySelectorAll(".nav a, .gear-btn, .drawer a").forEach(function (a) {
       if (a.getAttribute("data-nav") === active) a.classList.add("on");
     });
     paintSlip();

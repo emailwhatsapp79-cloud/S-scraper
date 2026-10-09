@@ -866,3 +866,29 @@ html:not(.gate-ok) body .top { visibility: hidden }
 .str { display: inline-block; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; font-weight: 700; border-radius: 999px; padding: 2px 8px; flex: none }
 .str.strong { background: var(--go); color: #04140a }
 .str.good { color: var(--go); box-shadow: inset 0 0 0 1px var(--go) }
+
+/* Side drawer — every page, grouped; the bottom bar keeps the five used most */
+.menu-btn { margin-left: -4px }
+.drawer-bg { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.5); opacity: 0; pointer-events: none; transition: opacity .2s ease }
+.drawer {
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 61;
+  width: min(300px, 84vw); overflow-y: auto;
+  padding: 14px 12px calc(20px + env(safe-area-inset-bottom));
+  background: var(--bg2, var(--card)); box-shadow: 1px 0 0 var(--line), 12px 0 40px rgba(0,0,0,.35);
+  transform: translateX(-102%); transition: transform .22s ease;
+}
+body.drawer-open .drawer { transform: none }
+body.drawer-open .drawer-bg { opacity: 1; pointer-events: auto }
+body.drawer-open { overflow: hidden }
+.drawer-head { display: flex; align-items: center; gap: 12px; padding: 4px 6px 10px }
+.drawer-sec { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); font-weight: 700; padding: 14px 10px 6px }
+.drawer a, .drawer-lock {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 11px 10px; border-radius: 11px; border: 0; background: transparent;
+  color: var(--ink); font: inherit; font-size: 14.5px; font-weight: 600; text-align: left; text-decoration: none; cursor: pointer;
+}
+.drawer a svg, .drawer-lock svg { width: 20px; height: 20px; flex: none; color: var(--dim) }
+.drawer a.on { background: color-mix(in srgb, var(--go) 14%, transparent); color: var(--go) }
+.drawer a.on svg { color: var(--go) }
+.drawer-lock { margin-top: 14px; color: var(--dim); box-shadow: inset 0 1px 0 var(--line); border-radius: 0 }
+@media (prefers-reduced-motion: reduce) { .drawer, .drawer-bg { transition: none } }
