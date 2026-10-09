@@ -122,6 +122,7 @@ export async function fetchTTCard() {
   const seen = new Set();
   const errors = [];
   try {
+    let read = 0;
     for (let page = 1; page <= 6; page++) {
       const data = await getJson("pcUpcomingEvents", {
         sportId: SPORT, marketId: MARKET_IDS, option: "1",
@@ -139,7 +140,10 @@ export async function fetchTTCard() {
           found.push({ ...ev, _tourn: tourn });
         }
       }
-      if (count < 100) break;
+      // A page can hold far fewer than pageSize (64 of 131 was seen), so a short
+      // page is not the last: stop on an empty one or once totalNum is read.
+      read += count;
+      if (!count || read >= Number(data?.totalNum || 0)) break;
     }
   } catch (e) {
     errors.push(String(e?.message || e));

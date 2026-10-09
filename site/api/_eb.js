@@ -64,6 +64,7 @@ async function ensure() {
 export async function fetchEBCard() {
   const out = [];
   const seen = new Set();
+  let read = 0;
   for (let page = 1; page <= 4; page++) {
     const data = await getJson("pcUpcomingEvents", {
       sportId: SPORT, marketId: "219", option: "2", timeline: "48",
@@ -79,7 +80,8 @@ export async function fetchEBCard() {
         out.push(g);
       }
     }
-    if (count < 100) break;
+    read += count;
+    if (!count || read >= Number(data?.totalNum || 0)) break;
   }
   return out;
 }
@@ -113,7 +115,8 @@ export async function settleEB(hours = 6) {
   const end = Date.now();
   const start = end - hours * 3600 * 1000;
   const found = [];
-  for (let page = 1; page <= 6; page++) {
+  let read = 0;
+  for (let page = 1; page <= 10; page++) {
     let data;
     try {
       data = await getJson("eventResultList", {
@@ -129,7 +132,10 @@ export async function settleEB(hours = 6) {
         if (s && ev.gameId) found.push([String(ev.gameId), s.home, s.away, String(ev.eventId || "")]);
       }
     }
-    if (count < 100) break;
+    // Pages hold "up to" 100 and the first often holds 99, so a short page is
+    // not the last one: stop on an empty page or once totalNum is read.
+    read += count;
+    if (!count || read >= Number(data?.totalNum || 0)) break;
   }
   if (!found.length) return { settled: 0 };
   const rows = await sql`
