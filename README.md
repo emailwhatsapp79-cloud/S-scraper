@@ -40,7 +40,8 @@ games each); the record above the card says whether those tags have made money.
 Table tennis and tennis carry the same **Strong / Good** tags: our side at 60%+
 (tennis 75%+) with the book's favourite the same player, and Strong when our
 read sits 3+ points over the price at 65%+ (tennis 78%+). Prices only appear an hour or so before tip-off, so
-`.github/workflows/eb-bank.yml` calls `/api/poll?eb=1` every 10 minutes, and any
+`.github/workflows/eb-bank.yml` calls `/api/poll?eb=1` every 10 minutes (one run
+loops ~5.5 hours, then starts the next; GitHub's own schedule only restarts it), and any
 open page of the app banks it every 5. That route needs no key — it only reads
 public odds — and skips if it ran in the last 4 minutes.
 
