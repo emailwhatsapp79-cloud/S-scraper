@@ -5,6 +5,7 @@
 // the daily poll, so the card never waits on that. Gated like the rest.
 import { guard } from "./_gate.js";
 import { fetchTTCard, normalise, storeTT, listUpcomingTT, listRecentResultsTT, countsTT, getModelMeta } from "./_tt.js";
+import { refreshEB, listEB, recordEB, countsEB } from "./_eb.js";
 import { fetchTennisCard, enrichTennis, trackTennis, trackBooks, bookedTennisRecord, backfillBooks } from "./_tennis.js";
 
 function queryOf(req) {
@@ -18,6 +19,25 @@ export default async function handler(req, res) {
   if (guard(req, res)) return;
   const started = Date.now();
   const q = queryOf(req);
+  // eBasketball, paper only. Rides this function rather than its own so the
+  // deployment does not grow another serverless function.
+  if (String(q.card || "") === "eb" && String(q.bank || "") === "1") {
+    let pass;
+    try { pass = await refreshEB(); } catch (e) { pass = { error: String(e?.message || e) }; }
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json({ ok: !pass.error, tookMs: Date.now() - started, pass });
+    return;
+  }
+  if (String(q.card || "") === "eb") {
+    let pass = null, record = null, games = [], counts = null, error = null;
+    try { pass = await refreshEB(); } catch (e) { pass = { error: String(e?.message || e) }; }
+    try { record = await recordEB(); } catch (e) { error = String(e?.message || e); }
+    try { games = await listEB(!!(record && record.proven)); } catch (e) { error = error || String(e?.message || e); }
+    try { counts = await countsEB(); } catch { /* the card still shows */ }
+    res.setHeader("Cache-Control", "no-store");
+    res.status(200).json({ ok: !error, error, tookMs: Date.now() - started, pass, record, counts, games });
+    return;
+  }
   if (String(q.card || "") === "tennis" && String(q.record || "") === "1") {
     try {
       try { await backfillBooks(); } catch { /* the saved rows still show */ }

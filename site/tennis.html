@@ -69,6 +69,7 @@
   <div class="seg">
     <a href="/tt">Table tennis</a>
     <a href="/tennis" class="on">Tennis</a>
+    <a href="/eb">eBasketball</a>
   </div>
   <div class="chips" id="views">
     <button type="button" class="chip on" id="v-matches">Matches</button>
@@ -86,10 +87,13 @@
   V.injectChrome("tt");
   var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", RECORD = null, BOOKED = null, BOOKS = [], REC = "score", WHEN = "wait";
 
+  // "Cerundolo, Francisco" -> Cerundolo; "Stevens B" -> Stevens;
+  // a doubles pair "Krawietz K / Puetz T" -> Krawietz / Puetz.
   function lastName(s) {
     var t = String(s || "").trim();
+    if (t.indexOf("/") >= 0) return t.split("/").map(lastName).join(" / ");
     if (t.indexOf(",") >= 0) return t.split(",")[0].trim();
-    var p = t.split(/\s+/);
+    var p = t.split(/\s+/).filter(function (w) { return !/^[A-Z]\.?$/.test(w); });
     return p[p.length - 1] || t;
   }
   function pct(n) { return (n == null || !isFinite(n)) ? "—" : Math.round(n) + "%"; }

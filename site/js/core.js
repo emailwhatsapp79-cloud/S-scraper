@@ -964,7 +964,7 @@
           "Lab</a>" +
         '<a href="/tt" data-nav="tt">' +
           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="9" r="6"/><path d="M6 13.2 3.4 19.6"/><circle cx="17.6" cy="15.4" r="1.3" fill="currentColor" stroke="none"/></svg>' +
-          "TT</a>";
+          "Sports</a>";
       document.body.appendChild(nav);
     }
     document.querySelectorAll(".nav a, .gear-btn").forEach(function (a) {
@@ -1227,8 +1227,27 @@
         markOpen(d.remainingMs);
         scheduleLock(d.remainingMs);
         hydrate();
+        bankEB();
       }
     }).catch(function () { markLocked(); showLock(); });
+  }
+
+  // eBasketball prices only show shortly before tip-off, so while any page is
+  // open and unlocked, bank the card every 5 minutes in the background. The
+  // last run time is shared across tabs so two open pages don't double up.
+  var ebTimer = null;
+  function bankEB() {
+    if (ebTimer) return;
+    function tick() {
+      if (document.visibilityState !== "visible") return;
+      var last = 0;
+      try { last = Number(localStorage.getItem("vfs_eb_bank")) || 0; } catch (e) { last = 0; }
+      if (Date.now() - last < 5 * 60 * 1000) return;
+      try { localStorage.setItem("vfs_eb_bank", String(Date.now())); } catch (e) { /* still bank */ }
+      fetch("/api/tt?card=eb&bank=1").catch(function () {});
+    }
+    tick();
+    ebTimer = setInterval(tick, 60 * 1000);
   }
 
   function lockNow() {

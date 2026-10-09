@@ -1,18 +1,44 @@
 # sportyfilter
 
-A screener for SportyBet **vFootball**. It does not place bets and it does not
-browse. You hand it match odds as JSON, it hands back the short list of games
-whose odds sit inside the bands you set.
+Started as a screener for SportyBet **vFootball**; it is now a personal betting
+workstation covering vFootball, table tennis, tennis and eBasketball.
 
 The live site — [vfootball-screener.vercel.app](https://vfootball-screener.vercel.app) —
-reads today's remaining card itself. Open it; there is nothing to install.
+reads the cards itself. Behind the PIN it can also **place real slips** on
+SportyBet or Football.com with your own login (`site/api/_fc.js`), and issue
+booking codes. The Python package below is the original offline screener and
+never touches an account.
 
 ```
 python3 -m sportyfilter samples/screenshot_games.json --all
 python3 -m sportyfilter samples/synthetic_pass.json -c config.json --json
 ```
 
-## The screen
+## How the models are graded
+
+Every model is judged the same way before it is allowed to switch picks on:
+
+- **Walk-forward only.** A game is scored with what was known before it
+  started. Table tennis and eBasketball write the % down on the game row before
+  its result is trained in, and the record reads only that number.
+- **Profit at the posted price, not hit rate.** A 60% favourite that hits 58%
+  still loses money once the margin is in. "Proven" needs a positive return and
+  a Wilson lower bound on the hit rate above the rate those prices need to break
+  even.
+
+## eBasketball (paper only)
+
+`/eb`. SportyBet's eBasketball (`sr:sport:153`) — 4×5-minute NBA 2K games
+between named gamers, ~250 a day. The gamer is the name in brackets; the team
+changes game to game. Each gamer carries a number that moves on *result minus
+the book's %*, so it measures who keeps beating the book, not who is good (the
+book already knows that). Picks show as "watching" until 100+ graded paper
+picks have made money. Prices only appear an hour or so before tip-off, so
+`.github/workflows/eb-bank.yml` calls `/api/poll?eb=1` every 10 minutes, and any
+open page of the app banks it every 5. That route needs no key — it only reads
+public odds — and skips if it ran in the last 4 minutes.
+
+## The vFootball screen
 
 Sides are never hardcoded. For each match the **favourite** is whichever of the
 full-time home/away legs is the shorter price, and the **dog** is the other one.

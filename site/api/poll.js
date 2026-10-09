@@ -1,5 +1,5 @@
 // Cron target: pull the card and save it without shipping 400 games back.
-import { logErr } from "./_db.js";
+import { sql, logErr } from "./_db.js";
 import { store } from "./_store.js";
 import { fetchCard, fetchLive, normalise } from "./_card.js";
 import { refreshSlips } from "./_slips.js";
@@ -9,6 +9,7 @@ import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT, rebuild
 import { pullScores24 } from "./_s24.js";
 import { pullSetka, pullSetkaDays } from "./_setka.js";
 import { rebuildVF } from "./_vf_model.js";
+import { refreshEB } from "./_eb.js";
 import { requireFill } from "./_gate.js";
 import { touchHealth } from "./_health.js";
 // Sofascore history is disabled: its API 403s every server request, so it banked
@@ -65,10 +66,33 @@ async function vfHeartbeat() {
   return out;
 }
 
+// eBasketball banking takes no key, by the owner's choice: it only reads
+// SportyBet's public card and saves it, so the GitHub schedule can call it
+// without a stored secret. A run inside the last 4 minutes answers "skipped",
+// so calling it more often does nothing.
+async function ebTick(res) {
+  let out;
+  try {
+    const last = await sql`SELECT at FROM health WHERE k = 'eb'`;
+    const at = last[0] ? new Date(last[0].at).getTime() : 0;
+    if (Date.now() - at < 4 * 60 * 1000) {
+      out = { ok: true, skipped: true };
+    } else {
+      await touchHealth("eb", { started: true });
+      out = { ok: true, ...(await refreshEB()) };
+      await touchHealth("eb", out);
+    }
+  } catch (e) { out = { ok: false, error: String(e?.message || e) }; }
+  res.setHeader("Cache-Control", "no-store");
+  return res.status(200).json(out);
+}
+
 export default async function handler(req, res) {
+  const url = new URL(req.url, "http://x");
+  if (url.searchParams.get("eb") === "1") return ebTick(res);
+
   if (requireFill(req, res)) return;
 
-  const url = new URL(req.url, "http://x");
   if (url.searchParams.get("vf") === "1") {
     const out = await vfHeartbeat();
     res.setHeader("Cache-Control", "no-store");
@@ -96,6 +120,10 @@ export default async function handler(req, res) {
     settled = await settlePicks(25);
     gamesSettled = (await settleGames(25)).settled;
   } catch (e) { logErr("poll.picks", e); pickError = String(e?.message || e); }
+
+  let eb = null;
+  try { eb = await refreshEB(); }
+  catch (e) { logErr("poll.eb", e); eb = { error: String(e?.message || e) }; }
 
   let tt = null;
   try {
@@ -138,6 +166,7 @@ export default async function handler(req, res) {
     gamesSettled,
     pickError,
     tt,
+    eb,
     saveError,
     feedErrors: errors.length ? errors : null,
   });

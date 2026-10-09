@@ -1,0 +1,16 @@
+# Saves the eBasketball card every 10 minutes. Its prices only show about an
+# hour before tip-off, so without this most games are never priced. The route
+# needs no key (it only reads SportyBet's public odds) and skips if it ran in
+# the last 4 minutes. GitHub runs schedules from the default branch only.
+name: eb-bank
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+jobs:
+  bank:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Bank eBasketball
+        run: curl -fsS --max-time 55 "https://vfootball-screener.vercel.app/api/poll?eb=1"
