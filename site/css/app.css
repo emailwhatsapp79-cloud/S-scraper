@@ -779,6 +779,7 @@ body.has-dock { padding-bottom: calc(var(--nav-h) + 68px + env(safe-area-inset-b
 }
 .gear-btn svg { width: 20px; height: 20px }
 .gear-btn:active { transform: scale(0.94) }
+.gear-btn:disabled { opacity: .45 }
 .gear-btn.on { color: var(--go); border-color: color-mix(in srgb, var(--go) 45%, var(--line)) }
 .ghost.on { background: var(--go); color: var(--go-ink); box-shadow: none }
 body.locked .wrap,

@@ -18,12 +18,15 @@
   .eb-tourn { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--faint); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .eb-when { margin-left: auto; font-family: var(--mono); font-size: 12.5px; color: var(--dim); flex: none }
   .eb-when.soon { color: var(--hold) } .eb-when.now { color: var(--bad) }
-  .eb-row { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 4px 0 }
-  .eb-row b { font-size: 15px; font-weight: 650; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-  .eb-row b i { font-style: normal; color: var(--dim); font-weight: 600 }
+  .eb-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px; padding: 6px 0 }
+  .eb-row + .eb-row { border-top: 1px solid rgba(255,255,255,.06) }
+  .eb-row .who { min-width: 0 }
+  .eb-row b { display: block; font-size: 15px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
   .eb-row .n { font-size: 11px; color: var(--faint); font-weight: 600; margin-left: 6px }
-  .eb-row .px { font-family: var(--mono); font-size: 14px; font-weight: 600 }
-  .eb-row .pc { font-family: var(--mono); font-size: 12px; color: var(--dim); min-width: 92px; text-align: right }
+  .eb-row .team { display: block; font-size: 12px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+  .eb-row .rt { text-align: right }
+  .eb-row .px { display: block; font-family: var(--mono); font-size: 15px; font-weight: 600 }
+  .eb-row .pc { display: block; font-family: var(--mono); font-size: 11px; color: var(--dim); white-space: nowrap }
   .eb-row.pick b, .eb-row.pick .px { color: var(--go) }
   .eb-tag { margin-top: 8px; font-size: 12px; color: var(--dim) }
   .eb-tag b { color: var(--go) }
@@ -35,16 +38,16 @@
 </head>
 <body>
 <main class="wrap">
-  <div class="stats">
-    <div class="stat"><b id="s-up">—</b><span>On the card</span></div>
-    <div class="stat go"><b id="s-graded">—</b><span>Graded before the result</span></div>
-  </div>
-  <p class="note" id="rec-note"></p>
   <div class="seg">
     <a href="/tt">Table tennis</a>
     <a href="/tennis">Tennis</a>
     <a href="/eb" class="on">eBasketball</a>
   </div>
+  <div class="stats">
+    <div class="stat"><b id="s-up">—</b><span>On the card</span></div>
+    <div class="stat go"><b id="s-graded">—</b><span>Graded before the result</span></div>
+  </div>
+  <p class="note" id="rec-note"></p>
   <h2 class="lab-h">Upcoming · paper only</h2>
   <div id="out"><div class="skel"></div><div class="skel"></div></div>
 </main>
@@ -84,13 +87,16 @@
   function row(name, price, n, ours, book, isPick) {
     var r = V.el("div", "eb-row" + (isPick ? " pick" : ""));
     var s = split(name);
-    var b = V.el("b");
-    b.appendChild(document.createTextNode(s.gamer || s.team));
-    if (s.gamer) { b.appendChild(document.createTextNode(" ")); b.appendChild(V.el("i", "", s.team)); }
-    b.appendChild(V.el("span", "n", n + "g"));
-    r.appendChild(b);
-    r.appendChild(V.el("span", "pc", "ours " + (ours == null ? "—" : Math.round(ours) + "%") + " · book " + (book == null ? "—" : Math.round(book) + "%")));
-    r.appendChild(V.el("span", "px", odds(price)));
+    var who = V.el("div", "who");
+    var b = V.el("b", "", s.gamer || s.team);
+    b.appendChild(V.el("span", "n", n + " games"));
+    who.appendChild(b);
+    if (s.gamer) who.appendChild(V.el("span", "team", s.team));
+    r.appendChild(who);
+    var rt = V.el("div", "rt");
+    rt.appendChild(V.el("span", "px", odds(price)));
+    rt.appendChild(V.el("span", "pc", "ours " + (ours == null ? "—" : Math.round(ours) + "%") + " · book " + (book == null ? "—" : Math.round(book) + "%")));
+    r.appendChild(rt);
     return r;
   }
 

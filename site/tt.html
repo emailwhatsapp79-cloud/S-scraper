@@ -84,17 +84,17 @@
 </head>
 <body>
 <main class="wrap">
+  <div class="seg">
+    <a href="/tt" class="on">Table tennis</a>
+    <a href="/tennis">Tennis</a>
+    <a href="/eb">eBasketball</a>
+  </div>
   <div class="stats">
     <div class="stat"><b id="s-up">—</b><span>On the card</span></div>
     <div class="stat go"><b id="s-settled">—</b><span>Finished — trains %</span></div>
   </div>
   <p class="note" id="sofa-note"></p>
   <p class="note" id="bt-note"></p>
-  <div class="seg">
-    <a href="/tt" class="on">Table tennis</a>
-    <a href="/tennis">Tennis</a>
-    <a href="/eb">eBasketball</a>
-  </div>
   <div class="seg" id="seg">
     <button type="button" data-mode="up" class="on">Upcoming</button>
     <button type="button" data-mode="res">Results</button>
@@ -475,7 +475,8 @@
         // the odds/percentages appear to "change" on every tick.
         repaint(false);
         if (keep) return new Promise(function (ok) { setTimeout(ok, 600); }).then(fillPass);
-        sn.textContent = comma(f && f.settled) + " finished" + (note ? " · " + note : "") + " — keeps filling at night with the tab closed";
+        var done = f && f.settled != null ? comma(f.settled) : document.getElementById("s-settled").textContent;
+        sn.textContent = done + " finished" + (note ? " · " + note : "") + " — keeps filling at night with the tab closed";
         return repaint(true).then(function () {
           setTimeout(fillPass, 120000);
         });
