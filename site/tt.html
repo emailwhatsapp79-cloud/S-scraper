@@ -108,7 +108,7 @@
 (function () {
   var V = window.VFS;
   V.injectChrome("tt");
-  var LAST = null, LEAGUE = "All", MODE = "up", MIN60 = false, SHORT = false;
+  var LAST = null, LEAGUE = "All", MODE = "up", MIN60 = false, SHORT = false, STR = null;
 
   function odds(v) { return (v == null || !isFinite(Number(v))) ? "—" : Number(v).toFixed(2); }
 
@@ -260,6 +260,8 @@
     if (!g.pct && !g.ours) {
       top.appendChild(V.el("span", "tt-tag", g.book ? "book odds · thin history" : "no data yet"));
     }
+    var lvl = levelOf(g);
+    if (lvl) top.appendChild(V.strengthTag(lvl));
     top.appendChild(whenEl(g));
     box.appendChild(top);
 
@@ -325,8 +327,17 @@
     return hotPick(g) && pr != null && pr <= 1.50;
   }
 
+  // Strong / Good on our side, with the book's favourite the same player.
+  function levelOf(g) {
+    var p = g.pct || g.ours, b = g.book;
+    if (!p || !b) return null;
+    var home = Number(p.home) >= Number(p.away);
+    return V.strength(home ? p.home : p.away, home ? b.home : b.away, Math.min(g.nH || 0, g.nA || 0));
+  }
+
   function filtered(list) {
     var out = LEAGUE === "All" ? list.slice() : list.filter(function (g) { return (g.tourn || "Other") === LEAGUE; });
+    if (MODE === "up" && STR) out = out.filter(function (g) { var l = levelOf(g); return STR === "strong" ? l === "strong" : !!l; });
     if (MODE === "up" && SHORT) out = out.filter(shortPick);
     else if (MODE === "up" && MIN60) out = out.filter(hotPick);
     return out;
@@ -343,6 +354,15 @@
     var box = document.getElementById("tourns");
     box.textContent = "";
     if (MODE === "up") {
+      var nStrong = games.filter(function (g) { return levelOf(g) === "strong"; }).length;
+      var nGood = games.filter(function (g) { return !!levelOf(g); }).length;
+      [["strong", "Strong " + nStrong], ["good", "Strong + good " + nGood]].forEach(function (c) {
+        var sb = V.el("button", "chip" + (STR === c[0] ? " on" : ""), c[1]);
+        sb.type = "button";
+        sb.setAttribute("aria-pressed", STR === c[0] ? "true" : "false");
+        sb.addEventListener("click", function () { STR = STR === c[0] ? null : c[0]; render(); });
+        box.appendChild(sb);
+      });
       var n60 = games.filter(hotPick).length;
       var hot = V.el("button", "chip" + (MIN60 && !SHORT ? " on" : ""), "60%+ " + n60);
       hot.type = "button";
@@ -380,6 +400,7 @@
     if (!list.length) {
       out.appendChild(V.el("div", "empty", MODE === "res"
         ? "No results banked yet — they fill in as matches finish."
+        : STR ? "Nothing " + (STR === "strong" ? "strong" : "strong or good") + " on this card right now."
         : (SHORT
           ? "None at 60%+ with the favourite at 1.50 or shorter."
           : (MIN60

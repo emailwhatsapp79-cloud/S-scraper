@@ -289,18 +289,18 @@ export async function createSlip(stake, incoming, book, opts = {}) {
       };
     } else if (!g && row.home && row.eventId && row.price) {
       const league = row.league || "";
-      const asked = row.sport === "tn" || row.sport === "tt" ? row.sport : "";
+      const asked = row.sport === "tn" || row.sport === "tt" || row.sport === "eb" ? row.sport : "";
       g = {
         id, eventId: row.eventId, home: row.home, away: row.away,
-        league: league || (asked === "tn" ? "Tennis" : "Table tennis"),
+        league: league || (asked === "tn" ? "Tennis" : asked === "eb" ? "eBasketball" : "Table tennis"),
         kickoff: row.kickoff || null,
         ft: { home: row.selection === "1" ? Number(row.price) : null, draw: null, away: row.selection === "2" ? Number(row.price) : null },
         sport: asked || (/setka|elite series|liga pro|tt cup|challenger|table tennis/i.test(String(league)) ? "tt" : "fb"),
       };
     }
     if (!g) throw new Error(`Game ${id} is not on the stored card`);
-    const sport = row.sport === "tn" || row.sport === "tt" ? row.sport : (g.sport || "fb");
-    if (sport !== "tt" && sport !== "tn" && g.eventId) {
+    const sport = row.sport === "tn" || row.sport === "tt" || row.sport === "eb" ? row.sport : (g.sport || "fb");
+    if (sport !== "tt" && sport !== "tn" && sport !== "eb" && g.eventId) {
       const ev = await fetchEvent(g.eventId);
       if (ev && ev.homeTeamName) {
         g = { ...g, home: ev.homeTeamName, away: ev.awayTeamName || g.away };
@@ -417,7 +417,8 @@ export async function refreshSlips() {
   const snaps = await Promise.all(eventIds.map((id) => {
     const fc = legs.some((l) => l.event_id === id && l.sport === "fc");
     const tn = legs.some((l) => l.event_id === id && (l.sport === "tn" || l.sport === "tt"));
-    return fetchEvent(id, tn ? { marketId: "186,199" } : {}, fc ? FOOTBALL_BASE : undefined);
+    const eb = legs.some((l) => l.event_id === id && l.sport === "eb");
+    return fetchEvent(id, eb ? { marketId: "219" } : tn ? { marketId: "186,199" } : {}, fc ? FOOTBALL_BASE : undefined);
   }));
   for (const ev of snaps) {
     const snap = scoreOf(ev);
@@ -465,7 +466,7 @@ export async function refreshSlips() {
     const ls = grouped.get(slip.id) || [];
     const anyLost = ls.some((l) => l.won === "no");
     const allWon = ls.length > 0 && ls.every((l) => l.won === "yes");
-    const anyLive = ls.some((l) => l.match_status && /^(H1|H2|HT|1H|2H|LIVE|set\s*\d|Playing|1st set|2nd set|3rd set)/i.test(l.match_status));
+    const anyLive = ls.some((l) => l.match_status && /^(H1|H2|HT|1H|2H|LIVE|set\s*\d|Playing|1st set|2nd set|3rd set|Q[1-4]|OT|Overtime|Pause)/i.test(l.match_status));
     let status = "open";
     let returned = null;
     let settledAt = null;

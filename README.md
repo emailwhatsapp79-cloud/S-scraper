@@ -32,8 +32,14 @@ Every model is judged the same way before it is allowed to switch picks on:
 between named gamers, ~250 a day. The gamer is the name in brackets; the team
 changes game to game. Each gamer carries a number that moves on *result minus
 the book's %*, so it measures who keeps beating the book, not who is good (the
-book already knows that). Picks show as "watching" until 100+ graded paper
-picks have made money. Prices only appear an hour or so before tip-off, so
+book already knows that). Prices can be tapped into the Betslip like table
+tennis (winner market `219`). Games the model leans on are tagged **Good** (our %
+4+ points over the book's, both gamers 20+ games) or **Strong** (7+ points, 40+
+games each); the record above the card says whether those tags have made money.
+
+Table tennis and tennis carry the same **Strong / Good** tags: our side at 60%+
+(tennis 75%+) with the book's favourite the same player, and Strong when our
+read sits 3+ points over the price at 65%+ (tennis 78%+). Prices only appear an hour or so before tip-off, so
 `.github/workflows/eb-bank.yml` calls `/api/poll?eb=1` every 10 minutes, and any
 open page of the app banks it every 5. That route needs no key — it only reads
 public odds — and skips if it ran in the last 4 minutes.

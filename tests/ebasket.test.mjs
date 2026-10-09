@@ -90,3 +90,25 @@ test("table tennis holdout proves a bucket that wins money clearly", () => {
   assert.ok(g.beat.roi > 0.2);
   assert.equal(g.proven, true);
 });
+
+test("an eBasketball leg books the winner market under eBasketball", async () => {
+  const { toSelection } = await import("../site/api/_share.js");
+  const row = toSelection({ sport: "eb", eventId: "sr:match:1", selection: "2", price: 1.78, home: "A (x)", away: "B (y)" });
+  assert.equal(row.marketId, "219");
+  assert.equal(row.outcomeId, "5");
+  assert.equal(row.sportId, "sr:sport:153");
+});
+
+test("the price check reads market 219 on an eBasketball event", async () => {
+  const { quote } = await import("../site/api/_fc.js");
+  const ev = {
+    eventId: "sr:match:75389334", sport: { id: "sr:sport:153" }, matchStatus: "Not start",
+    markets: [{ id: "219", desc: "Winner (incl. overtime)", product: 3, status: 0,
+      outcomes: [{ id: "4", desc: "Home", odds: "1.90", isActive: 1 }, { id: "5", desc: "Away", odds: "1.78", isActive: 1 }] }],
+  };
+  const q = quote(ev, "1", { sport: "eb" });
+  assert.equal(q.marketId, "219");
+  assert.equal(q.outcomeId, "4");
+  assert.equal(q.odds, 1.9);
+  assert.equal(q.sportId, "sr:sport:153");
+});
