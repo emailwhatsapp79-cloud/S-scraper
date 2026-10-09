@@ -1,16 +1,45 @@
 # Saves the eBasketball card every 10 minutes. Its prices only show about an
 # hour before tip-off, so without this most games are never priced. The route
 # needs no key (it only reads SportyBet's public odds) and skips if it ran in
-# the last 4 minutes. GitHub runs schedules from the default branch only.
+# the last 4 minutes.
+#
+# GitHub's own */10 schedule proved unreliable (it went hours without firing),
+# so each run loops for ~5.5 hours, then starts the next run itself. The
+# schedule stays as a fallback that restarts the chain if it ever breaks; a
+# run that finds another one already looping exits at once.
 name: eb-bank
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/30 * * * *"
   workflow_dispatch:
+permissions:
+  actions: write
+concurrency:
+  group: eb-bank
+  cancel-in-progress: false
 jobs:
   bank:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 350
     steps:
-      - name: Bank eBasketball
-        run: curl -fsS --max-time 55 "https://vfootball-screener.vercel.app/api/poll?eb=1"
+      - name: Skip if another run is already looping
+        id: busy
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow eb-bank.yml --status in_progress --json databaseId --jq "[.[] | select(.databaseId != ${{ github.run_id }})] | length")
+          echo "others=$n" >> "$GITHUB_OUTPUT"
+      - name: Bank eBasketball every 10 minutes for ~5.5 hours
+        if: steps.busy.outputs.others == '0'
+        run: |
+          end=$(( $(date +%s) + 330*60 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            curl -sS --max-time 55 "https://vfootball-screener.vercel.app/api/poll?eb=1" || true
+            echo
+            sleep 600
+          done
+      - name: Start the next run
+        if: steps.busy.outputs.others == '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run eb-bank.yml -R "$GITHUB_REPOSITORY" --ref "${{ github.ref_name }}"
