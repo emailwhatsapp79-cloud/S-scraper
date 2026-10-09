@@ -99,6 +99,7 @@ export async function storeEB(games) {
       ON CONFLICT (match_id) DO UPDATE SET
         event_id = COALESCE(EXCLUDED.event_id, eb_games.event_id),
         status = EXCLUDED.status,
+        start_at = COALESCE(EXCLUDED.start_at, eb_games.start_at),
         win_home = COALESCE(EXCLUDED.win_home, eb_games.win_home),
         win_away = COALESCE(EXCLUDED.win_away, eb_games.win_away),
         last_seen = now()`;
