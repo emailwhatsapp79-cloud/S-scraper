@@ -66,11 +66,6 @@
 </head>
 <body>
 <main class="wrap">
-  <div class="seg">
-    <a href="/tt">Table tennis</a>
-    <a href="/tennis" class="on">Tennis</a>
-    <a href="/eb">eBasketball</a>
-  </div>
   <div class="chips" id="views">
     <button type="button" class="chip on" id="v-matches">Matches</button>
     <button type="button" class="chip" id="v-book">Book</button>
@@ -84,7 +79,7 @@
 <script>
 (function () {
   var V = window.VFS;
-  V.injectChrome("tt");
+  V.injectChrome("tennis");
   var LAST = [], LEAGUE = "All", VIEW = "matches", ONLY = "", STR = "", RECORD = null, BOOKED = null, BOOKS = [], REC = "score", WHEN = "wait";
 
   // "Cerundolo, Francisco" -> Cerundolo; "Stevens B" -> Stevens;
