@@ -1375,7 +1375,8 @@ export async function backfillBooks() {
     for (let page = 1; page <= 6; page++) {
       const batch = await resultPage(start, start + 86400000, page);
       listed.push(...batch);
-      if (batch.length < 100) break;
+      // Pages run short of 100 (96 of 196 was seen), so only an empty page ends it.
+      if (!batch.length) break;
     }
   }
   const want = [];
