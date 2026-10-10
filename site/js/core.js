@@ -1371,12 +1371,29 @@
     if (!slips || !slips.length) return;
     var seen = pingSeen();
     var now = Date.now();
+    // First look on this phone (or right after turning pings on): everything
+    // already settled counts as seen, so only results that land from now on
+    // are announced — no burst of an hour's old Yes / No.
+    var based = false;
+    try { based = localStorage.getItem("vfs_ping_base") === "1"; } catch (e) { based = true; }
+    if (!based) {
+      slips.forEach(function (sp) {
+        (sp.legs || []).forEach(function (l) {
+          if (l.won === true || l.won === false) pingMark("leg-" + l.gameId + "-" + (l.won ? "yes" : "no"));
+        });
+        if (sp.status === "won" || sp.status === "lost") pingMark("slip-" + sp.id + "-" + sp.status);
+      });
+      try { localStorage.setItem("vfs_ping_base", "1"); } catch (e) {}
+      return;
+    }
     slips.filter(function (sp) {
       if (sp.status === "open" || sp.status === "live") return true;
       var t = sp.settledAt ? Date.parse(sp.settledAt) : 0;
       return isFinite(t) && t > 0 && now - t < PING_RECENT;
     }).forEach(function (sp) {
+      var dead = sp.status === "lost";
       (sp.legs || []).forEach(function (l) {
+        if (dead) return;   // once lost, only "Bet missed" below
         if (l.won !== true && l.won !== false) return;
         var k = "leg-" + l.gameId + "-" + (l.won ? "yes" : "no");
         if (seen[k]) return;
@@ -1465,7 +1482,11 @@
 
   function saveDevice(patch) {
     if (!patch) return Promise.resolve(device);
-    if (typeof patch.pings === "boolean") device.pings = patch.pings;
+    if (typeof patch.pings === "boolean") {
+      // Turning pings on starts fresh: what already finished is not news.
+      if (patch.pings && !device.pings) { try { localStorage.removeItem("vfs_ping_base"); } catch (e) {} }
+      device.pings = patch.pings;
+    }
     if (typeof patch.bio === "boolean") device.bio = patch.bio;
     if (patch.lockMin != null) device.lockMin = Number(patch.lockMin) || 30;
     try {
