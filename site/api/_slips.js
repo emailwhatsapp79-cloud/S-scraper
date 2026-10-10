@@ -197,6 +197,27 @@ async function fillTTTags(legs) {
   } catch { /* the slip still books, just untagged */ }
 }
 
+// Tennis tags from the tennis stats model (Strong 80 / Good 75 / Lean 70),
+// for the side the pick backs (set scores back the side that wins them).
+async function fillTnTags(legs) {
+  const homeOf = (sel) => (sel === "1" || sel === "2:0" || sel === "2:1") ? true
+    : (sel === "2" || sel === "0:2" || sel === "1:2") ? false : null;
+  const need = legs.filter((l) => l.sport === "tn" && !l.tag && homeOf(String(l.selection)) != null);
+  if (!need.length) return;
+  try {
+    const { forecastTennis } = await import("./_tn_model.js");
+    const games = need.map((l) => ({ home: l.home, away: l.away, start: l.kickoff }));
+    await forecastTennis(games);
+    need.forEach((l, i) => {
+      const s = games[i].stats;
+      if (!s) return;
+      const mine = homeOf(String(l.selection)) ? s.home : s.away;
+      l.tag = mine >= 80 ? "strong" : mine >= 75 ? "good" : mine >= 70 ? "lean" : mine < 50 ? "against" : "none";
+      if (l.chance == null) l.chance = mine / 100;
+    });
+  } catch { /* the slip still books, just untagged */ }
+}
+
 const TAGS = new Set(["strong","good","lean","none","against"]);
 
 async function tryShare(legs) {
@@ -255,6 +276,7 @@ export async function createSlip(stake, incoming, book, opts = {}) {
       });
     }
     await fillTTTags(legs);
+    await fillTnTags(legs);
 
   const pay = opts.pay === "gift" ? "gift" : opts.pay === "money" ? "money" : "";
     let placed = null;
@@ -368,6 +390,8 @@ export async function createSlip(stake, incoming, book, opts = {}) {
       chance: Number(row.chance) > 0 && Number(row.chance) < 1 ? Number(row.chance) : null,
     });
   }
+  await fillTTTags(legs);
+  await fillTnTags(legs);
 
   const pay = opts.pay === "gift" ? "gift" : opts.pay === "money" ? "money" : "";
   let placed = null;
