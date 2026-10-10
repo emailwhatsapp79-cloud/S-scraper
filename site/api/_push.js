@@ -101,6 +101,7 @@ export async function notifyBooked(slips) {
     if (!active && !recent) continue;
 
     for (const l of sp.legs || []) {
+      if (sp.status === "lost") break;   // once lost, only "Bet missed" below
       if (l.won === true) {
         if (await sendOnce("leg-" + l.gameId + "-yes", {
           kind: "yes",
