@@ -1,0 +1,18 @@
+# One-off catch-up of scores24 history (the timer in eb-bank.yml keeps it
+# current every ~10 minutes). Run it from the Actions tab after a gap.
+name: s24-backfill
+on:
+  workflow_dispatch:
+    inputs:
+      days: { description: "Days back", default: "6" }
+      pages: { description: "Pages of 50 per league", default: "60" }
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash .github/s24-push.sh "${{ inputs.days || '6' }}" "${{ inputs.pages || '60' }}"

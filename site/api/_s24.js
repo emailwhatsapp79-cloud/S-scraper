@@ -575,3 +575,30 @@ export async function pullScores24(names, opts = {}) {
   const saved = all.length ? await bulkInsert(all) : 0;
   return { saved, seen: all.length, note: notes.join(" · "), hasMore };
 }
+
+/** Pages of finished matches fetched by our GitHub workflow (scores24 blocks
+ *  Vercel's servers, not GitHub's) — the same rows pullScores24 would save. */
+export async function ingestS24Pages(pages) {
+  await ensure();
+  const names = await sql`
+    SELECT home, away FROM tt_games
+    WHERE start_at > ${Date.now() - 3600000}
+    ORDER BY start_at ASC LIMIT 200`;
+  const byLast = byLastMap(names.flatMap((r) => [r.home, r.away]));
+  const rows = [];
+  const seen = new Set();
+  for (const p of (Array.isArray(pages) ? pages : []).slice(0, 400)) {
+    const slug = String(p?.slug || "").slice(0, 60);
+    const edges = Array.isArray(p?.edges) ? p.edges : p?.json?.data?.edges;
+    const got = [];
+    takeRows(Array.isArray(edges) ? edges.slice(0, 100) : [], slug, byLast, got);
+    for (const r of got) {
+      if (seen.has(r.id) || !r.start) continue;
+      seen.add(r.id);
+      rows.push(r);
+    }
+  }
+  const saved = rows.length ? await bulkInsert(rows) : 0;
+  const newest = rows.reduce((m, r) => Math.max(m, r.start || 0), 0);
+  return { saved, newest: newest ? new Date(newest).toISOString() : null };
+}
