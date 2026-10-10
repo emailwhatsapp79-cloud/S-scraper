@@ -60,6 +60,9 @@ export default async function handler(req, res) {
         try { await enrichTennis(games); } catch { /* book prices still stand */ }
         try { await trackTennis(games); } catch { /* ahead history stays cleared */ }
       }
+      // Stats-only win chance per player pair (tn_ratings), the source of the tags.
+      try { const { forecastTennis } = await import("./_tn_model.js"); await forecastTennis(games); }
+      catch { /* the card still loads without stats */ }
       try { await trackBooks(games, { settle: false }); } catch { /* the card still loads */ }
       res.setHeader("Cache-Control", "no-store");
       res.status(200).json({ ok: true, tookMs: Date.now() - started, count: games.length, games, record });

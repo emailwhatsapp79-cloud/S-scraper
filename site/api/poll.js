@@ -99,7 +99,11 @@ async function ebTick(res) {
           const { trainBatch } = await import("./_ratings.js");
           out.tt.trained = (await trainBatch(1500, 7000)).trained;
         } catch (e) { out.tt = { ...(out.tt || {}), error: String(e?.message || e) }; }
-        try { out.tn = await pullTnResults(3, 10); } catch (e) { out.tn = { error: String(e?.message || e).slice(0, 120) }; }
+        try {
+          out.tn = await pullTnResults(3, 10);
+          const { trainTennis } = await import("./_tn_model.js");
+          Object.assign(out.tn, await trainTennis(2000, 6000));
+        } catch (e) { out.tn = { ...(out.tn || {}), error: String(e?.message || e).slice(0, 120) }; }
         // Full-league history (TT Elite Series, Czech Liga Pro, ...) arrives from
         // the GitHub workflow at ?s24push=1: scores24 blocks Vercel's servers.
         await touchHealth("eb", out);
