@@ -85,11 +85,24 @@ async function ebTick(res) {
       if (now - (at.eb || 0) >= 9 * 60 * 1000) {
         await touchHealth("eb", { started: true });
         Object.assign(out, await refreshEB());
+        // Keep the table tennis card current with the app closed: games
+        // SportyBet adds an hour before play are banked and get their stats
+        // the moment the card is next read.
+        try {
+          const { events } = await fetchTTCard();
+          out.ttCard = await storeTT(events.map(ttNormalise));
+        } catch (e) { out.ttCard = String(e?.message || e).slice(0, 80); }
         try {
           out.tt = await settleTTResults(3, 8);
           const { trainBatch } = await import("./_ratings.js");
           out.tt.trained = (await trainBatch(1500, 7000)).trained;
         } catch (e) { out.tt = { ...(out.tt || {}), error: String(e?.message || e) }; }
+        // Full-league history (TT Elite Series, Czech Liga Pro, ...) from
+        // scores24: the newest finished matches across leagues.
+        try {
+          const r = await pullScores24([], { skipHtml: true, latestOnly: true, pages: 2, first: 40, days: 2, players: 0 });
+          out.s24 = { saved: r && r.saved, seen: r && r.seen, note: r && r.note ? String(r.note).slice(0, 160) : undefined };
+        } catch (e) { out.s24 = { error: String(e?.message || e).slice(0, 160) }; }
         await touchHealth("eb", out);
       }
       await touchHealth("watch", { slips: out.slips });
