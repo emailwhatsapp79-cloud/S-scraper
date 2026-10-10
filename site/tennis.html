@@ -221,7 +221,7 @@
         (g.h2h && g.h2h.n ? " · met " + g.h2h.n + "× (" + g.h2h.hw + "–" + (g.h2h.n - g.h2h.hw) + ")" : "")));
       box.appendChild(sl);
     } else if (!g.sim && !isDoubles(g)) {
-      box.appendChild(V.el("div", "tn-stats", "Stats: not enough matches yet (" + (g.nH || 0) + " / " + (g.nA || 0) + ", needs 10 each)"));
+      box.appendChild(V.el("div", "tn-stats", "Stats: not enough matches yet (" + (g.nH || 0) + " / " + (g.nA || 0) + ", needs 5 each)"));
     }
     if (g.context && g.context.note) {
       var bad = /out|retired/i.test(g.context.note);

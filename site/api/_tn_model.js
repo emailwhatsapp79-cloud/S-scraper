@@ -11,7 +11,9 @@ import { ensureTnHist } from "./_tn_hist.js";
 // Fitted 10 Oct 2026 on 11k matches, tested on the newest 4,725: 70-75% won
 // 75%, 75-80% won 80%, 80-90% won 85%, 90%+ won 98%.
 export const TN_W = { b: 0.0445, elo: 0.8936, form: -2.1405, gs: 2.2261, h2h: 2.3314, rest: 0.0877, career: 0.0579 };
-export const MIN_N = 10;
+// 5+ each: on the newest 30%, players with 5–9 matches called at 80%+ won 93%
+// (87 games), at 75%+ 86% — as good as the 10+ group.
+export const MIN_N = 5;
 
 export function tnKey(s) {
   return String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase()
@@ -189,11 +191,18 @@ export async function forecastTennis(games) {
   // The card sometimes shortens a first name ("Coulibaly, E") that the results
   // spell out ("Coulibaly, Eliakim"): take the one full name that fits.
   const alias = new Map();
+  const short = [];
   for (const name of new Set(singles.flatMap((g) => [g.home, g.away]))) {
     const m = String(name).match(/^\s*([^,]+?)\s*,\s*([A-Za-z])\.?\s*$/);
-    if (!m || players.has(tnKey(name))) continue;
-    const rows = await sql`SELECT * FROM tn_ratings WHERE display ILIKE ${m[1] + ", " + m[2] + "%"} LIMIT 2`;
-    if (rows.length === 1) { const p = parseRow(rows[0]); players.set(p.k, p); alias.set(tnKey(name), p.k); }
+    if (m && !players.has(tnKey(name))) short.push({ name, pat: (m[1] + ", " + m[2]).toLowerCase() });
+  }
+  if (short.length) {
+    // One query for all of them; keep only a name that fits exactly one player.
+    const rows = await sql`SELECT * FROM tn_ratings WHERE display ILIKE ANY(${short.map((x) => x.pat + "%")})`;
+    for (const x of short) {
+      const hits = rows.filter((r) => String(r.display || "").toLowerCase().startsWith(x.pat));
+      if (hits.length === 1) { const p = parseRow(hits[0]); players.set(p.k, p); alias.set(tnKey(x.name), p.k); }
+    }
   }
   const keyOf = (name) => alias.get(tnKey(name)) || tnKey(name);
   const h2h = await loadH2H(singles.map((g) => [keyOf(g.home), keyOf(g.away)]));
