@@ -124,8 +124,10 @@ export async function fetchTTCard() {
   try {
     let read = 0;
     for (let page = 1; page <= 6; page++) {
+      // option=1 is SportyBet's highlight list (55 of 144 seen); option=2 is
+      // the whole card, including games added an hour before they start.
       const data = await getJson("pcUpcomingEvents", {
-        sportId: SPORT, marketId: MARKET_IDS, option: "1",
+        sportId: SPORT, marketId: MARKET_IDS, option: "2", timeline: "48",
         pageSize: "100", pageNum: String(page),
       });
       let count = 0;
@@ -142,8 +144,10 @@ export async function fetchTTCard() {
       }
       // A page can hold far fewer than pageSize (64 of 131 was seen), so a short
       // page is not the last: stop on an empty one or once totalNum is read.
+      // option=2 sends no totalNum, so only an empty page ends it there.
       read += count;
-      if (!count || read >= Number(data?.totalNum || 0)) break;
+      const total = Number(data?.totalNum || 0);
+      if (!count || (total > 0 && read >= total)) break;
     }
   } catch (e) {
     errors.push(String(e?.message || e));

@@ -81,7 +81,8 @@ export async function fetchEBCard() {
       }
     }
     read += count;
-    if (!count || read >= Number(data?.totalNum || 0)) break;
+    const total = Number(data?.totalNum || 0);
+    if (!count || (total > 0 && read >= total)) break;
   }
   return out;
 }
