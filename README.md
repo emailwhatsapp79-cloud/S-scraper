@@ -37,9 +37,14 @@ tennis (winner market `219`). Games the model leans on are tagged **Good** (our 
 4+ points over the book's, both gamers 20+ games) or **Strong** (7+ points, 40+
 games each); the record above the card says whether those tags have made money.
 
-Table tennis and tennis carry the same **Strong / Good** tags: our side at 60%+
-(tennis 75%+) with the book's favourite the same player, and Strong when our
-read sits 3+ points over the price at 65%+ (tennis 78%+). Prices only appear an hour or so before tip-off, so
+Table tennis tags come from **player stats only**, never the price: rating
+gap, head-to-head, last-20 form, rest and career record, combined by a
+logistic fit (`statsHome` in `_ratings.js`). On 81k games it never saw, 75%+
+(**Strong**) won 79–92% and 70–75% (**Good**) won 73%; on SportyBet's own games
+75%+ won 63 of 74. SportyBet's % is shown beside it, not mixed in. Each game's
+pre-result stats % is stored (`pre_stats`) so the live record can be graded.
+Tennis tags: our side at 75%+ with the book's favourite the same player,
+Strong at 78%+ and 3+ points over the price. Prices only appear an hour or so before tip-off, so
 `.github/workflows/eb-bank.yml` calls `/api/poll?eb=1` every 10 minutes (one run
 loops ~5.5 hours, then starts the next; GitHub's own schedule only restarts it), and any
 open page of the app banks it every 5. That route needs no key — it only reads

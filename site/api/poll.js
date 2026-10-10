@@ -5,7 +5,7 @@ import { fetchCard, fetchLive, normalise } from "./_card.js";
 import { refreshSlips } from "./_slips.js";
 import { recordPicks, settlePicks } from "./_screen.js";
 import { settleGames, settleFromEvents, countsVF } from "./_results.js";
-import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT, rebuildPack } from "./_tt.js";
+import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT, rebuildPack, settleTTResults } from "./_tt.js";
 import { pullScores24 } from "./_s24.js";
 import { pullSetka, pullSetkaDays } from "./_setka.js";
 import { rebuildVF } from "./_vf_model.js";
@@ -80,6 +80,15 @@ async function ebTick(res) {
     } else {
       await touchHealth("eb", { started: true });
       out = { ok: true, ...(await refreshEB()) };
+      // Table tennis results ride the same 10-minute timer: public results
+      // only, written onto games already on file.
+      try {
+        out.tt = await settleTTResults(3, 8);
+        // Train what just settled, so each game's pre-result % is written
+        // while the record is fresh (short deadline: this route has 30s).
+        const { trainBatch } = await import("./_ratings.js");
+        out.tt.trained = (await trainBatch(1500, 7000)).trained;
+      } catch (e) { out.tt = { ...(out.tt || {}), error: String(e?.message || e) }; }
       await touchHealth("eb", out);
     }
   } catch (e) { out = { ok: false, error: String(e?.message || e) }; }
@@ -131,6 +140,7 @@ export default async function handler(req, res) {
     const games = events.map(ttNormalise);
     const ttSaved = await storeTT(games);
     const ttTouched = (await enrichSettleTT(80)).touched;
+    try { await settleTTResults(30, 20); } catch (e) { logErr("poll.ttresults", e); }
     const names = events.flatMap((ev) => [ev.homeTeamName, ev.awayTeamName].filter(Boolean));
     const setkaNames = games.filter((g) => /setka/i.test(g.tourn || ""))
       .flatMap((g) => [g.home, g.away]).filter(Boolean);

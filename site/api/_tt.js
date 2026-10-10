@@ -220,7 +220,11 @@ export async function enrichSettleTT(limit = 80) {
     WHERE event_id IS NOT NULL
       AND start_at IS NOT NULL
       AND (
-        (r_status IS NULL AND start_at < ${now - 90000})
+        -- Only the last two days: one event SportyBet no longer answers for
+        -- used to sit at the front of this queue forever (oldest first), and
+        -- from 30 Sep almost nothing newer settled. Older games settle in bulk
+        -- from the results list in settleTTResults.
+        (r_status IS NULL AND start_at < ${now - 90000} AND start_at > ${now - 2 * 86400000})
         OR (win_home IS NULL AND start_at > ${now - 90000})
         OR (cs_json IS NULL AND start_at > ${now - 90000})
       )
@@ -250,6 +254,54 @@ export async function enrichSettleTT(limit = 80) {
     touched++;
   }
   return { touched };
+}
+
+/** Settle SportyBet's own table tennis games from the bulk results list
+ *  (about 1,100 a day, kept for 12+ days). Matches on game id or event id and
+ *  only fills rows that have no result yet. */
+export async function settleTTResults(hours = 6, maxPages = 20) {
+  await ensureTT();
+  const end = Date.now();
+  const start = end - hours * 3600 * 1000;
+  const found = [];
+  let read = 0;
+  for (let page = 1; page <= maxPages; page++) {
+    let data;
+    try {
+      data = await getJson("eventResultList", {
+        sportId: SPORT, startTime: String(start), endTime: String(end),
+        pageSize: "100", pageNum: String(page),
+      });
+    } catch { break; }
+    let count = 0;
+    for (const t of data?.tournaments || []) {
+      for (const ev of t.events || []) {
+        count++;
+        if (!/^end/i.test(String(ev.matchStatus || ""))) continue;
+        const s = parseSet(ev.setScore);
+        if (!s || s.home === s.away || !ev.gameId) continue;
+        found.push([String(ev.gameId), s.home, s.away, String(ev.eventId || "")]);
+      }
+    }
+    read += count;
+    if (!count || read >= Number(data?.totalNum || 0)) break;
+  }
+  if (!found.length) return { read, settled: 0 };
+  let settled = 0;
+  for (let i = 0; i < found.length; i += 300) {
+    const part = found.slice(i, i + 300);
+    const rows = await sql`
+      UPDATE tt_games t SET r_home = v.h, r_away = v.a, r_status = 'ended',
+        status = 'Ended', settled_at = now()
+      FROM (SELECT unnest(${part.map((x) => x[0])}::text[]) AS id,
+                   unnest(${part.map((x) => x[1])}::int[]) AS h,
+                   unnest(${part.map((x) => x[2])}::int[]) AS a,
+                   unnest(${part.map((x) => x[3])}::text[]) AS ev) v
+      WHERE (t.match_id = v.id OR (v.ev <> '' AND t.event_id = v.ev)) AND t.r_home IS NULL
+      RETURNING t.match_id`;
+    settled += rows.length;
+  }
+  return { read, settled };
 }
 
 export function winPctBook(hOdds, aOdds) {
