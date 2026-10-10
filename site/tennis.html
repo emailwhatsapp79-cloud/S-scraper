@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/app.css">
+<link rel="stylesheet" href="/css/app.css?v=20261010b">
 <style>
   .seg { display: inline-flex; background: var(--card); box-shadow: var(--shadow); border-radius: 999px; padding: 3px; gap: 3px; margin-bottom: 12px }
   .seg a, .seg button { border: 0; background: transparent; color: var(--dim); font: inherit; font-weight: 600; font-size: 13px; padding: 6px 14px; border-radius: 999px; text-decoration: none; cursor: pointer }
@@ -77,7 +77,7 @@
   <h2 class="lab-h" id="head">Upcoming</h2>
   <div id="out"><div class="skel"></div><div class="skel"></div></div>
 </main>
-<script src="/js/core.js"></script>
+<script src="/js/core.js?v=20261010b"></script>
 <script>
 (function () {
   var V = window.VFS;
@@ -131,14 +131,14 @@
     if (extra) c.appendChild(V.el("em", null, extra));
     var score = /^\d+:\d+$/.test(sel);
     var closed = g.suspended || (score ? g.scoresOpen === false : g.winOpen === false) ||
-      V.heldNow({ id: g.id, eventId: g.eventId });
+      (V.heldNow ? V.heldNow({ id: g.id, eventId: g.eventId }) : false);
     // Suspended on SportyBet: can't be added, only taken off if already on the slip.
     var bookable = price != null && g.selectionRefs && g.selectionRefs[sel] && (!closed || on);
     if (!bookable) c.classList.add("off");
     if (bookable) {
       c.addEventListener("click", function (e) {
         e.stopPropagation();
-        V.bookChecked(V.makePick(gameOf(g), sel, price, label));
+        (V.bookChecked || V.toggleBook)(V.makePick(gameOf(g), sel, price, label));
         render();
       });
     }
@@ -161,6 +161,32 @@
     return Math.round(100 * (side === "away" ? 1 - ph : ph));
   }
 
+  // One bad game must never blank the whole list: draw a plain card instead,
+  // with the error so a screenshot says what broke.
+  function safeCard(g, n) {
+    try { return card(g, n); } catch (e) {
+      var box = V.el("article", "tn");
+      box.appendChild(V.el("span", "tn-num", String(n)));
+      var lvl = null;
+      try { lvl = levelOf(g); } catch (x) {}
+      var top = V.el("div", "tn-top");
+      if (lvl) top.appendChild(V.strengthTag(lvl));
+      top.appendChild(V.el("span", "tn-tourn", g.tourn || "Tennis"));
+      box.appendChild(top);
+      box.appendChild(V.el("div", "tn-call", (g.home || "?") + " vs " + (g.away || "?")));
+      if (g.stats) box.appendChild(V.el("div", "tn-stats", "Stats: " + g.stats.home + "% / " + g.stats.away + "%"));
+      if (g.win) {
+        var wg = V.el("div", "tn-g");
+        try {
+          wg.appendChild(cell(g, "1", g.win.home, lastName(g.home), false, ""));
+          wg.appendChild(cell(g, "2", g.win.away, lastName(g.away), false, ""));
+        } catch (x) {}
+        box.appendChild(wg);
+      }
+      box.appendChild(V.el("div", "tn-note bad", "Display error: " + (e && e.message ? e.message : String(e))));
+      return box;
+    }
+  }
   function card(g, n) {
     var box = V.el("article", "tn");
     box.appendChild(V.el("span", "tn-num", String(n)));
@@ -552,7 +578,7 @@
     document.getElementById("head").textContent = (bookish() ? "Book — " : "Upcoming — ") + list.length;
     if (!list.length) {
       out.appendChild(V.el("div", "empty", bookish() ? "No book mark in this list." : (LAST.length ? "Nothing in that tournament." : "No upcoming tennis on SportyBet right now.")));
-    } else list.forEach(function (g, i) { out.appendChild(card(g, i + 1)); });
+    } else list.forEach(function (g, i) { out.appendChild(safeCard(g, i + 1)); });
     tourns(LAST);
     V.tick();
   }
