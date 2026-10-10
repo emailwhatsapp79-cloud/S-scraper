@@ -37,9 +37,12 @@ tennis (winner market `219`). Games the model leans on are tagged **Good** (our 
 4+ points over the book's, both gamers 20+ games) or **Strong** (7+ points, 40+
 games each); the record above the card says whether those tags have made money.
 
-Table tennis and tennis carry the same **Strong / Good** tags: our side at 60%+
-(tennis 75%+) with the book's favourite the same player, and Strong when our
-read sits 3+ points over the price at 65%+ (tennis 78%+). Prices only appear an hour or so before tip-off, so
+Table tennis tags mean *likely to win*: **Strong** is SportyBet's favourite at
+1.30 or shorter with our read at or above the book's (won 79% of 100 past
+games), **Good** the same at 1.50 or shorter (68% of 374). Over 3,380 SportyBet
+games no table tennis group beat the ~8.5% margin, so these are likely winners,
+not money-makers. Tennis tags: our side at 75%+ with the book's favourite the
+same player, Strong at 78%+ and 3+ points over the price. Prices only appear an hour or so before tip-off, so
 `.github/workflows/eb-bank.yml` calls `/api/poll?eb=1` every 10 minutes (one run
 loops ~5.5 hours, then starts the next; GitHub's own schedule only restarts it), and any
 open page of the app banks it every 5. That route needs no key — it only reads
