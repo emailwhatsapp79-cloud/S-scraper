@@ -163,7 +163,10 @@
       marketId: g.selectionRefs && g.selectionRefs[selection] ? g.selectionRefs[selection].marketId : null,
       outcomeId: g.selectionRefs && g.selectionRefs[selection] ? g.selectionRefs[selection].outcomeId : null,
       specifier: g.selectionRefs && g.selectionRefs[selection] ? (g.selectionRefs[selection].specifier || "") : "",
-      probability: g.selectionRefs && g.selectionRefs[selection] ? (g.selectionRefs[selection].probability || "") : ""
+      probability: g.selectionRefs && g.selectionRefs[selection] ? (g.selectionRefs[selection].probability || "") : "",
+      // Our own win chance for this pick (0-1) when the page has one, for the
+      // Betslip's "chance this slip wins".
+      chance: g.chance && isFinite(g.chance[selection]) ? Number(g.chance[selection]) : null
     };
   }
 
