@@ -186,9 +186,19 @@ export async function forecastTennis(games) {
   await ensure();
   const singles = (games || []).filter((g) => g && g.home && g.away && !/\//.test(g.home + g.away));
   const players = await loadPlayers(singles.flatMap((g) => [tnKey(g.home), tnKey(g.away)]));
-  const h2h = await loadH2H(singles.map((g) => [tnKey(g.home), tnKey(g.away)]));
+  // The card sometimes shortens a first name ("Coulibaly, E") that the results
+  // spell out ("Coulibaly, Eliakim"): take the one full name that fits.
+  const alias = new Map();
+  for (const name of new Set(singles.flatMap((g) => [g.home, g.away]))) {
+    const m = String(name).match(/^\s*([^,]+?)\s*,\s*([A-Za-z])\.?\s*$/);
+    if (!m || players.has(tnKey(name))) continue;
+    const rows = await sql`SELECT * FROM tn_ratings WHERE display ILIKE ${m[1] + ", " + m[2] + "%"} LIMIT 2`;
+    if (rows.length === 1) { const p = parseRow(rows[0]); players.set(p.k, p); alias.set(tnKey(name), p.k); }
+  }
+  const keyOf = (name) => alias.get(tnKey(name)) || tnKey(name);
+  const h2h = await loadH2H(singles.map((g) => [keyOf(g.home), keyOf(g.away)]));
   for (const g of singles) {
-    const kH = tnKey(g.home), kA = tnKey(g.away);
+    const kH = keyOf(g.home), kA = keyOf(g.away);
     const H = players.get(kH), A = players.get(kA);
     const rec = h2h.get(kH + ">" + kA) || { n: 0, hw: 0 };
     g.nH = H ? H.n : 0;
