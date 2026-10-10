@@ -192,10 +192,14 @@ export async function notifySets(legs) {
     const base = String(l.slip_id) + "-" + String(l.game_id);
     const who = home ? l.home : l.away;
     const verb = mine < theirs ? "behind" : mine > theirs ? "ahead" : "level";
+    // Sets needed to win: table tennis best of 5, tennis best of 3.
+    const need = l.sport === "tn" ? 2 : 3;
+    const brink = theirs === need - 1 && mine < theirs;   // opponent one set from winning
+    const lead = brink ? "🚨 One set from losing · " : mine < theirs ? "⚠️ " : mine > theirs ? "✅ " : "";
     if (await sendOnce("set-" + base + "-" + a + ":" + b, {
       kind: mine < theirs ? "no" : "kick",
       url: "/book",
-      title: lastName(l.home) + " " + a + "–" + b + " " + lastName(l.away) + " · " + lastName(who) + " " + verb,
+      title: lead + lastName(l.home) + " " + a + "–" + b + " " + lastName(l.away) + " · " + lastName(who) + " " + verb,
       body: (l.home || "") + " v " + (l.away || "") + " · your pick: " + (who || ""),
     })) sent++;
   }
