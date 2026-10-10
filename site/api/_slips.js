@@ -2,7 +2,7 @@
 import { sql, rowToGame } from "./_db.js";
 import { fetchEvent, scoreOf, FOOTBALL_BASE } from "./_card.js";
 import { shareSelections } from "./_share.js";
-import { notifyBooked } from "./_push.js";
+import { notifyBooked, notifySets } from "./_push.js";
 import { placeOrder, loadGifts, priceLeg } from "./_fc.js";
 import { readSession, writeSession } from "./_fc_session.js";
 
@@ -456,6 +456,7 @@ export async function refreshSlips() {
   const freshLegs = await sql`
     SELECT * FROM slip_legs
     WHERE slip_id IN (SELECT id FROM slips WHERE status IN ('open', 'live'))`;
+  try { await notifySets(freshLegs); } catch { /* scores still save */ }
   const grouped = new Map();
   for (const l of freshLegs) {
     if (!grouped.has(l.slip_id)) grouped.set(l.slip_id, []);

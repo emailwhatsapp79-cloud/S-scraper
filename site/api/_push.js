@@ -152,3 +152,53 @@ export async function notifyBooked(slips) {
   }
   return { sent };
 }
+
+// Live set alerts for table tennis and tennis legs. Once the side you picked
+// drops behind in sets, every new set score is pushed until the match ends
+// (the existing Yes / No push then gives the result). Each score is claimed
+// once per slip and leg in push_sent, so a score is never sent twice.
+function pickedHome(sel) {
+  const s = String(sel || "");
+  if (s === "1") return true;
+  if (s === "2") return false;
+  const m = s.match(/^(\d+):(\d+)$/);
+  return m ? Number(m[1]) > Number(m[2]) : null;
+}
+
+async function seenKey(k) {
+  const rows = await sql`SELECT 1 FROM push_sent WHERE k = ${k}`;
+  return rows.length > 0;
+}
+
+export async function notifySets(legs) {
+  if (!Array.isArray(legs) || !legs.length) return { sent: 0 };
+  try {
+    const { loadPrefs } = await import("./_vault.js");
+    if ((await loadPrefs()).pings === false) return { sent: 0 };
+  } catch { return { sent: 0 }; }
+  await ensure();
+  let sent = 0;
+  for (const l of legs) {
+    if (l.sport !== "tt" && l.sport !== "tn") continue;
+    if (l.won === "yes" || l.won === "no") continue;
+    const m = String(l.set_score || "").match(/^(\d+)\s*:\s*(\d+)$/);
+    if (!m) continue;
+    const home = pickedHome(l.selection);
+    if (home == null) continue;
+    const a = Number(m[1]), b = Number(m[2]);
+    const mine = home ? a : b, theirs = home ? b : a;
+    const base = String(l.slip_id) + "-" + String(l.game_id);
+    const trig = "trig-" + base;
+    if (mine < theirs) await claimed(trig);
+    else if (!(await seenKey(trig))) continue;
+    const who = home ? l.home : l.away;
+    const verb = mine < theirs ? "behind" : mine > theirs ? "ahead" : "level";
+    if (await sendOnce("set-" + base + "-" + a + ":" + b, {
+      kind: mine < theirs ? "no" : "kick",
+      url: "/book",
+      title: "Sets " + a + "–" + b + " · " + (who || "your pick") + " " + verb,
+      body: (l.home || "") + " v " + (l.away || "") + " · you have " + (who || "") ,
+    })) sent++;
+  }
+  return { sent };
+}
