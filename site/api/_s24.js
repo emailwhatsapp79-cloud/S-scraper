@@ -1,6 +1,7 @@
 // scores24.live — bank finished TT grind into tt_games (s24:{id}).
 // 1) One HTML dump of /en/table-tennis (SSR JSON, ~600 ended games).
 // 2) rapi pages if HTML was thin. Never throw away a league on one error.
+import { createHash } from "crypto";
 import { sql } from "./_db.js";
 
 const UA = "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 " +
@@ -129,8 +130,14 @@ export async function bulkInsert(rows) {
   return saved;
 }
 
+// Key for our own edge relay. With no GATE_SECRET / CRON_SECRET set the relay
+// used to refuse every call (empty key), and Vercel Node in Cape Town is 403'd
+// by scores24 — so nothing new was banked after 5 Oct. Fall back to a key
+// derived from DATABASE_URL, which the relay can derive too.
 function fillKey() {
-  return process.env.GATE_SECRET || process.env.CRON_SECRET || "";
+  const k = process.env.GATE_SECRET || process.env.CRON_SECRET;
+  if (k) return k;
+  return createHash("sha256").update("vfs-s24:" + (process.env.DATABASE_URL || "")).digest("hex");
 }
 function proxyOrigins() {
   const out = [];
