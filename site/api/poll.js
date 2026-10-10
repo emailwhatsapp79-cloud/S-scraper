@@ -66,30 +66,33 @@ async function vfHeartbeat() {
   return out;
 }
 
-// eBasketball banking takes no key, by the owner's choice: it only reads
-// SportyBet's public card and saves it, so the GitHub schedule can call it
-// without a stored secret. A run inside the last 4 minutes answers "skipped",
-// so calling it more often does nothing.
+// The public timer route (GitHub calls it every minute; it takes no key by the
+// owner's choice and only reads public SportyBet data). Each call refreshes
+// open slips so set alerts go out within a minute; the heavier eBasketball and
+// table tennis banking runs at most every 9 minutes. Calls closer than 45s
+// apart answer "skipped".
 async function ebTick(res) {
-  let out;
+  let out = { ok: true };
   try {
-    const last = await sql`SELECT at FROM health WHERE k = 'eb'`;
-    const at = last[0] ? new Date(last[0].at).getTime() : 0;
-    if (Date.now() - at < 4 * 60 * 1000) {
-      out = { ok: true, skipped: true };
+    const rows = await sql`SELECT k, at FROM health WHERE k IN ('watch', 'eb')`;
+    const at = Object.fromEntries(rows.map((r) => [r.k, new Date(r.at).getTime()]));
+    const now = Date.now();
+    if (now - (at.watch || 0) < 45 * 1000) {
+      out.skipped = true;
     } else {
-      await touchHealth("eb", { started: true });
-      out = { ok: true, ...(await refreshEB()) };
-      // Table tennis results ride the same 10-minute timer: public results
-      // only, written onto games already on file.
-      try {
-        out.tt = await settleTTResults(3, 8);
-        // Train what just settled, so each game's pre-result % is written
-        // while the record is fresh (short deadline: this route has 30s).
-        const { trainBatch } = await import("./_ratings.js");
-        out.tt.trained = (await trainBatch(1500, 7000)).trained;
-      } catch (e) { out.tt = { ...(out.tt || {}), error: String(e?.message || e) }; }
-      await touchHealth("eb", out);
+      await touchHealth("watch", { started: true });
+      try { out.slips = await refreshSlips(); } catch (e) { out.slips = { error: String(e?.message || e) }; }
+      if (now - (at.eb || 0) >= 9 * 60 * 1000) {
+        await touchHealth("eb", { started: true });
+        Object.assign(out, await refreshEB());
+        try {
+          out.tt = await settleTTResults(3, 8);
+          const { trainBatch } = await import("./_ratings.js");
+          out.tt.trained = (await trainBatch(1500, 7000)).trained;
+        } catch (e) { out.tt = { ...(out.tt || {}), error: String(e?.message || e) }; }
+        await touchHealth("eb", out);
+      }
+      await touchHealth("watch", { slips: out.slips });
     }
   } catch (e) { out = { ok: false, error: String(e?.message || e) }; }
   res.setHeader("Cache-Control", "no-store");

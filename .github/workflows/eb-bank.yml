@@ -1,4 +1,5 @@
-# Saves the eBasketball card every 10 minutes. Its prices only show about an
+# Every minute: refresh open slips so live set alerts go out. Every ~10
+# minutes (the route decides): save the eBasketball card and table tennis results. Its prices only show about an
 # hour before tip-off, so without this most games are never priced. The route
 # needs no key (it only reads SportyBet's public odds) and skips if it ran in
 # the last 4 minutes.
@@ -29,14 +30,14 @@ jobs:
         run: |
           n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow eb-bank.yml --status in_progress --json databaseId --jq "[.[] | select(.databaseId != ${{ github.run_id }})] | length")
           echo "others=$n" >> "$GITHUB_OUTPUT"
-      - name: Bank eBasketball every 10 minutes for ~5.5 hours
+      - name: Check slips every minute, bank cards every ~10, for ~5.5 hours
         if: steps.busy.outputs.others == '0'
         run: |
           end=$(( $(date +%s) + 330*60 ))
           while [ "$(date +%s)" -lt "$end" ]; do
             curl -sS --max-time 55 "https://vfootball-screener.vercel.app/api/poll?eb=1" || true
             echo
-            sleep 600
+            sleep 60
           done
       - name: Start the next run
         if: steps.busy.outputs.others == '0'

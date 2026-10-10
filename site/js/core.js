@@ -1346,7 +1346,7 @@
   }
 
   function watchPings() {
-    if (device.pings === false) return;
+    if (device.pings === false || pushOn) return;
     if (!("Notification" in window) || Notification.permission !== "granted") return;
     var seen = pingSeen();
     var now = Date.now();
@@ -1367,7 +1367,7 @@
   // for games long finished.
   var PING_RECENT = 45 * 60 * 1000;
   function noticeSlips(slips) {
-    if (device.pings === false) return;
+    if (device.pings === false || pushOn) return;
     if (!slips || !slips.length) return;
     var seen = pingSeen();
     var now = Date.now();
@@ -1414,6 +1414,7 @@
         });
       }).then(function (sub) {
         if (!sub) return;
+        pushOn = true;
         return fetch("/api/push", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1422,6 +1423,18 @@
       });
     });
   }
+
+  // When this phone has a server push subscription the server announces
+  // everything (once, even with the site closed); the page stays quiet so the
+  // same result never arrives twice.
+  var pushOn = false;
+  try {
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.ready.then(function (reg) {
+        return reg.pushManager ? reg.pushManager.getSubscription() : null;
+      }).then(function (s) { pushOn = !!s; }).catch(function () {});
+    }
+  } catch (e) {}
 
   var device = { pings: true, bio: true, lockMin: 30 };
   try {
@@ -1437,6 +1450,7 @@
       if (!reg.pushManager) return;
       return reg.pushManager.getSubscription().then(function (sub) {
         var endpoint = sub && sub.endpoint;
+        pushOn = false;
         var gone = sub ? sub.unsubscribe() : Promise.resolve();
         return gone.then(function () {
           return fetch("/api/push", {
