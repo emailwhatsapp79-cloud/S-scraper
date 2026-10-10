@@ -1,0 +1,37 @@
+# One-off load of SportyBet's tennis results into the app (tn_games), the
+# history the tennis stats model learns from. The timer keeps it current.
+name: tn-backfill
+on:
+  workflow_dispatch:
+    inputs:
+      days: { description: "Days back", default: "400" }
+      skip: { description: "Start this many days back", default: "0" }
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - run: |
+          set -uo pipefail
+          UA="Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/122.0 Mobile Safari/537.36"
+          APP="https://vfootball-screener.vercel.app/api/poll?tnpush=1"
+          DAYS=${{ inputs.days || '400' }}; SKIP=${{ inputs.skip || '0' }}
+          for ((d = SKIP; d < SKIP + DAYS; d++)); do
+            e=$(( $(date +%s) - d*86400 ))000; s=$(( $(date +%s) - (d+1)*86400 ))000
+            echo '[]' > pages.json
+            read=0
+            for p in $(seq 1 12); do
+              curl -fsS -m 25 -H "User-Agent: $UA" "https://www.sportybet.com/api/ng/factsCenter/eventResultList?sportId=sr:sport:5&startTime=$s&endTime=$e&pageSize=100&pageNum=$p" > r.json || break
+              n=$(jq '[.data.tournaments[]?.events[]?] | length' r.json)
+              [ "$n" -gt 0 ] || break
+              jq -c --slurpfile r r.json '. + [$r[0].data]' pages.json > t.json && mv t.json pages.json
+              read=$((read + n)); total=$(jq '.data.totalNum // 0' r.json)
+              [ "$read" -lt "$total" ] || break
+            done
+            jq -c '{pages: .}' pages.json > body.json
+            tok=$(curl -fsS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=vfs-s24" | jq -r .value)
+            echo "day -$d read $read: $(curl -sS -m 55 -X POST -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' --data-binary @body.json "$APP")"
+          done
