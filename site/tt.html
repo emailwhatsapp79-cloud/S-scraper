@@ -54,6 +54,8 @@
   .tt-stat tr { border-bottom: 1px solid rgba(255,255,255,.06) }
   .tt-stat tr:last-child { border: 0 }
 
+  .tt-statline { font-size: 12.5px; color: var(--dim); margin: -4px 0 10px }
+  .tt-statline b { color: var(--ink); font-weight: 650 }
   .tt-cs { margin-top: 10px }
   .tt-cs-side { margin-top: 8px }
   .tt-cs-lab { display: block; font-size: 10.5px; color: var(--dim); margin-bottom: 5px }
@@ -90,7 +92,7 @@
   </div>
   <p class="note" id="sofa-note"></p>
   <p class="note" id="bt-note"></p>
-  <p class="note">Strong = SportyBet 1.30 or shorter and our read agrees: won 79% of 100 past games. Good = 1.50 or shorter, agrees: won 68% of 374. Likely winners, not money-makers: at these prices you need 83% and 70% to profit, and no table tennis group has beaten SportyBet's 8.5% margin over 3,380 games.</p>
+  <p class="note">Strong / Good come from player stats only, not SportyBet's price: rating, head-to-head, recent form, rest and career record. On 81,000 games the stats never saw, 75%+ (Strong) won 79–92% and 70–75% (Good) won 73%. On SportyBet's own games, 75%+ won 63 of 74. A small sample, so keep stakes small while it builds a record.</p>
   <div class="seg" id="seg">
     <button type="button" data-mode="up" class="on">Upcoming</button>
     <button type="button" data-mode="res">Results</button>
@@ -262,6 +264,17 @@
     box.appendChild(top);
 
     box.appendChild(playersBlock(g));
+    var st = statSide(g);
+    if (st) {
+      var who = st.home ? g.home : g.away;
+      var bk = g.book ? (st.home ? g.book.home : g.book.away) : null;
+      var line = V.el("div", "tt-statline");
+      line.appendChild(V.el("b", null, "Stats: " + lastNameOf(who) + " " + st.pct + "%"));
+      line.appendChild(document.createTextNode(bk != null
+        ? " · SportyBet " + bk + "%" + (bk >= 50 ? " (agrees)" : " (other side)")
+        : ""));
+      box.appendChild(line);
+    }
     box.appendChild(statsTable(g));
 
     box.appendChild(V.el("div", "tt-mkt-lab", "Winner"));
@@ -324,22 +337,20 @@
   }
 
   // Strong / Good on our side, with the book's favourite the same player.
-  // Strong / Good here mean "likely to win", not "beats SportyBet": in 3,380
-  // past SportyBet games nothing beat the price, but a short favourite that
-  // our read also backs won most often. Strong: SportyBet 1.30 or shorter and
-  // our % at or above the book's (won 79% of 100). Good: 1.50 or shorter, same
-  // agreement (won 68% of 374). Both players need 20+ games on record.
+  // Strong / Good come from the players' stats only — rating, head-to-head,
+  // form, rest, career record — never SportyBet's price. Tested on 81k games
+  // the stats model never saw: 75%+ won 79-92%, 70-75% won 73%.
+  function statSide(g) {
+    var s = g.stats;
+    if (!s) return null;
+    var home = Number(s.home) >= Number(s.away);
+    return { home: home, pct: home ? Number(s.home) : Number(s.away) };
+  }
   function levelOf(g) {
-    var p = g.pct || g.ours, b = g.book, w = g.win;
-    if (!p || !b || !w) return null;
-    if (Math.min(g.nH || 0, g.nA || 0) < 20) return null;
-    var bookHome = Number(w.home) <= Number(w.away);
-    var price = bookHome ? Number(w.home) : Number(w.away);
-    var ours = bookHome ? Number(p.home) : Number(p.away);
-    var theirs = bookHome ? Number(b.home) : Number(b.away);
-    if (!(price > 1) || !(ours >= theirs)) return null;
-    if (price <= 1.30) return "strong";
-    if (price <= 1.50) return "good";
+    var st = statSide(g);
+    if (!st) return null;
+    if (st.pct >= 75) return "strong";
+    if (st.pct >= 70) return "good";
     return null;
   }
 

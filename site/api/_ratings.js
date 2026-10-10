@@ -49,6 +49,7 @@ async function ensure() {
   // Our home % for the game, written by trainBatch from the ratings as they
   // stood BEFORE that game's result was learned. The holdout reads only this.
   await sql`ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS pre_home INT`;
+  await sql`ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS pre_stats INT`;
   await sql`CREATE INDEX IF NOT EXISTS tt_games_untrained
     ON tt_games (start_at) WHERE trained IS NOT TRUE`;
   ready = true;
@@ -140,7 +141,7 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
     if (wh > 1 && wa > 1 && !alreadySeen(H.rec, kA, st0) && !alreadySeen(A.rec, kH, st0)) {
       const one = { home: g.home, away: g.away, tourn: g.tourn, start: st0, win: { home: wh, away: wa } };
       scoreOne({ [kH]: H, [kA]: A }, ha, one);
-      if (one.ours) pre.push([g.match_id, one.ours.home]);
+      if (one.ours || one.stats) pre.push([g.match_id, one.ours ? one.ours.home : null, one.stats ? one.stats.home : null]);
     }
     // walk-forward self-check, before the update
     if (H.n >= 5 && A.n >= 5) {
@@ -191,9 +192,10 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
     ON CONFLICT (k) DO UPDATE SET data = ${JSON.stringify(meta)}`;
   for (let i = 0; i < pre.length; i += 200) {
     const part = pre.slice(i, i + 200);
-    await sql`UPDATE tt_games t SET pre_home = v.p
+    await sql`UPDATE tt_games t SET pre_home = v.p, pre_stats = v.s
       FROM (SELECT unnest(${part.map((x) => x[0])}::text[]) AS id,
-                   unnest(${part.map((x) => x[1])}::int[]) AS p) v
+                   unnest(${part.map((x) => x[1])}::int[]) AS p,
+                   unnest(${part.map((x) => x[2])}::int[]) AS s) v
       WHERE t.match_id = v.id`;
   }
   for (let i = 0; i < done.length; i += 200) {
@@ -258,6 +260,32 @@ async function loadCardPlayers(games) {
   return players;
 }
 
+// Stats-only win chance — player numbers, never the price. A logistic fit on
+// 189k older games, tested on the newest 81k it never saw: when it said
+// 70-75% the player won 73%, 75-80% won 79%, 80-85% won 85%, 85%+ won 92%.
+// On SportyBet's own games, 75%+ won 63 of 74 (+10.9% at the posted price).
+// Inputs: rating gap, last-20 form gap (a hot streak counts slightly against,
+// it cools), head-to-head (the strongest), rest, career win rate.
+const STATS_W = { b: -0.012, elo: 0.5407, form: -0.591, h2h: 1.9413, rest: -0.0515, career: 0.1243 };
+export function statsHome(H, A, kH, kA, start) {
+  if (!H || !A || (H.n || 0) < 10 || (A.n || 0) < 10) return null;
+  const recH = H.rec || [], recA = A.rec || [];
+  if (!recH.length || !recA.length) return null;
+  const form = (rec) => { const r = rec.slice(-20); return r.reduce((s, x) => s + (x.won ? 1 : 0), 0) / r.length; };
+  let hw = 0, hn = 0;
+  for (const x of recH) if (x.vs === kA) { hn++; if (x.won) hw++; }
+  const t = Number(start) || Date.now();
+  const rest = (p) => Math.log1p(p.last ? Math.min(Math.max(0, (t - p.last) / 60000), 600) : 600);
+  const car = (p) => { const c = ((p.w || 0) + 1) / ((p.n || 0) + 2); return Math.log(c / (1 - c)); };
+  const z = STATS_W.b
+    + STATS_W.elo * ((H.elo - A.elo) / 400) * Math.LN10
+    + STATS_W.form * (form(recH) - form(recA))
+    + STATS_W.h2h * ((hw + 1) / (hn + 2) - 0.5) * Math.min(hn, 10) / 10
+    + STATS_W.rest * (rest(H) - rest(A))
+    + STATS_W.career * (car(H) - car(A));
+  return 1 / (1 + Math.exp(-z));
+}
+
 function homeAdv(meta) {
   return meta.homeN >= 200 ? Math.min(0.05, Math.max(-0.05, (meta.homeW / meta.homeN) - 0.5)) : 0;
 }
@@ -290,6 +318,8 @@ function scoreOne(players, ha, g) {
   g.nH = f.nH; g.nA = f.nA;
   g.h2hRec = f.h2hRec;
   g.formH = f.formH; g.formA = f.formA;
+  const s = statsHome(players[kH], players[kA], kH, kA, g.start);
+  g.stats = s == null ? null : { home: Math.round(s * 100), away: 100 - Math.round(s * 100) };
   return g;
 }
 
