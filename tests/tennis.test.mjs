@@ -320,7 +320,7 @@ test("a live second set is not a finished match", () => {
 test("a book mark is the same game for the score and the winner", () => {
   const marked = bookMark({
     eventId: "sr:match:1", sim: false, home: "A", away: "B",
-    withBook: { sel: "0:2" },
+    withBook: { sel: "0:2" }, stats: { home: 25, away: 75 },
     win: { home: 3.4, away: 1.28 },
     scores: [{ sel: "0:2", odds: 1.55 }],
   });
@@ -330,11 +330,19 @@ test("a book mark is the same game for the score and the winner", () => {
   assert.equal(bookMark({ eventId: "sr:match:2", ahead: { sel: "2:0" }, withBook: { sel: "2:0" } }), null);
   const plain = bookMark({
     eventId: "sr:match:3", home: "C", away: "D",
-    win: { home: 1.2, away: 4 },
+    win: { home: 1.2, away: 4 }, stats: { home: 72, away: 28 },
     scores: [{ sel: "2:0", odds: 1.5 }, { sel: "0:2", odds: 6 }],
   });
   assert.equal(plain.score, "2:0");
   assert.equal(plain.winner, "1");
+});
+
+test("book + stats agree: no mark when our stats disagree or are missing", () => {
+  const base = { eventId: "sr:match:4", home: "E", away: "F", win: { home: 1.2, away: 4 }, scores: [{ sel: "2:0", odds: 1.5 }] };
+  assert.equal(bookMark({ ...base }), null);
+  assert.equal(bookMark({ ...base, stats: { home: 62, away: 38 } }), null);
+  assert.equal(bookMark({ ...base, stats: { home: 30, away: 70 } }), null);
+  assert.ok(bookMark({ ...base, stats: { home: 70, away: 30 } }));
 });
 
 test("booked tennis splits into winners and correct score", () => {

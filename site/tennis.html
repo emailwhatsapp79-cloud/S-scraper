@@ -70,7 +70,7 @@
 <main class="wrap">
   <div class="chips" id="views">
     <button type="button" class="chip on" id="v-matches">Matches</button>
-    <button type="button" class="chip" id="v-book">Book</button>
+    <button type="button" class="chip" id="v-book">Book + stats</button>
     <button type="button" class="chip" id="v-record">Record</button>
   </div>
   <div class="chips" id="tourns"></div>
@@ -294,14 +294,22 @@
   }
   function hasBook(g) {
     if (!g || g.sim || g.ahead || g.called) return false;
-    if (g.withBook && g.withBook.sel) return true;
+    if (g.withBook && g.withBook.sel) return statsAgree(g, /^(2:0|2:1)$/.test(g.withBook.sel) ? "home" : "away");
     if (g.context) return false;
-    var short = 99;
+    var short = 99, sel = "";
     (g.scores || []).forEach(function (s) {
       var o = Number(s.odds);
-      if (o > 1 && o < short) short = o;
+      if (o > 1 && o < short) { short = o; sel = s.sel; }
     });
-    return short <= 1.7;
+    if (short > 1.7) return false;
+    return statsAgree(g, sel === "2:0" || sel === "2:1" ? "home" : "away");
+  }
+  // Book + stats agree: SportyBet's short favourite only when our stats also
+  // give that player 70%+ on their own record.
+  function statsAgree(g, side) {
+    if (!g.stats) return false;
+    var ours = side === "away" ? g.stats.away : g.stats.home;
+    return ours >= LEVELS.lean;
   }
 
   function tourns(list) {
