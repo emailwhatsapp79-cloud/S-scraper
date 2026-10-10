@@ -8,6 +8,7 @@ import { settleGames, settleFromEvents, countsVF } from "./_results.js";
 import { fetchTTCard, normalise as ttNormalise, storeTT, enrichSettleTT, rebuildPack, settleTTResults } from "./_tt.js";
 import { pullScores24, ingestS24Pages } from "./_s24.js";
 import { githubOk } from "./_oidc.js";
+import { rowsFromPage, saveTnRows, pullTnResults } from "./_tn_hist.js";
 import { pullSetka, pullSetkaDays } from "./_setka.js";
 import { rebuildVF } from "./_vf_model.js";
 import { refreshEB } from "./_eb.js";
@@ -98,6 +99,7 @@ async function ebTick(res) {
           const { trainBatch } = await import("./_ratings.js");
           out.tt.trained = (await trainBatch(1500, 7000)).trained;
         } catch (e) { out.tt = { ...(out.tt || {}), error: String(e?.message || e) }; }
+        try { out.tn = await pullTnResults(3, 10); } catch (e) { out.tn = { error: String(e?.message || e).slice(0, 120) }; }
         // Full-league history (TT Elite Series, Czech Liga Pro, ...) arrives from
         // the GitHub workflow at ?s24push=1: scores24 blocks Vercel's servers.
         await touchHealth("eb", out);
@@ -130,10 +132,28 @@ async function s24Push(req, res) {
   return res.status(200).json(out);
 }
 
+// A year of SportyBet tennis results, fetched by the tn-backfill workflow
+// (raw eventResultList pages), proven by GitHub's signed token.
+async function tnPush(req, res) {
+  res.setHeader("Cache-Control", "no-store");
+  if (req.method !== "POST") return res.status(405).json({ ok: false });
+  let who = null;
+  try { who = await githubOk(req); } catch (e) { logErr("tnpush.auth", e); }
+  if (!who) return res.status(401).json({ ok: false, error: "no" });
+  let body = req.body;
+  if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = null; } }
+  const pages = Array.isArray(body && body.pages) ? body.pages.slice(0, 40) : [];
+  try {
+    const saved = await saveTnRows(pages.flatMap((d) => rowsFromPage(d)));
+    return res.status(200).json({ ok: true, saved });
+  } catch (e) { return res.status(500).json({ ok: false, error: String(e?.message || e).slice(0, 160) }); }
+}
+
 export default async function handler(req, res) {
   const url = new URL(req.url, "http://x");
   if (url.searchParams.get("eb") === "1") return ebTick(res);
   if (url.searchParams.get("s24push") === "1") return s24Push(req, res);
+  if (url.searchParams.get("tnpush") === "1") return tnPush(req, res);
 
   if (requireFill(req, res)) return;
 
