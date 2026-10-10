@@ -41,7 +41,7 @@ Table tennis tags come from **player stats only**, never the price: rating
 gap, head-to-head, last-20 form, rest and career record, combined by a
 logistic fit (`statsHome` in `_ratings.js`). On 81k games it never saw, 75%+
 (**Strong**) won 79–92% and 70–75% (**Good**) won 73%; on SportyBet's own games
-75%+ won 63 of 74. SportyBet's % is shown beside it, not mixed in. Each game's
+75%+ won 63 of 74. SportyBet's % is shown beside it, not mixed in. **Lean** is 65–70% (won 67%). Head-to-head comes from `tt_h2h`, the full history per pair (backfilled from 289k meetings, then kept up by `trainBatch`), not the players' last 80 games. Each game's
 pre-result stats % is stored (`pre_stats`) so the live record can be graded.
 Tennis tags: our side at 75%+ with the book's favourite the same player,
 Strong at 78%+ and 3+ points over the price. Prices only appear an hour or so before tip-off, so
