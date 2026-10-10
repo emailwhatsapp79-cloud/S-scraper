@@ -128,16 +128,19 @@
     who.appendChild(b);
     if (s.gamer) who.appendChild(V.el("span", "team", s.team));
     r.appendChild(who);
-    var can = g.eventId && price > 1;
-    var rt = V.el("div", "rt" + (can ? " tap" : "") + (current(g) === sel ? " on" : ""));
+    var on = current(g) === sel;
+    var held = V.heldNow({ id: g.id, eventId: g.eventId });
+    var can = g.eventId && price > 1 && (!held || on);
+    var rt = V.el("div", "rt" + (can ? " tap" : "") + (on ? " on" : ""));
     rt.appendChild(V.el("span", "px", odds(price)));
-    rt.appendChild(V.el("span", "pc", "ours " + (ours == null ? "—" : Math.round(ours) + "%") + " · book " + (book == null ? "—" : Math.round(book) + "%")));
+    if (held && !on) rt.appendChild(V.el("span", "pc", "suspended"));
+    else rt.appendChild(V.el("span", "pc", "ours " + (ours == null ? "—" : Math.round(ours) + "%") + " · book " + (book == null ? "—" : Math.round(book) + "%")));
     if (can) {
       rt.setAttribute("role", "button");
       rt.tabIndex = 0;
       var go = function (e) {
         e.stopPropagation();
-        V.toggleBook(V.makePick(gameOf(g), sel, price, (s.gamer || s.team) + " to win"));
+        V.bookChecked(V.makePick(gameOf(g), sel, price, (s.gamer || s.team) + " to win"));
         render(LAST);
       };
       rt.addEventListener("click", go);
@@ -206,6 +209,7 @@
     });
   }
 
+  window.addEventListener("vfs-book", function () { if (LAST) render(LAST); });
   load();
   // Keep banking prices while the page is open; games are only priced shortly before tip-off.
   setInterval(function () { if (document.visibilityState === "visible") load(); }, 120000);

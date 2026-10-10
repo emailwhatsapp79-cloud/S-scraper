@@ -126,12 +126,16 @@
     c.appendChild(V.el("b", null, price != null ? Number(price).toFixed(2) : label));
     c.appendChild(V.el("span", null, label));
     if (extra) c.appendChild(V.el("em", null, extra));
-    var bookable = price != null && g.selectionRefs && g.selectionRefs[sel];
+    var score = /^\d+:\d+$/.test(sel);
+    var closed = g.suspended || (score ? g.scoresOpen === false : g.winOpen === false) ||
+      V.heldNow({ id: g.id, eventId: g.eventId });
+    // Suspended on SportyBet: can't be added, only taken off if already on the slip.
+    var bookable = price != null && g.selectionRefs && g.selectionRefs[sel] && (!closed || on);
     if (!bookable) c.classList.add("off");
     if (bookable) {
       c.addEventListener("click", function (e) {
         e.stopPropagation();
-        V.toggleBook(V.makePick(gameOf(g), sel, price, label));
+        V.bookChecked(V.makePick(gameOf(g), sel, price, label));
         render();
       });
     }

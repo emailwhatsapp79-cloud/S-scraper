@@ -50,6 +50,16 @@ loops ~5.5 hours, then starts the next; GitHub's own schedule only restarts it),
 open page of the app banks it every 5. That route needs no key — it only reads
 public odds — and skips if it ran in the last 4 minutes.
 
+Table tennis history for the leagues SportyBet only partly lists (TT Elite
+Series, Czech Liga Pro, TT Cup, ...) comes from scores24, which blocks every
+Vercel server but not GitHub's. So the same loop runs `.github/s24-push.sh`
+every 10 minutes: it fetches the newest finished matches and POSTs them to
+`/api/poll?s24push=1`, which only accepts GitHub's signed OIDC token for this
+repo (`_oidc.js`, no stored secret), saves the rows and trains on them at once.
+After a gap, run **s24-backfill** from the Actions tab (days back, pages per
+league). Games SportyBet adds late are banked within 10 minutes and get their
+stats the moment the card is read.
+
 ## The vFootball screen
 
 Sides are never hardcoded. For each match the **favourite** is whichever of the

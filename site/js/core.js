@@ -565,6 +565,62 @@
     return saveBook(kept);
   }
 
+  // The card can be a minute or more old, so ask SportyBet at the moment of the
+  // tap whether the price can still be booked. A suspended leg goes straight
+  // back off the slip with a note; a moved price is updated in place.
+  var heldAt = {};
+  function heldNow(pick) {
+    var t = heldAt[legKey(pick)];
+    return t && Date.now() - t < 120000;
+  }
+  function say(text) {
+    var el = document.getElementById("vfs-say");
+    if (!el) {
+      el = document.createElement("div");
+      el.id = "vfs-say";
+      el.className = "say";
+      el.setAttribute("role", "status");
+      document.body.appendChild(el);
+    }
+    el.textContent = text;
+    el.classList.add("on");
+    clearTimeout(say.t);
+    say.t = setTimeout(function () { el.classList.remove("on"); }, 4500);
+  }
+  function bookChecked(pick) {
+    var key = legKey(pick);
+    var same = function (l) { return legKey(l) === key && l.selection === pick.selection; };
+    var legs = toggleBook(pick);
+    if (!pick.eventId || !legs.some(same)) return legs;
+    fetch("/api/slips", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ quote: true, book: "sporty", legs: [{
+        gameId: pick.id, eventId: pick.eventId, selection: pick.selection,
+        home: pick.home, away: pick.away, league: pick.league,
+        price: pick.price, kickoff: pick.kickoff, label: pick.label || "",
+        source: "", sport: pick.sport || "",
+        marketId: pick.marketId || null, outcomeId: pick.outcomeId || null,
+        specifier: pick.specifier || "", probability: pick.probability || ""
+      }] })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      var q = d && d.ok && (d.legs || [])[0];
+      if (!q || !loadBook().some(same)) return;
+      var swapped = pick.outcomeId && q.outcomeId && String(q.outcomeId) !== String(pick.outcomeId);
+      if ((q.error && /suspended|not open/i.test(q.error)) || swapped) {
+        heldAt[key] = Date.now();
+        saveBook(loadBook().filter(function (l) { return !same(l); }));
+        say((pick.home || "This game") + " v " + (pick.away || "") + " is suspended on SportyBet right now, so it was not added.");
+      } else if (Number(q.price) > 1 && Math.abs(Number(q.price) - Number(pick.price)) >= 0.01) {
+        saveBook(loadBook().map(function (l) {
+          return same(l) ? Object.assign({}, l, { price: Number(q.price), marketId: q.marketId || l.marketId, outcomeId: q.outcomeId || l.outcomeId }) : l;
+        }));
+        say("Price moved: " + Number(pick.price).toFixed(2) + " → " + Number(q.price).toFixed(2));
+      }
+    }).catch(function () { /* could not check: the Betslip checks again before booking */ });
+    return legs;
+  }
+
   var BOOK_FC = "vfs_book_fc";
   function loadBookFc() {
     try { return JSON.parse(localStorage.getItem(BOOK_FC) || "[]") || []; }
@@ -1904,7 +1960,7 @@
     hydrate: hydrate, enablePings: enablePings, noticeSlips: noticeSlips,
     screen: screen, makePick: makePick, favPick: favPick, stylePick: stylePick, spreadPack: spreadPack, sameSlotClusters: sameSlotClusters, acca: acca,
     rateGame: rateGame, packHit: packHit, stakeOf: stakeOf, bookLegs: bookLegs,
-    loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, inBook: inBook,
+    loadBook: loadBook, saveBook: saveBook, toggleBook: toggleBook, bookChecked: bookChecked, heldNow: heldNow, say: say, inBook: inBook,
     loadBookFc: loadBookFc, saveBookFc: saveBookFc, toggleBookFc: toggleBookFc, inBookFc: inBookFc,
     usedMap: usedMap, markUsed: markUsed, mergeUsedFromSlips: mergeUsedFromSlips, isUsed: isUsed,
     rebetSlip: rebetSlip,

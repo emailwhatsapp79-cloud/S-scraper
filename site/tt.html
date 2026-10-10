@@ -40,6 +40,7 @@
   .tt-cell span { display: block; font-size: 10.5px; color: var(--dim); margin-top: 2px }
   .tt-cell.tap { cursor: pointer; transition: transform .06s ease }
   .tt-cell.tap:active { transform: scale(.97) }
+  .tt-cell.held { opacity: .55 } .tt-cell.held span { color: var(--bad) }
   .tt-cell.fav { box-shadow: inset 0 0 0 1px var(--line, rgba(255,255,255,.14)), var(--shadow) }
   .tt-cell.on { background: var(--good, #37c76a); color: #04140a }
   .tt-cell em { display: block; font-style: normal; font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--go); margin-top: 1px }
@@ -137,11 +138,14 @@
     return null;
   }
   function tapCell(g, sel, price, label, cls, pct, book) {
-    var can = price != null && isFinite(Number(price));
-    var on = can && currentSel(g.id) === sel;
-    var c = V.el("div", "tt-cell " + (cls || "") + (can ? " tap" : "") + (on ? " on" : ""));
+    var priced = price != null && isFinite(Number(price));
+    var on = priced && currentSel(g.id) === sel;
+    // Suspended on SportyBet (card or a tap just now): can't be added, only taken off.
+    var held = g.held || (V.heldNow({ id: g.id, eventId: g.eventId }) ? "Suspended" : "");
+    var can = priced && (!held || on);
+    var c = V.el("div", "tt-cell " + (cls || "") + (can ? " tap" : "") + (on ? " on" : "") + (held ? " held" : ""));
     c.appendChild(V.el("b", null, odds(price)));
-    c.appendChild(V.el("span", null, label));
+    c.appendChild(V.el("span", null, held || label));
     if (pct != null && isFinite(pct)) c.appendChild(V.el("em", null, "Ours " + pct + "%"));
     if (book != null && isFinite(book)) c.appendChild(V.el("span", "book", "Book " + book + "%"));
     if (can) {
@@ -149,7 +153,7 @@
       c.tabIndex = 0;
       var go = function (e) {
         e.stopPropagation();
-        V.toggleBook(V.makePick(pickGame(g), sel, price, label));
+        V.bookChecked(V.makePick(pickGame(g), sel, price, label));
         render();
       };
       c.addEventListener("click", go);
@@ -423,6 +427,7 @@
     });
   }
 
+  window.addEventListener("vfs-book", function () { render(); });
   function render() {
     var out = document.getElementById("out");
     out.textContent = "";
