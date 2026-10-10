@@ -71,14 +71,24 @@ export default async function handler(req, res) {
 
   // Fresh card first, so the available games are never stale on load. Failures
   // here (SportyBet slow/down) never block the serve — we fall back to the DB.
-  let cardErr = null;
+  let cardErr = null, live = null;
   try {
     const { events } = await fetchTTCard();
-    await storeTT(events.map(normalise));
+    const fresh = events.map(normalise);
+    await storeTT(fresh);
+    live = new Map(fresh.map((g) => [g.id, g.open]));
   } catch (e) { cardErr = String(e?.message || e); }
 
   let games = [], results = [], counts = { total: 0, settled: 0 }, model = null, error = null;
   try { games = await listUpcomingTT(400); } catch (e) { error = String(e?.message || e); }
+  // What SportyBet shows right now: a game whose winner market is suspended,
+  // or that has dropped off its list, cannot be booked — say so on the card.
+  if (live && live.size) {
+    for (const g of games) {
+      if (!live.has(g.id)) g.held = "Not on SportyBet now";
+      else if (live.get(g.id) === false) g.held = "Suspended";
+    }
+  }
   try { results = await listRecentResultsTT(60); } catch { /* ignore */ }
   try { counts = await countsTT(); } catch { /* ignore */ }
   try { model = await getModelMeta(); } catch { /* ignore */ }

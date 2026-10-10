@@ -91,6 +91,7 @@ function scoreKey(desc) {
 
 function parseMarkets(ev, home, away) {
   const win = {}, cs = {};
+  let open = null;
   const markets = ev?.markets || ev?.playList || [];
   for (const m of markets) {
     const desc = String(m.desc || m.name || "").toLowerCase();
@@ -98,6 +99,10 @@ function parseMarkets(ev, home, away) {
     const winner = desc === "winner" || desc === "match winner" || desc === "moneyline";
     const correct = desc.includes("correct score") || desc.includes("set betting") || desc.includes("correct set");
     if (winner) {
+      // Suspended market (status != 0) or a pulled outcome: priced but not bookable.
+      const live = (m.status == null || m.status === "" || Number(m.status) === 0) &&
+        outs.length > 0 && outs.every((o) => o.isActive !== 0);
+      open = open || live;
       for (const o of outs) {
         const p = parseFloat(o.odds);
         if (!isFinite(p)) continue;
@@ -114,7 +119,7 @@ function parseMarkets(ev, home, away) {
       }
     }
   }
-  return { win, cs };
+  return { win, cs, open };
 }
 
 export async function fetchTTCard() {
@@ -158,8 +163,9 @@ export async function fetchTTCard() {
 export function normalise(ev) {
   const home = ev.homeTeamName || "?";
   const away = ev.awayTeamName || "?";
-  const { win, cs } = parseMarkets(ev, home, away);
+  const { win, cs, open } = parseMarkets(ev, home, away);
   return {
+    open,
     id: String(ev.gameId),
     eventId: ev.eventId || null,
     home, away,
