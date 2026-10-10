@@ -866,6 +866,7 @@ html:not(.gate-ok) body .top { visibility: hidden }
 .str { display: inline-block; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; font-weight: 700; border-radius: 999px; padding: 2px 8px; flex: none }
 .str.strong { background: var(--go); color: #04140a }
 .str.good { color: var(--go); box-shadow: inset 0 0 0 1px var(--go) }
+.str.lean { color: var(--dim); box-shadow: inset 0 0 0 1px var(--line) }
 
 /* Side drawer — every page, grouped; the bottom bar keeps the five used most */
 .menu-btn { margin-left: -4px }

@@ -144,7 +144,7 @@
     return null;
   }
   function strengthTag(level) {
-    return el("span", "str " + level, level === "strong" ? "Strong" : "Good");
+    return el("span", "str " + level, level === "strong" ? "Strong" : level === "good" ? "Good" : "Lean");
   }
 
   function makePick(g, selection, price, label) {

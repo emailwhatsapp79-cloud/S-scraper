@@ -92,7 +92,7 @@
   </div>
   <p class="note" id="sofa-note"></p>
   <p class="note" id="bt-note"></p>
-  <p class="note">Strong / Good come from player stats only, not SportyBet's price: rating, head-to-head, recent form, rest and career record. On 81,000 games the stats never saw, 75%+ (Strong) won 79–92% and 70–75% (Good) won 73%. On SportyBet's own games, 75%+ won 63 of 74. A small sample, so keep stakes small while it builds a record.</p>
+  <p class="note">Tags come from player stats only, not SportyBet's price: rating, full head-to-head, recent form, rest and career record. On 81,000 games the stats never saw: Strong (75%+) won 79–92%, Good (70–75%) won 73%, Lean (65–70%) won 67%. On SportyBet's own games 75%+ won 63 of 74 — a small sample, so keep stakes small.</p>
   <div class="seg" id="seg">
     <button type="button" data-mode="up" class="on">Upcoming</button>
     <button type="button" data-mode="res">Results</button>
@@ -351,12 +351,16 @@
     if (!st) return null;
     if (st.pct >= 75) return "strong";
     if (st.pct >= 70) return "good";
+    if (st.pct >= 65) return "lean";
     return null;
   }
 
+  var RANK = { lean: 1, good: 2, strong: 3 };
+  function atLeast(l, want) { return !!l && RANK[l] >= RANK[want]; }
+
   function filtered(list) {
     var out = LEAGUE === "All" ? list.slice() : list.filter(function (g) { return (g.tourn || "Other") === LEAGUE; });
-    if (MODE === "up" && STR) out = out.filter(function (g) { var l = levelOf(g); return STR === "strong" ? l === "strong" : !!l; });
+    if (MODE === "up" && STR) out = out.filter(function (g) { return atLeast(levelOf(g), STR); });
     if (MODE === "up" && SHORT) out = out.filter(shortPick);
     else if (MODE === "up" && MIN60) out = out.filter(hotPick);
     return out;
@@ -373,10 +377,9 @@
     var box = document.getElementById("tourns");
     box.textContent = "";
     if (MODE === "up") {
-      var nStrong = games.filter(function (g) { return levelOf(g) === "strong"; }).length;
-      var nGood = games.filter(function (g) { return !!levelOf(g); }).length;
-      [["strong", "Strong " + nStrong], ["good", "Strong + good " + nGood]].forEach(function (c) {
-        var sb = V.el("button", "chip" + (STR === c[0] ? " on" : ""), c[1]);
+      [["strong", "Strong"], ["good", "Good+"], ["lean", "Lean+"]].forEach(function (c) {
+        var nn = games.filter(function (g) { return atLeast(levelOf(g), c[0]); }).length;
+        var sb = V.el("button", "chip" + (STR === c[0] ? " on" : ""), c[1] + " " + nn);
         sb.type = "button";
         sb.setAttribute("aria-pressed", STR === c[0] ? "true" : "false");
         sb.addEventListener("click", function () { STR = STR === c[0] ? null : c[0]; render(); });
@@ -419,7 +422,7 @@
     if (!list.length) {
       out.appendChild(V.el("div", "empty", MODE === "res"
         ? "No results banked yet — they fill in as matches finish."
-        : STR ? "Nothing " + (STR === "strong" ? "strong" : "strong or good") + " on this card right now."
+        : STR ? "Nothing at " + (STR === "strong" ? "Strong" : STR === "good" ? "Good or better" : "Lean or better") + " on this card right now."
         : (SHORT
           ? "None at 60%+ with the favourite at 1.50 or shorter."
           : (MIN60

@@ -50,6 +50,13 @@ async function ensure() {
   // stood BEFORE that game's result was learned. The holdout reads only this.
   await sql`ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS pre_home INT`;
   await sql`ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS pre_stats INT`;
+  // Full head-to-head per pair (a < b by key; aw = a's wins). The players'
+  // last-80 record saw a median 3 meetings per pair where history holds 11,
+  // and head-to-head is the stats model's strongest input.
+  await sql`CREATE TABLE IF NOT EXISTS tt_h2h (
+    a TEXT NOT NULL, b TEXT NOT NULL, n INT NOT NULL DEFAULT 0, aw INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (a, b)
+  )`;
   await sql`CREATE INDEX IF NOT EXISTS tt_games_untrained
     ON tt_games (start_at) WHERE trained IS NOT TRUE`;
   ready = true;
@@ -119,6 +126,9 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
   const meta = await loadMeta();
   const bt = meta.bt || { n: 0, hit: 0, brier: 0, strongN: 0, strongW: 0 };
   const ha = homeAdv(meta);
+  let h2hMap = null;
+  try { h2hMap = await loadH2H(games.map((g) => [nameKey(g.home), nameKey(g.away)])); } catch { h2hMap = null; }
+  const h2hAdd = new Map();   // pair -> { n, aw } added by this batch
   const done = [];
   const pre = [];
   for (const g of games) {
@@ -140,8 +150,21 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
     const wh = Number(g.win_home), wa = Number(g.win_away);
     if (wh > 1 && wa > 1 && !alreadySeen(H.rec, kA, st0) && !alreadySeen(A.rec, kH, st0)) {
       const one = { home: g.home, away: g.away, tourn: g.tourn, start: st0, win: { home: wh, away: wa } };
-      scoreOne({ [kH]: H, [kA]: A }, ha, one);
+      scoreOne({ [kH]: H, [kA]: A }, ha, one, h2hMap);
       if (one.ours || one.stats) pre.push([g.match_id, one.ours ? one.ours.home : null, one.stats ? one.stats.home : null]);
+    }
+    // Count the meeting once: a copy of this match from another feed may
+    // already be in the record (same pair within 15 minutes).
+    if (h2hMap && !alreadySeen(H.rec, kA, st0)) {
+      const [a, b] = pairOf(kH, kA);
+      const k2 = a + ">" + b;
+      const r = h2hMap.get(k2) || { n: 0, aw: 0 };
+      const aWon = (hw ? kH : kA) === a;
+      r.n++; if (aWon) r.aw++;
+      h2hMap.set(k2, r);
+      const d = h2hAdd.get(k2) || { n: 0, aw: 0 };
+      d.n++; if (aWon) d.aw++;
+      h2hAdd.set(k2, d);
     }
     // walk-forward self-check, before the update
     if (H.n >= 5 && A.n >= 5) {
@@ -190,6 +213,18 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
   meta.bt = bt;
   await sql`INSERT INTO tt_rating_meta (k, data) VALUES ('main', ${JSON.stringify(meta)})
     ON CONFLICT (k) DO UPDATE SET data = ${JSON.stringify(meta)}`;
+  // Add this batch's meetings on top, so two overlapping runs never overwrite
+  // each other's counts.
+  if (h2hAdd.size) {
+    const list = [...h2hAdd];
+    for (let i = 0; i < list.length; i += 300) {
+      const part = list.slice(i, i + 300).map(([k2, d]) => { const [a, b] = k2.split(">"); return [a, b, d.n, d.aw]; });
+      await sql`INSERT INTO tt_h2h (a, b, n, aw)
+        SELECT * FROM unnest(${part.map((x) => x[0])}::text[], ${part.map((x) => x[1])}::text[],
+                             ${part.map((x) => x[2])}::int[], ${part.map((x) => x[3])}::int[])
+        ON CONFLICT (a, b) DO UPDATE SET n = tt_h2h.n + EXCLUDED.n, aw = tt_h2h.aw + EXCLUDED.aw`;
+    }
+  }
   for (let i = 0; i < pre.length; i += 200) {
     const part = pre.slice(i, i + 200);
     await sql`UPDATE tt_games t SET pre_home = v.p, pre_stats = v.s
@@ -267,13 +302,34 @@ async function loadCardPlayers(games) {
 // Inputs: rating gap, last-20 form gap (a hot streak counts slightly against,
 // it cools), head-to-head (the strongest), rest, career win rate.
 const STATS_W = { b: -0.012, elo: 0.5407, form: -0.591, h2h: 1.9413, rest: -0.0515, career: 0.1243 };
-export function statsHome(H, A, kH, kA, start) {
+const pairOf = (x, y) => (x < y ? [x, y] : [y, x]);
+// { hw, hn } for x against y out of the full head-to-head map, or null.
+function h2hOf(map, x, y) {
+  if (!map) return null;
+  const [a, b] = pairOf(x, y);
+  const r = map.get(a + ">" + b);
+  if (!r) return { hw: 0, hn: 0 };
+  return { hw: x === a ? r.aw : r.n - r.aw, hn: r.n };
+}
+async function loadH2H(pairs) {
+  const map = new Map();
+  const list = [...new Set(pairs.map(([x, y]) => pairOf(x, y).join(">")))];
+  for (let i = 0; i < list.length; i += 400) {
+    const part = list.slice(i, i + 400);
+    const rows = await sql`SELECT a, b, n, aw FROM tt_h2h WHERE (a || '>' || b) = ANY(${part})`;
+    for (const r of rows) map.set(r.a + ">" + r.b, { n: r.n, aw: r.aw });
+  }
+  return map;
+}
+
+export function statsHome(H, A, kH, kA, start, full) {
   if (!H || !A || (H.n || 0) < 10 || (A.n || 0) < 10) return null;
   const recH = H.rec || [], recA = A.rec || [];
   if (!recH.length || !recA.length) return null;
   const form = (rec) => { const r = rec.slice(-20); return r.reduce((s, x) => s + (x.won ? 1 : 0), 0) / r.length; };
   let hw = 0, hn = 0;
-  for (const x of recH) if (x.vs === kA) { hn++; if (x.won) hw++; }
+  if (full) { hw = full.hw; hn = full.hn; }
+  else for (const x of recH) if (x.vs === kA) { hn++; if (x.won) hw++; }
   const t = Number(start) || Date.now();
   const rest = (p) => Math.log1p(p.last ? Math.min(Math.max(0, (t - p.last) / 60000), 600) : 600);
   const car = (p) => { const c = ((p.w || 0) + 1) / ((p.n || 0) + 2); return Math.log(c / (1 - c)); };
@@ -299,7 +355,7 @@ function alreadySeen(rec, oppKey, start) {
 
 // Sets the fields the page reads (pct / ours / book / nH / nA / h2hRec /
 // formH / formA) on one game, from whatever player rows it is handed.
-function scoreOne(players, ha, g) {
+function scoreOne(players, ha, g, h2hMap) {
   const kH = nameKey(g.home), kA = nameKey(g.away);
   const H = players[kH];
   const h2h = {};
@@ -318,7 +374,7 @@ function scoreOne(players, ha, g) {
   g.nH = f.nH; g.nA = f.nA;
   g.h2hRec = f.h2hRec;
   g.formH = f.formH; g.formA = f.formA;
-  const s = statsHome(players[kH], players[kA], kH, kA, g.start);
+  const s = statsHome(players[kH], players[kA], kH, kA, g.start, h2hOf(h2hMap, kH, kA));
   g.stats = s == null ? null : { home: Math.round(s * 100), away: 100 - Math.round(s * 100) };
   return g;
 }
@@ -328,7 +384,9 @@ export async function forecastCard(games) {
   await ensure();
   const players = await loadCardPlayers(games);
   const ha = homeAdv(await loadMeta());
-  for (const g of games) scoreOne(players, ha, g);
+  let h2hMap = null;
+  try { h2hMap = await loadH2H(games.map((g) => [nameKey(g.home), nameKey(g.away)])); } catch { h2hMap = null; }
+  for (const g of games) scoreOne(players, ha, g, h2hMap);
   return games;
 }
 
