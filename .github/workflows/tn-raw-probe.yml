@@ -1,0 +1,15 @@
+name: tn-raw-probe
+on:
+  push:
+    branches: [ccr-59cf78c4-n7ktec]
+    paths: [.github/workflows/tn-raw-probe.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - run: |
+          UA="Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/122.0 Mobile Safari/537.36"
+          for p in 1 2 3; do
+            curl -s -m 20 -H "User-Agent: $UA" "https://www.sportybet.com/api/ng/factsCenter/pcUpcomingEvents?sportId=sr:sport:5&marketId=186,199&option=2&timeline=24&pageSize=100&pageNum=$p" | jq -c '.data' | sed 's/^/RAWPAGE /'
+          done
