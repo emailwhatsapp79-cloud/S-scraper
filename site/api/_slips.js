@@ -2,7 +2,7 @@
 import { sql, rowToGame } from "./_db.js";
 import { fetchEvent, scoreOf, FOOTBALL_BASE } from "./_card.js";
 import { shareSelections } from "./_share.js";
-import { notifyBooked, notifySets } from "./_push.js";
+import { notifyBooked, notifySets, notifyFlags } from "./_push.js";
 import { placeOrder, loadGifts, priceLeg } from "./_fc.js";
 import { readSession, writeSession } from "./_fc_session.js";
 
@@ -58,6 +58,8 @@ export async function ensureSlips() {
   // What the card said when the leg was booked: strong / good / lean / none,
   // or "against" (backed the side the stats did not favour), plus our chance.
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS tag TEXT`;
+  // Points of every set ("7:11 12:10 3:3"), for the red-flag check.
+  await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS game_score TEXT`;
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS chance DOUBLE PRECISION`;
   schemaReady = true;
 }
@@ -508,6 +510,7 @@ export async function refreshSlips() {
         match_status = ${snap.status},
         played = ${snap.played},
         set_score = ${snap.setScore},
+        game_score = ${snap.gameScore || null},
         ht_home = ${snap.htHome},
         ht_away = ${snap.htAway},
         ft_home = ${snap.ftHome},
@@ -522,6 +525,7 @@ export async function refreshSlips() {
     SELECT * FROM slip_legs
     WHERE slip_id IN (SELECT id FROM slips WHERE status IN ('open', 'live'))`;
   try { await notifySets(freshLegs); } catch { /* scores still save */ }
+  try { await notifyFlags(freshLegs, open); } catch { /* scores still save */ }
   const grouped = new Map();
   for (const l of freshLegs) {
     if (!grouped.has(l.slip_id)) grouped.set(l.slip_id, []);
