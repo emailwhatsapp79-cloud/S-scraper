@@ -184,6 +184,7 @@ export function scoreOf(ev) {
     status,
     played: pts ? (pts.home + ":" + pts.away) : (ev.playedSeconds || ""),
     setScore: ev.setScore || "",
+    gameScore: Array.isArray(ev.gameScore) ? ev.gameScore.filter((x) => /^\d+:\d+$/.test(String(x))).join(" ") : "",
     ftHome: ft ? ft.home : null,
     ftAway: ft ? ft.away : null,
     htHome: ht ? ht.home : null,

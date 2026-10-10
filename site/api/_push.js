@@ -205,3 +205,39 @@ export async function notifySets(legs) {
   }
   return { sent };
 }
+
+// Red flags (see _flags.js): one alert per leg when it turns "danger", with
+// what was seen, and every flag logged in slip_flags for the briefing.
+export async function notifyFlags(legs, slips) {
+  if (!Array.isArray(legs) || !legs.length) return { sent: 0 };
+  const { legFlags } = await import("./_flags.js");
+  await sql`CREATE TABLE IF NOT EXISTS slip_flags (
+    slip_id TEXT NOT NULL, game_id TEXT NOT NULL, level TEXT NOT NULL,
+    reasons TEXT, set_score TEXT, at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (slip_id, game_id, level)
+  )`;
+  let pingsOff = false;
+  try { const { loadPrefs } = await import("./_vault.js"); pingsOff = (await loadPrefs()).pings === false; } catch { /* default on */ }
+  const potential = new Map((slips || []).map((s) => [String(s.id), Number(s.potential) || 0]));
+  let sent = 0;
+  for (const l of legs) {
+    if (l.sport !== "tt" && l.sport !== "tn") continue;
+    const f = legFlags(l);
+    if (f.level === "none") continue;
+    const why = f.reasons.join(" · ");
+    await sql`INSERT INTO slip_flags (slip_id, game_id, level, reasons, set_score)
+      VALUES (${String(l.slip_id)}, ${String(l.game_id)}, ${f.level}, ${why}, ${l.set_score || ""})
+      ON CONFLICT (slip_id, game_id, level) DO NOTHING`;
+    if (f.level !== "danger" || pingsOff) continue;
+    const home = pickedHome(l.selection);
+    const who = home ? l.home : l.away;
+    const pot = potential.get(String(l.slip_id));
+    if (await sendOnce("flag-" + l.slip_id + "-" + l.game_id, {
+      kind: "no",
+      url: "/book",
+      title: "🚩 Think about cashing out · " + lastName(who) + " struggling",
+      body: why + (pot ? " · slip pays ₦" + Math.round(pot).toLocaleString("en-NG") + " if it holds" : ""),
+    })) sent++;
+  }
+  return { sent };
+}
