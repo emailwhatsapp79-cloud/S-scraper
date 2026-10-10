@@ -154,7 +154,7 @@
     var top = Math.max(g.stats.home, g.stats.away);
     return top >= LEVELS.strong ? "strong" : top >= LEVELS.good ? "good" : top >= LEVELS.lean ? "lean" : null;
   }
-  function bookPct(g, side) {
+  function sbPct(g, side) {
     var h = Number(g.win && g.win.home), a = Number(g.win && g.win.away);
     if (!(h > 1) || !(a > 1)) return null;
     var ph = (1 / h) / (1 / h + 1 / a);
@@ -213,7 +213,7 @@
     if (ss) {
       var sl = V.el("div", "tn-stats");
       var who = lastName(ss === "away" ? g.away : g.home);
-      var bp = bookPct(g, ss);
+      var bp = sbPct(g, ss);
       sl.appendChild(V.el("b", null, "Stats: " + who + " " + (ss === "away" ? g.stats.away : g.stats.home) + "%"));
       sl.appendChild(document.createTextNode(
         (bp != null ? " · SportyBet " + bp + "%" : "") +
