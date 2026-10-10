@@ -154,10 +154,10 @@ export async function notifyBooked(slips) {
   return { sent };
 }
 
-// Live set alerts for table tennis and tennis legs. Once the side you picked
-// drops behind in sets, every new set score is pushed until the match ends
-// (the existing Yes / No push then gives the result). Each score is claimed
-// once per slip and leg in push_sent, so a score is never sent twice.
+// Live set alerts for table tennis and tennis legs: every new set score from
+// the first set on (1-0, 1-1, ...) until the match ends; the existing Yes / No
+// push then gives the result. Each score is claimed once per slip and leg in
+// push_sent, so a score is never sent twice.
 function pickedHome(sel) {
   const s = String(sel || "");
   if (s === "1") return true;
@@ -166,9 +166,9 @@ function pickedHome(sel) {
   return m ? Number(m[1]) > Number(m[2]) : null;
 }
 
-async function seenKey(k) {
-  const rows = await sql`SELECT 1 FROM push_sent WHERE k = ${k}`;
-  return rows.length > 0;
+function lastName(s) {
+  const t = String(s || "").trim();
+  return t.includes(",") ? t.split(",")[0].trim() : (t.split(/\s+/).pop() || t);
 }
 
 export async function notifySets(legs) {
@@ -188,17 +188,15 @@ export async function notifySets(legs) {
     if (home == null) continue;
     const a = Number(m[1]), b = Number(m[2]);
     const mine = home ? a : b, theirs = home ? b : a;
+    if (a + b === 0) continue;           // not started, or no set finished yet
     const base = String(l.slip_id) + "-" + String(l.game_id);
-    const trig = "trig-" + base;
-    if (mine < theirs) await claimed(trig);
-    else if (!(await seenKey(trig))) continue;
     const who = home ? l.home : l.away;
     const verb = mine < theirs ? "behind" : mine > theirs ? "ahead" : "level";
     if (await sendOnce("set-" + base + "-" + a + ":" + b, {
       kind: mine < theirs ? "no" : "kick",
       url: "/book",
-      title: "Sets " + a + "–" + b + " · " + (who || "your pick") + " " + verb,
-      body: (l.home || "") + " v " + (l.away || "") + " · you have " + (who || "") ,
+      title: lastName(l.home) + " " + a + "–" + b + " " + lastName(l.away) + " · " + lastName(who) + " " + verb,
+      body: (l.home || "") + " v " + (l.away || "") + " · your pick: " + (who || ""),
     })) sent++;
   }
   return { sent };
