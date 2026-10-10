@@ -119,10 +119,17 @@
 
   // Standard book leg — one selection per match, same as the football slip.
   function pickGame(g) {
-    var s = g.stats;
+    var s = g.stats, st = statSide(g), lvl = levelOf(g);
+    var tags = null;
+    if (st) {
+      tags = {};
+      tags[st.home ? "1" : "2"] = lvl || "none";
+      tags[st.home ? "2" : "1"] = "against";
+    }
     return { id: g.id, eventId: g.eventId || null, home: g.home, away: g.away,
              league: g.tourn || "Table tennis", kickoff: g.start || null,
-             chance: s ? { "1": Number(s.home) / 100, "2": Number(s.away) / 100 } : null };
+             chance: s ? { "1": Number(s.home) / 100, "2": Number(s.away) / 100 } : null,
+             tags: tags };
   }
   function currentSel(id) {
     var legs = V.loadBook();

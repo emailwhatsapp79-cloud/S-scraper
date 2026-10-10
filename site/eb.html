@@ -98,7 +98,11 @@
       id: g.id, eventId: g.eventId, home: g.home, away: g.away,
       league: (g.tourn || "eBasketball").replace(/\s*\(.*?\)\s*/g, " ").trim(),
       kickoff: g.start, sport: "eb",
-      selectionRefs: { "1": { marketId: "219", outcomeId: "4" }, "2": { marketId: "219", outcomeId: "5" } }
+      selectionRefs: { "1": { marketId: "219", outcomeId: "4" }, "2": { marketId: "219", outcomeId: "5" } },
+      chance: g.ours == null ? null : { "1": g.ours / 100, "2": 1 - g.ours / 100 },
+      tags: g.pick
+        ? (g.pick.side === "home" ? { "1": levelOf(g), "2": "against" } : { "1": "against", "2": levelOf(g) })
+        : { "1": "none", "2": "none" }
     };
   }
   function current(g) {

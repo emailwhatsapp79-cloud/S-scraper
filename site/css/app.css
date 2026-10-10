@@ -893,3 +893,9 @@ body.drawer-open { overflow: hidden }
 .drawer a.on svg { color: var(--go) }
 .drawer-lock { margin-top: 14px; color: var(--dim); box-shadow: inset 0 1px 0 var(--line); border-radius: 0 }
 @media (prefers-reduced-motion: reduce) { .drawer, .drawer-bg { transition: none } }
+.str.booked { margin-left: 6px; vertical-align: 1px; font-size: 9.5px; padding: 1px 7px }
+.str.none { color: var(--faint); box-shadow: inset 0 0 0 1px var(--line) }
+.tag-tally { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin: 0 0 14px }
+.tag-tally > div { background: var(--card); box-shadow: var(--shadow); border-radius: var(--r3); padding: 10px 12px }
+.tag-tally b { display: block; font-family: var(--mono); font-size: 16px }
+.tag-tally span { font-size: 11.5px; color: var(--dim) }

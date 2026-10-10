@@ -101,10 +101,19 @@
     return null;
   }
   function gameOf(g) {
+    // The tag the card shows belongs to the called side; the other side is
+    // "against". Set-score picks take the tag of the side they favour.
+    var tags = null;
+    if (g.call && !g.sim) {
+      var lvl = levelOf(g) || "none";
+      var homeTag = g.call.side === "away" ? "against" : lvl;
+      var awayTag = g.call.side === "away" ? lvl : "against";
+      tags = { "1": homeTag, "2": awayTag, "2:0": homeTag, "2:1": homeTag, "1:2": awayTag, "0:2": awayTag };
+    }
     return {
       id: g.id, eventId: g.eventId, home: g.home, away: g.away,
       league: g.tourn || "Tennis", kickoff: g.start || null,
-      sport: "tn", selectionRefs: g.selectionRefs || {}
+      sport: "tn", selectionRefs: g.selectionRefs || {}, tags: tags
     };
   }
   function cell(g, sel, price, label, kind, extra) {
