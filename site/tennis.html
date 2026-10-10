@@ -391,8 +391,12 @@
       groupDays(out, slips, function (s) { return s.createdAt || slipKick(s); }, V.slipCard);
       return;
     }
+    var stale = Date.now() - 12 * 3600 * 1000;
     var list = BOOKS.filter(function (row) {
       var done = row.scoreHit != null || row.winnerHit != null;
+      // A pick that started over 12 hours ago with no result found is not
+      // "waiting" any more (often doubles, which the results feed skips).
+      if (!done && Number(row.start) && Number(row.start) < stale) return false;
       return WHEN === "done" ? done : !done;
     });
     var picks = list.map(function (row) { return toPick(row, REC, WHEN === "done"); });

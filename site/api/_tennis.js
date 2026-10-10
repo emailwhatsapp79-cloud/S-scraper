@@ -1486,6 +1486,17 @@ export async function trackBooks(games, opts = {}) {
       chunk.flat(),
     );
   }
+  // Settle from our own results history (tn_games, SportyBet's result list):
+  // catches picks the per-event check below missed or aged out of.
+  try {
+    await sql`
+      UPDATE tn_books b SET result = g.r_home || ':' || g.r_away,
+        winner_hit = ((b.winner = '1') = (g.r_home > g.r_away)),
+        score_hit = (b.score = g.r_home || ':' || g.r_away), hold = NULL
+      FROM tn_games g
+      WHERE g.event_id = b.event_id AND g.event_id <> ''
+        AND b.winner_hit IS NULL AND b.score_hit IS NULL`;
+  } catch { /* the per-event check still runs */ }
   const due = await sql`
     SELECT event_id, score, winner, result FROM tn_books
     WHERE start_at IS NOT NULL AND start_at < ${Date.now() - 20 * 60 * 1000}
