@@ -18,16 +18,16 @@ test("games share reads the set scores from either side", () => {
   assert.equal(gamesShare("", true), 0.5);
 });
 
-test("no stats until both players have 10 matches; the winner's side rises", () => {
+test("no stats until both players have 5 matches; the winner's side rises", () => {
   const H = blank(), A = blank();
-  for (let i = 0; i < 9; i++) learnTennis(H, A, true, "6:3 6:3", 1000 + i);
-  assert.equal(statsTennis(H, A, { n: 9, hw: 9 }, 2000), null);
+  for (let i = 0; i < 4; i++) learnTennis(H, A, true, "6:3 6:3", 1000 + i);
+  assert.equal(statsTennis(H, A, { n: 4, hw: 4 }, 2000), null);
   learnTennis(H, A, true, "6:3 6:3", 1010);
-  const s = statsTennis(H, A, { n: 10, hw: 10 }, 2000);
+  const s = statsTennis(H, A, { n: 5, hw: 5 }, 2000);
   assert.ok(s > 0.5, "home has won every meeting");
-  assert.equal(H.n, 10); assert.equal(H.w, 10); assert.equal(A.w, 0);
+  assert.equal(H.n, 5); assert.equal(H.w, 5); assert.equal(A.w, 0);
   assert.ok(H.elo > 1500 && A.elo < 1500);
-  assert.equal(H.r.length, 10); assert.ok(H.g.length <= 10);
+  assert.equal(H.r.length, 5); assert.ok(H.g.length <= 10);
 });
 
 test("doubles and unfinished results are not history", () => {

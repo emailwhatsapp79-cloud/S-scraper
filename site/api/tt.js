@@ -56,7 +56,10 @@ export default async function handler(req, res) {
     try {
       const games = await fetchTennisCard();
       let record = null;
-      if (String(q.fresh || "") !== "1") {
+      // Tags come from player stats now. The old enrichment (scores24 form, which
+      // Vercel can't reach, plus two tip sites) cost up to ~20s a load, so it only
+      // runs when asked for (?enrich=1).
+      if (String(q.enrich || "") === "1") {
         try { await enrichTennis(games); } catch { /* book prices still stand */ }
         try { await trackTennis(games); } catch { /* ahead history stays cleared */ }
       }
