@@ -169,6 +169,34 @@ function shapeLeg(l) {
   };
 }
 
+// Table tennis legs that reach the server without a tag (an old page still
+// open, or legs left in the Betslip from before) get it worked out here from
+// the same stats % the card shows: 75%+ Strong, 70%+ Good, 65%+ Lean, else No
+// tag; backing the other side is "against".
+export function tagFromStats(stats, selection) {
+  if (!stats || (selection !== "1" && selection !== "2")) return null;
+  const home = Number(stats.home) >= Number(stats.away);
+  const pct = home ? Number(stats.home) : Number(stats.away);
+  const mine = selection === "1" ? Number(stats.home) : Number(stats.away);
+  const tag = (selection === "1") !== home ? "against"
+    : pct >= 75 ? "strong" : pct >= 70 ? "good" : pct >= 65 ? "lean" : "none";
+  return { tag, chance: Math.round(mine) / 100 };
+}
+
+async function fillTTTags(legs) {
+  const need = legs.filter((l) => l.sport === "tt" && !l.tag && (l.selection === "1" || l.selection === "2"));
+  if (!need.length) return;
+  try {
+    const { forecastCard } = await import("./_ratings.js");
+    const games = need.map((l) => ({ home: l.home, away: l.away, tourn: l.league, start: l.kickoff }));
+    await forecastCard(games);
+    need.forEach((l, i) => {
+      const t = tagFromStats(games[i].stats, l.selection);
+      if (t) { l.tag = t.tag; if (l.chance == null) l.chance = t.chance; }
+    });
+  } catch { /* the slip still books, just untagged */ }
+}
+
 const TAGS = new Set(["strong","good","lean","none","against"]);
 
 async function tryShare(legs) {
@@ -226,7 +254,9 @@ export async function createSlip(stake, incoming, book, opts = {}) {
         sportId: row.sportId || null,
       });
     }
-    const pay = opts.pay === "gift" ? "gift" : opts.pay === "money" ? "money" : "";
+    await fillTTTags(legs);
+
+  const pay = opts.pay === "gift" ? "gift" : opts.pay === "money" ? "money" : "";
     let placed = null;
     let booked = legs;
     if (pay) {
