@@ -1310,7 +1310,7 @@
     var s = pingSeen();
     s[k] = Date.now();
     var keys = Object.keys(s);
-    if (keys.length > 80) keys.sort(function (a, b) { return s[a] - s[b]; }).slice(0, keys.length - 80).forEach(function (x) { delete s[x]; });
+    if (keys.length > 400) keys.sort(function (a, b) { return s[a] - s[b]; }).slice(0, keys.length - 400).forEach(function (x) { delete s[x]; });
     try { localStorage.setItem("vfs_pinged", JSON.stringify(s)); } catch (e) {}
   }
 
@@ -1361,11 +1361,21 @@
     });
   }
 
+  // Only slips still in play or settled in the last 45 minutes. This used to
+  // walk every slip in history while remembering just the last 80 keys, so
+  // old legs fell out of memory and were announced again — the repeat pings
+  // for games long finished.
+  var PING_RECENT = 45 * 60 * 1000;
   function noticeSlips(slips) {
     if (device.pings === false) return;
     if (!slips || !slips.length) return;
     var seen = pingSeen();
-    slips.forEach(function (sp) {
+    var now = Date.now();
+    slips.filter(function (sp) {
+      if (sp.status === "open" || sp.status === "live") return true;
+      var t = sp.settledAt ? Date.parse(sp.settledAt) : 0;
+      return isFinite(t) && t > 0 && now - t < PING_RECENT;
+    }).forEach(function (sp) {
       (sp.legs || []).forEach(function (l) {
         if (l.won !== true && l.won !== false) return;
         var k = "leg-" + l.gameId + "-" + (l.won ? "yes" : "no");
