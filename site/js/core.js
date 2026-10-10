@@ -166,7 +166,9 @@
       probability: g.selectionRefs && g.selectionRefs[selection] ? (g.selectionRefs[selection].probability || "") : "",
       // Our own win chance for this pick (0-1) when the page has one, for the
       // Betslip's "chance this slip wins".
-      chance: g.chance && isFinite(g.chance[selection]) ? Number(g.chance[selection]) : null
+      chance: g.chance && isFinite(g.chance[selection]) ? Number(g.chance[selection]) : null,
+      // The tag the card showed for this side when it was booked.
+      tag: g.tags ? (g.tags[selection] || "none") : null
     };
   }
 
@@ -518,7 +520,9 @@
             marketId: l.marketId || null,
             outcomeId: l.outcomeId || null,
             specifier: l.specifier || "",
-            probability: l.probability || ""
+            probability: l.probability || "",
+            tag: l.tag || null,
+            chance: l.chance == null ? null : l.chance
           };
         })
       })
@@ -1610,6 +1614,28 @@
     return status;
   }
 
+  // What the card said when this leg was booked.
+  function bookedTag(tag, chance) {
+    var pct = chance != null && isFinite(chance) ? " " + Math.round(Number(chance) * 100) + "%" : "";
+    if (tag === "strong" || tag === "good" || tag === "lean") {
+      var t = strengthTag(tag); t.textContent += pct; t.className += " booked"; return t;
+    }
+    return el("span", "str booked none", (tag === "against" ? "Against stats" : "No tag") + pct);
+  }
+
+  // Booked legs grouped by the tag they carried: how each tag actually did.
+  function tagStats(slips) {
+    var by = {};
+    (slips || []).forEach(function (sp) {
+      (sp.legs || []).forEach(function (l) {
+        if (!l.tag || (l.won !== true && l.won !== false)) return;
+        var b = by[l.tag] || (by[l.tag] = { n: 0, w: 0 });
+        b.n++; if (l.won) b.w++;
+      });
+    });
+    return by;
+  }
+
   function legRow(l) {
     var st = matchState(l);
     var row = el("div", "leg " + st);
@@ -1619,6 +1645,7 @@
       var sel = el("div", "sel");
       sel.appendChild(el("span", "pick", l.label));
       sel.appendChild(document.createTextNode(" @ " + Number(l.price).toFixed(2)));
+      if (l.tag) sel.appendChild(bookedTag(l.tag, l.chance));
       left.appendChild(sel);
       if (st === "live" && l.livePrice != null && isFinite(l.livePrice)) {
         var live = el("div", "live-odds");
@@ -1882,7 +1909,7 @@
     usedMap: usedMap, markUsed: markUsed, mergeUsedFromSlips: mergeUsedFromSlips, isUsed: isUsed,
     rebetSlip: rebetSlip,
     card: card, compactRow: compactRow,
-    strength: strength, strengthTag: strengthTag,
+    strength: strength, strengthTag: strengthTag, bookedTag: bookedTag, tagStats: tagStats,
     until: until, clock: clock, dayLabel: dayLabel, byKick: byKick,
     leagueKey: leagueKey, teamsBlock: teamsBlock, crest: crest,
     fetchGames: fetchGames, fetchHistory: fetchHistory, fetchSlips: fetchSlips, fetchPicks: fetchPicks,

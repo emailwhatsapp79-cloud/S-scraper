@@ -88,6 +88,20 @@
       var slips = (d.slips || []).filter(function (s) { return s.status === "won" || s.status === "lost"; });
       stats(V.legStats(slips));
       var out = document.getElementById("out"); out.textContent = "";
+      var ts = V.tagStats(slips);
+      var order = [["strong", "Strong"], ["good", "Good"], ["lean", "Lean"], ["none", "No tag"], ["against", "Against stats"]];
+      var have = order.filter(function (o) { return ts[o[0]] && ts[o[0]].n; });
+      if (have.length) {
+        out.appendChild(V.el("h2", "lab-h", "How each tag did (legs you booked)"));
+        var tally = V.el("div", "tag-tally");
+        have.forEach(function (o) {
+          var b = ts[o[0]], cell = V.el("div");
+          cell.appendChild(V.el("b", null, b.w + "/" + b.n + " · " + Math.round(b.w / b.n * 100) + "%"));
+          cell.appendChild(V.el("span", null, o[1] + " legs won"));
+          tally.appendChild(cell);
+        });
+        out.appendChild(tally);
+      }
       if (!slips.length) {
         out.appendChild(V.el("div", "empty", "No settled slips yet. Book a slip on Betslip; once its games finish it appears here."));
       } else {

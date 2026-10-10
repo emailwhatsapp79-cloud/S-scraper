@@ -55,6 +55,10 @@ export async function ensureSlips() {
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS market_id TEXT`;
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS outcome_id TEXT`;
   await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS specifier TEXT`;
+  // What the card said when the leg was booked: strong / good / lean / none,
+  // or "against" (backed the side the stats did not favour), plus our chance.
+  await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS tag TEXT`;
+  await sql`ALTER TABLE slip_legs ADD COLUMN IF NOT EXISTS chance DOUBLE PRECISION`;
   schemaReady = true;
 }
 
@@ -160,8 +164,12 @@ function shapeLeg(l) {
     marketId: l.market_id || null,
     outcomeId: l.outcome_id || null,
     specifier: l.specifier || "",
+    tag: l.tag || null,
+    chance: l.chance == null ? null : Number(l.chance),
   };
 }
+
+const TAGS = new Set(["strong","good","lean","none","against"]);
 
 async function tryShare(legs) {
   try {
@@ -326,6 +334,8 @@ export async function createSlip(stake, incoming, book, opts = {}) {
       outcomeId: row.outcomeId ? String(row.outcomeId) : null,
       probability: row.probability ? String(row.probability) : "",
       specifier: row.specifier ? String(row.specifier) : "",
+      tag: TAGS.has(String(row.tag || "")) ? String(row.tag) : null,
+      chance: Number(row.chance) > 0 && Number(row.chance) < 1 ? Number(row.chance) : null,
     });
   }
 
@@ -365,10 +375,11 @@ export async function createSlip(stake, incoming, book, opts = {}) {
     await sql`
       INSERT INTO slip_legs (
         slip_id, pos, game_id, event_id, home, away, league, kickoff,
-        selection, selection_label, price, sport, market_id, outcome_id, specifier)
+        selection, selection_label, price, sport, market_id, outcome_id, specifier, tag, chance)
       VALUES (
         ${id}, ${i}, ${l.gameId}, ${l.eventId}, ${l.home}, ${l.away}, ${l.league}, ${l.kickoff},
-        ${l.selection}, ${l.label}, ${l.price}, ${l.sport || "fb"}, ${l.marketId || null}, ${l.outcomeId || null}, ${l.specifier || null})`;
+        ${l.selection}, ${l.label}, ${l.price}, ${l.sport || "fb"}, ${l.marketId || null}, ${l.outcomeId || null}, ${l.specifier || null},
+        ${l.tag || null}, ${l.chance ?? null})`;
   }
 
   await refreshSlips();
