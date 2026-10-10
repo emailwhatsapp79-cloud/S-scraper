@@ -1267,6 +1267,8 @@ export function bookMark(g) {
   }
   if (score !== "2:0" && score !== "2:1" && score !== "1:2" && score !== "0:2") return null;
   const homeSide = score === "2:0" || score === "2:1";
+  // Book + stats agree: our stats (forecastTennis) must give the same player 70%+.
+  if (!g.stats || (homeSide ? g.stats.home : g.stats.away) < 70) return null;
   const scoreRow = (g.scores || []).find((s) => s.sel === score);
   const winnerOdds = Number(homeSide ? g.win && g.win.home : g.win && g.win.away);
   const scoreOdds = Number(scoreRow && scoreRow.odds);
