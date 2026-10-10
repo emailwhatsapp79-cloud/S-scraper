@@ -157,7 +157,9 @@
         marketId: l.marketId || null,
         outcomeId: l.outcomeId || null,
         specifier: l.specifier || "",
-        probability: l.probability || ""
+        probability: l.probability || "",
+        tag: l.tag || null,
+        chance: l.chance == null ? null : l.chance
       };
     });
   }
