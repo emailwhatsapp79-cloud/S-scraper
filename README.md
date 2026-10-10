@@ -43,8 +43,12 @@ logistic fit (`statsHome` in `_ratings.js`). On 81k games it never saw, 75%+
 (**Strong**) won 79–92% and 70–75% (**Good**) won 73%; on SportyBet's own games
 75%+ won 63 of 74. SportyBet's % is shown beside it, not mixed in. **Lean** is 65–70% (won 67%). Head-to-head comes from `tt_h2h`, the full history per pair (backfilled from 289k meetings, then kept up by `trainBatch`), not the players' last 80 games. Each game's
 pre-result stats % is stored (`pre_stats`) so the live record can be graded.
-Tennis tags: our side at 75%+ with the book's favourite the same player,
-Strong at 78%+ and 3+ points over the price. Prices only appear an hour or so before tip-off, so
+Tennis tags also come from **player stats only** (`_tn_model.js`): Elo rating,
+last-20 wins, last-10 share of games won, head-to-head, rest and career record,
+fitted on a year of SportyBet's own singles results (`tn_games`, 40k matches).
+On the newest 4,725 it never saw: **Strong** (80%+) won 85%, **Good** (75–80%)
+won 80%, **Lean** (70–75%) won 75%. Players need 10+ matches. The timer pulls
+new results and learns them every ~10 minutes; `tn-backfill` reloads history. Prices only appear an hour or so before tip-off, so
 `.github/workflows/eb-bank.yml` calls `/api/poll?eb=1` every 10 minutes (one run
 loops ~5.5 hours, then starts the next; GitHub's own schedule only restarts it), and any
 open page of the app banks it every 5. That route needs no key — it only reads

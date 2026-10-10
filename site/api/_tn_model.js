@@ -8,7 +8,9 @@
 import { sql } from "./_db.js";
 import { ensureTnHist } from "./_tn_hist.js";
 
-export const TN_W = { b: 0, elo: 1, form: 0, gs: 0, h2h: 0, rest: 0, career: 0 };
+// Fitted 10 Oct 2026 on 11k matches, tested on the newest 4,725: 70-75% won
+// 75%, 75-80% won 80%, 80-90% won 85%, 90%+ won 98%.
+export const TN_W = { b: 0.0445, elo: 0.8936, form: -2.1405, gs: 2.2261, h2h: 2.3314, rest: 0.0877, career: 0.0579 };
 export const MIN_N = 10;
 
 export function tnKey(s) {
