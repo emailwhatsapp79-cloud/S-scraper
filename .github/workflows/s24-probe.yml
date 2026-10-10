@@ -1,0 +1,19 @@
+name: s24-probe
+on:
+  push:
+    branches: [ccr-59cf78c4-n7ktec]
+    paths: [.github/workflows/s24-probe.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: |
+          F=$(date -u -d '-1 day' +%Y-%m-%d); T=$(date -u -d '+1 day' +%Y-%m-%d)
+          for s in tt-elite-series-1 czech-liga-pro-1; do
+            curl -sS -o out.json -w "$s %{http_code} %{size_download}\n" \
+              -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" \
+              -H "Accept: application/json" -H "Referer: https://scores24.live/en/table-tennis" \
+              "https://scores24.live/rapi/leagues/table-tennis/$s/matches?lang=en&first=5&status=ended&date_between%5B%5D=$F&date_between%5B%5D=$T&audience=en"
+            head -c 300 out.json; echo
+          done
