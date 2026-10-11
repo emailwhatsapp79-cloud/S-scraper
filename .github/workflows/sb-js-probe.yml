@@ -40,7 +40,9 @@ jobs:
                   seg = t[m.start():m.start()+9000]
                   for k in re.finditer(r'concat\(j[,)]|fetch\(j[,)]|\(j,\{', seg):
                       print("== J use ==\n", seg[max(0, k.start()-900):k.start()+900].replace("\n", " "), "\n")
-              for m in re.finditer(r'realSportsGame/cashOut"', t):
+              for m in re.finditer(r'(?:fetch\(j[,)]|fetch\(j\b|\(j,M\(|"POST",body:JSON\.stringify\(\{[^}]{0,200}betId)', t):
+                  print("== JPOST in", f, "==\n", t[max(0, m.start()-1500):m.start()+700].replace("\n", " "), "\n")
+              for m in re.finditer(r'realSportsGame/cashOut_DISABLED"', t):
                   print("== CASHOUT literal in", f, "==\n", t[max(0, m.start()-1200):m.start()+600].replace("\n", " "), "\n")
               for m in re.finditer(r'cashOutAmount|cashoutAmount', t):
                   ctx = t[max(0, m.start()-300):m.start()+200]
