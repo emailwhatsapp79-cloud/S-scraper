@@ -29,6 +29,12 @@ test("reads the winner market off a SportyBet event", () => {
   assert.deepEqual(g.win, { home: 2.79, away: 1.35 });
 });
 
+test("ids come from the eventId, since SportyBet reuses the short gameId", () => {
+  const ev = { gameId: "12371", eventId: "sr:match:75508772", homeTeamName: "A (x)", awayTeamName: "B (y)", markets: [] };
+  assert.equal(normaliseEB(ev, "ESportsBattle").id, "75508772");
+  assert.equal(normaliseEB({ ...ev, eventId: null }, "ESportsBattle").id, "12371");
+});
+
 test("only a finished, untied score settles", () => {
   assert.deepEqual(finalScore({ matchStatus: "Ended", setScore: "70:89" }), { home: 70, away: 89 });
   assert.equal(finalScore({ matchStatus: "Q4", setScore: "60:58" }), null);

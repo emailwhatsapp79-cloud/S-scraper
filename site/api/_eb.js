@@ -4,7 +4,7 @@
 // is learned, so the record grades only what we could have known.
 import { sql } from "./_db.js";
 import {
-  SPORT, normaliseEB, finalScore, gamerKey, splitName, bookHome, predict, learn, pickOf, grade,
+  SPORT, sbGameId, normaliseEB, finalScore, gamerKey, splitName, bookHome, predict, learn, pickOf, grade,
 } from "./_eb_model.js";
 
 const BASE = "https://www.sportybet.com/api/ng/factsCenter";
@@ -130,7 +130,7 @@ export async function settleEB(hours = 6) {
       for (const ev of t.events || []) {
         count++;
         const s = finalScore(ev);
-        if (s && ev.gameId) found.push([String(ev.gameId), s.home, s.away, String(ev.eventId || "")]);
+        if (s && ev.gameId) found.push([sbGameId(ev), s.home, s.away, String(ev.eventId || "")]);
       }
     }
     // Pages hold "up to" 100 and the first often holds 99, so a short page is

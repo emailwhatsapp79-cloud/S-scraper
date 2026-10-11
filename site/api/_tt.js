@@ -141,7 +141,7 @@ export async function fetchTTCard() {
         for (const ev of t.events || []) {
           count++;
           if (!ev?.gameId || !ev.homeTeamName || !ev.awayTeamName) continue;
-          const id = String(ev.gameId);
+          const id = sbGameId(ev);
           if (seen.has(id)) continue;
           seen.add(id);
           found.push({ ...ev, _tourn: tourn });
@@ -160,13 +160,22 @@ export async function fetchTTCard() {
   return { events: found, errors };
 }
 
+// SportyBet's short gameId is reused: a September game and today's game can
+// both be "12371", and the second then never got stored (or wrote over the
+// first's start time). The number in its eventId (sr:match:75060040) is never
+// reused, so that is the id; gameId only when there is no eventId.
+export function sbGameId(ev) {
+  const m = String((ev && ev.eventId) || "").match(/(\d+)$/);
+  return m ? m[1] : String((ev && ev.gameId) || "");
+}
+
 export function normalise(ev) {
   const home = ev.homeTeamName || "?";
   const away = ev.awayTeamName || "?";
   const { win, cs, open } = parseMarkets(ev, home, away);
   return {
     open,
-    id: String(ev.gameId),
+    id: sbGameId(ev),
     eventId: ev.eventId || null,
     home, away,
     tourn: ev._tourn || (ev.sport?.category?.tournament?.name) || "",
@@ -290,7 +299,7 @@ export async function settleTTResults(hours = 6, maxPages = 20) {
         if (!/^end/i.test(String(ev.matchStatus || ""))) continue;
         const s = parseSet(ev.setScore);
         if (!s || s.home === s.away || !ev.gameId) continue;
-        found.push([String(ev.gameId), s.home, s.away, String(ev.eventId || "")]);
+        found.push([sbGameId(ev), s.home, s.away, String(ev.eventId || "")]);
       }
     }
     read += count;
