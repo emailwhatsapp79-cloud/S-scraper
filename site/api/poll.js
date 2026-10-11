@@ -80,15 +80,19 @@ async function ebTick(res) {
   try {
     const rows = await sql`SELECT k, v, at FROM health WHERE k IN ('watch', 'eb')`;
     const at = Object.fromEntries(rows.map((r) => [r.k, new Date(r.at).getTime()]));
+    let prevWatch = {};
+    try { prevWatch = JSON.parse((rows.find((r) => r.k === "watch") || {}).v || "{}"); } catch { prevWatch = {}; }
     const now = Date.now();
     if (now - (at.watch || 0) < 20 * 1000) {
       out.skipped = true;
-      try {
-        const row = rows.find((r) => r.k === "watch");
-        out.hot = !!(row && JSON.parse(row.v || "{}").hot);
-      } catch { out.hot = false; }
+      out.hot = !!prevWatch.hot;
+      out.lines = Array.isArray(prevWatch.lines) ? prevWatch.lines : [];
     } else {
-      await touchHealth("watch", { started: true });
+      await touchHealth("watch", {
+        started: true,
+        hot: !!prevWatch.hot,
+        lines: Array.isArray(prevWatch.lines) ? prevWatch.lines : [],
+      });
       try { out.slips = await refreshSlips(); } catch (e) { out.slips = { error: String(e?.message || e) }; }
       // Owner-authorized: every minute, each open slip's SportyBet cash-out
       // state and amount (shown in the app; used by the auto cash-out).
@@ -120,8 +124,19 @@ async function ebTick(res) {
         // the GitHub workflow at ?s24push=1: scores24 blocks Vercel's servers.
         await touchHealth("eb", out);
       }
-      await touchHealth("watch", { hot: !!(out.slips && out.slips.hot), slips: out.slips });
+      const lines = (out.slips && out.slips.lines) || [];
+      out.lines = lines;
       out.hot = !!(out.slips && out.slips.hot);
+      await touchHealth("watch", {
+        hot: out.hot,
+        lines,
+        slips: {
+          updated: out.slips && out.slips.updated,
+          pushed: out.slips && out.slips.pushed,
+          hot: out.hot,
+          error: out.slips && out.slips.error ? String(out.slips.error).slice(0, 120) : undefined,
+        },
+      });
     }
   } catch (e) { out = { ok: false, error: String(e?.message || e) }; }
   res.setHeader("Cache-Control", "no-store");

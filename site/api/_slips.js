@@ -5,7 +5,7 @@ import { shareSelections } from "./_share.js";
 import { notifyBooked, notifySets, notifyFlags, notifyMoments } from "./_push.js";
 import { placeOrder, loadGifts, priceLeg } from "./_fc.js";
 import { readSession, writeSession } from "./_fc_session.js";
-import { legIsHot } from "./_watch.js";
+import { legIsHot, watchLine } from "./_watch.js";
 
 let schemaReady = false;
 
@@ -593,7 +593,8 @@ export async function refreshSlips() {
   try { pushed = (await notifyBooked(slips)).sent; } catch { /* keep scores */ }
   const now = Date.now();
   const hot = freshLegs.some((l) => legIsHot(l, now));
-  return { updated, pushed, hot };
+  const lines = freshLegs.map(watchLine);
+  return { updated, pushed, hot, lines };
 }
 
 export async function dropTennisLeg(slipId, eventId, selection) {

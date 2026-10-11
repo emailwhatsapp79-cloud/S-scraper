@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isLiveStatus, legIsHot, legMoments, scoreStory } from "../site/api/_watch.js";
+import { isLiveStatus, legIsHot, legMoments, scoreStory, watchLine } from "../site/api/_watch.js";
 
 const NOW = Date.parse("2026-10-11T12:00:00Z");
 
@@ -120,4 +120,19 @@ test("eBasketball: ping when the lead flips, not on every basket", () => {
 
 test("a settled leg says nothing", () => {
   assert.deepEqual(legMoments(leg({ won: "no", set_score: "0:3", played: "4:11" })), []);
+});
+
+test("the timer line names the game and the pick, never the stake", () => {
+  const waiting = watchLine(leg({
+    match_status: "Not start", kickoff: Date.parse("2026-10-11T10:40:00Z"),
+  }));
+  assert.match(waiting.text, /Waiting · Kowalski v Novak · your pick: Kowalski/);
+  assert.match(waiting.text, /starts /);
+  assert.equal(waiting.live, false);
+
+  const live = watchLine(leg({ set_score: "1:0", played: "3:2" }));
+  assert.match(live.text, /Live · Kowalski v Novak/);
+  assert.match(live.text, /sets 1–0/);
+  assert.match(live.text, /this set 3–2/);
+  assert.equal(JSON.stringify(live).includes("stake"), false);
 });

@@ -214,3 +214,59 @@ export function legMoments(leg) {
   if (score && !starting) out.push(score);
   return out;
 }
+
+function lagosWhen(ms) {
+  const n = Number(ms);
+  if (!isFinite(n) || n <= 0) return "";
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Africa/Lagos",
+      day: "numeric",
+      month: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(n));
+  } catch {
+    return "";
+  }
+}
+
+// One line per booked leg for the timer. No stake, no cash-out, no booking code.
+export function watchLine(leg) {
+  const id = String(leg.slip_id) + "-" + String(leg.game_id);
+  const live = isLiveStatus(leg.match_status);
+  const ended = leg.won === "yes" || leg.won === "no";
+  const pair = parsePair(leg.set_score);
+  let story = "";
+  if (!ended && pair && (pair[0] + pair[1] > 0) && leg.sport !== "tt" && leg.sport !== "tn") {
+    const s = scoreStory(leg.selection, pair[0], pair[1]);
+    if (s) story = s.title;
+  }
+  const pts = !ended && (leg.sport === "tt" || leg.sport === "tn") ? setPoints(leg, false) : null;
+  const bits = [];
+  if (ended) bits.push(leg.won === "yes" ? "Won" : "Lost");
+  else if (live) bits.push("Live");
+  else bits.push("Waiting");
+  const who = names(leg);
+  if (who && who.trim() !== "v") bits.push(who);
+  bits.push("your pick: " + pickLabel(leg));
+  if (pair && pair[0] + pair[1] > 0) {
+    bits.push((leg.sport === "tt" || leg.sport === "tn" ? "sets " : "") + dash(pair[0], pair[1]));
+  }
+  if (pts && pts[0] + pts[1] > 0) bits.push("this set " + dash(pts[0], pts[1]));
+  if (story) bits.push(story);
+  if (!live && !ended) {
+    const when = lagosWhen(leg.kickoff);
+    if (when) bits.push("starts " + when);
+  }
+  const key = [
+    leg.sport || "",
+    leg.match_status || "",
+    leg.set_score || "",
+    leg.played || "",
+    leg.game_score || "",
+    story,
+    leg.won || "",
+  ].join("|");
+  return { id, key, live: !!live, text: bits.join(" · ") };
+}
