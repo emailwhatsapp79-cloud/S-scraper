@@ -20,6 +20,17 @@ jobs:
           while read u; do i=$((i+1)); curl -sL -m 30 -H "User-Agent: $UA" "$u" -o "f$i.js"; done < u.txt
           # follow chunk files referenced inside the bundles once
           grep -ohE '"[a-zA-Z0-9_/.-]*(cash|bet|order)[a-zA-Z0-9_/.-]*\.js"' f*.js | tr -d '"' | sort -u | head -40 > more.txt || true
+          # second level: any other script file the bundles mention (lazy chunks)
+          grep -ohE '[a-zA-Z0-9_./-]*static[a-zA-Z0-9_./-]*\.js' f*.js p.html 2>/dev/null | sort -u > chunks.txt || true
+          grep -ohE '"[a-zA-Z0-9_-]+\.[0-9a-f]{8,}\.(chunk\.)?js"' f*.js | tr -d '"' | sort -u >> chunks.txt || true
+          wc -l chunks.txt
+          base=$(sed -n '1p' u.txt | sed -E 's#/[^/]*$##')
+          j=100
+          while read c; do
+            j=$((j+1)); case "$c" in http*) url="$c";; /*) url="https://www.sportybet.com$c";; *) url="$base/$c";; esac
+            curl -sL -m 20 -H "User-Agent: $UA" "$url" -o "f$j.js"; [ $(stat -c%s "f$j.js") -gt 2000 ] || rm -f "f$j.js"
+          done < <(head -300 chunks.txt)
+          ls f*.js | wc -l
           python3 - <<'PY'
           import glob, re
           seen = set()
@@ -29,6 +40,8 @@ jobs:
                   seg = t[m.start():m.start()+9000]
                   for k in re.finditer(r'concat\(j[,)]|fetch\(j[,)]|\(j,\{', seg):
                       print("== J use ==\n", seg[max(0, k.start()-900):k.start()+900].replace("\n", " "), "\n")
+              for m in re.finditer(r'realSportsGame/cashOut"', t):
+                  print("== CASHOUT literal in", f, "==\n", t[max(0, m.start()-1200):m.start()+600].replace("\n", " "), "\n")
               for m in re.finditer(r'cashOutAmount|cashoutAmount', t):
                   ctx = t[max(0, m.start()-300):m.start()+200]
                   if "betId" in ctx and ("JSON.stringify" in ctx or "body" in ctx):
