@@ -42,12 +42,18 @@ jobs:
         run: |
           end=$(( $(date +%s) + 330*60 ))
           next_s24=0
+          next_vf=0
           while [ "$(date +%s)" -lt "$end" ]; do
             now=$(date +%s)
             # scores24 history every 10 minutes (it blocks Vercel, not GitHub)
             if [ "$now" -ge "$next_s24" ]; then
               bash .github/s24-push.sh 1 1 || true
               next_s24=$((now + 600))
+            fi
+            # vFootball card, live scores and results every 5 minutes
+            if [ "$now" -ge "$next_vf" ]; then
+              curl -sS --max-time 40 -o /dev/null "https://vfootball-screener.vercel.app/api/poll?vfpub=1" || true
+              next_vf=$((now + 300))
             fi
             resp=$(curl -sS --max-time 55 "https://vfootball-screener.vercel.app/api/poll?eb=1" || true)
             echo "$resp"
