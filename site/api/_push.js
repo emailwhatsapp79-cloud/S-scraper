@@ -1,5 +1,6 @@
 import webpush from "web-push";
 import { sql } from "./_db.js";
+import { touchHealth } from "./_health.js";
 
 export const VAPID_PUBLIC = "BCherTiAf4kuWJW2iqfmGWhtFCIrwxIujL3-g_R5q3Pf_VT2zjZ9uu9aWnSoqz9TxyhL9SNd9wP4hYsV-1NtMQA";
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE || "2-3ePmQknzsSUT4yqv84vbWCQs33b3JPimggL5DHNwY";
@@ -61,18 +62,27 @@ async function broadcast(payload) {
   await ensure();
   const rows = await sql`SELECT endpoint, p256dh, auth FROM push_subs`;
   const body = JSON.stringify(payload);
+  const fails = [];
+  let ok = 0;
+  // Every ping is about a live bet, so all of them go out "high": a phone in
+  // battery saver holds "normal" pushes back until it wakes, minutes late.
+  // TTL 15 min so a phone that is briefly offline still gets it.
   await Promise.all(rows.map(async (r) => {
     try {
       await webpush.sendNotification(
         { endpoint: r.endpoint, keys: { p256dh: r.p256dh, auth: r.auth } },
         body,
-        { TTL: 180, urgency: payload.kind === "kick" ? "high" : "normal" },
+        { TTL: 900, urgency: "high" },
       );
+      ok++;
     } catch (e) {
       const code = e?.statusCode;
+      fails.push({ host: String(r.endpoint).split("/")[2], code: code || String(e?.message || e).slice(0, 80) });
       if (code === 404 || code === 410) await dropSub(r.endpoint);
     }
   }));
+  // Last delivery, so a silent phone can be told apart from a push that failed.
+  await touchHealth("push", { at: Date.now(), tag: payload.tag, devices: rows.length, ok, fails });
 }
 
 async function sendOnce(k, payload) {
