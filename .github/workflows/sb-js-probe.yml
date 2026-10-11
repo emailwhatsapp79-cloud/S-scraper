@@ -20,9 +20,21 @@ jobs:
           while read u; do i=$((i+1)); curl -sL -m 30 -H "User-Agent: $UA" "$u" -o "f$i.js"; done < u.txt
           # follow chunk files referenced inside the bundles once
           grep -ohE '"[a-zA-Z0-9_/.-]*(cash|bet|order)[a-zA-Z0-9_/.-]*\.js"' f*.js | tr -d '"' | sort -u | head -40 > more.txt || true
-          echo "== context around the cash-out POST =="
-          for f in f*.js; do grep -o '.\{700\}betCashoutVO.\{200\}' "$f"; done | head -c 4000; echo
-          echo "== cashable / cashout lite context =="
-          for f in f*.js; do grep -oiE '.{250}(cashableBet|cashoutLite|cashable/|cashout/|cashOut/)[^"]{0,120}"' "$f"; done | head -c 5000; echo
-          echo "== path strings with cash =="
-          grep -ohiE '"[^" ]*/[^" ]*cash[^" ]*"' f*.js | sort -u | head -60
+          python3 - <<'PY'
+          import glob, re
+          seen = set()
+          for f in sorted(glob.glob("f*.js")):
+              t = open(f, encoding="utf-8", errors="ignore").read()
+              for m in re.finditer(r'betCashoutVO', t):
+                  print("== POST context in", f, "==\n", t[max(0, m.start()-900):m.start()+250].replace("\n", " "), "\n")
+              for m in re.finditer(r'["`]([^"`\s]{0,60}(?:[Cc]ash[Oo]ut|cashable|Cashable)[^"`\s]{0,60})["`]', t):
+                  v = m.group(1)
+                  if "/" in v and v not in seen:
+                      seen.add(v); print("PATH", v)
+              for m in re.finditer(r'(?:cashable|cashoutLite|cashOutLite|preCashout|cashoutInfo)', t):
+                  ctx = t[max(0, m.start()-160):m.start()+160]
+                  if "/" in ctx and ("fetch" in ctx or "url" in ctx.lower() or "api" in ctx.lower()):
+                      k = ctx[:60]
+                      if k not in seen:
+                          seen.add(k); print("CTX", ctx.replace("\n", " "))
+          PY
