@@ -87,6 +87,8 @@ export default async function handler(req, res) {
 
   let games = [], results = [], counts = { total: 0, settled: 0 }, model = null, error = null;
   try { games = await listUpcomingTT(400); } catch (e) { error = String(e?.message || e); }
+  // Watch-list players and poor records as big favourite: a warning, not a tag.
+  try { const { annotateWatch } = await import("./_tt_watch.js"); await annotateWatch(games); } catch { /* the card still shows */ }
   // What SportyBet shows right now: a game whose winner market is suspended,
   // or that has dropped off its list, cannot be booked — say so on the card.
   if (live && live.size) {
