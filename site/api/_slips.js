@@ -473,11 +473,16 @@ export async function reshareSlip(slipId) {
 export async function refreshSlips() {
   await ensureSlips();
   const open = await sql`SELECT * FROM slips WHERE status IN ('open', 'live')`;
-  if (!open.length) return { updated: 0 };
+  const recentLost = await sql`SELECT 1 FROM slips WHERE status = 'lost' AND created_at > now() - interval '24 hours' LIMIT 1`;
+  if (!open.length && !recentLost.length) return { updated: 0 };
 
+  // Legs of a slip that already lost keep getting results for a day, so the
+  // record and the tag tally are complete; they just send no alerts.
   const legs = await sql`
     SELECT * FROM slip_legs
-    WHERE slip_id IN (SELECT id FROM slips WHERE status IN ('open', 'live'))`;
+    WHERE slip_id IN (SELECT id FROM slips WHERE status IN ('open', 'live'))
+       OR (won IS NULL AND slip_id IN (SELECT id FROM slips
+            WHERE status = 'lost' AND created_at > now() - interval '24 hours'))`;
 
   let liveMap = new Map();
   const eventIds = [...new Set(legs.map((l) => l.event_id).filter(Boolean))];
