@@ -270,6 +270,30 @@ export async function notifySets(legs, slips) {
   return { sent };
 }
 
+// Started, and whether a booked game is going your way or not. Table tennis
+// and tennis set scores (1–0, 1–1, …) stay in notifySets. Each moment is
+// claimed once, so a score is never sent twice.
+export async function notifyMoments(legs) {
+  if (!Array.isArray(legs) || !legs.length) return { sent: 0 };
+  try {
+    const { loadPrefs } = await import("./_vault.js");
+    if ((await loadPrefs()).pings === false) return { sent: 0 };
+  } catch { return { sent: 0 }; }
+  const { legMoments } = await import("./_watch.js");
+  let sent = 0;
+  for (const l of legs) {
+    for (const m of legMoments(l)) {
+      if (await sendOnce(m.key, {
+        kind: m.kind,
+        url: "/book",
+        title: m.title,
+        body: m.body,
+      })) sent++;
+    }
+  }
+  return { sent };
+}
+
 // Red flags (see _flags.js): one alert per leg when it turns "danger", with
 // what was seen, and every flag logged in slip_flags for the briefing.
 export async function notifyFlags(legs, slips) {
