@@ -186,6 +186,16 @@ export default async function handler(req, res) {
   if (url.searchParams.get("eb") === "1") return ebTick(res);
   if (url.searchParams.get("s24push") === "1") return s24Push(req, res);
   if (url.searchParams.get("tnpush") === "1") return tnPush(req, res);
+  // vFootball heartbeat from the GitHub timer. Public odds and results only, so
+  // no key — and at most once per 4 minutes, whoever calls it.
+  if (url.searchParams.get("vfpub") === "1") {
+    res.setHeader("Cache-Control", "no-store");
+    try {
+      const [row] = await sql`SELECT at FROM health WHERE k = 'vf'`;
+      if (row && Date.now() - new Date(row.at).getTime() < 4 * 60 * 1000) return res.status(200).json({ ok: true, skipped: true });
+    } catch { /* first run */ }
+    return res.status(200).json(await vfHeartbeat());
+  }
 
   if (requireFill(req, res)) return;
 
