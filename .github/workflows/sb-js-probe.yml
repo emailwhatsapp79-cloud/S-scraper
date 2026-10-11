@@ -20,7 +20,9 @@ jobs:
           while read u; do i=$((i+1)); curl -sL -m 30 -H "User-Agent: $UA" "$u" -o "f$i.js"; done < u.txt
           # follow chunk files referenced inside the bundles once
           grep -ohE '"[a-zA-Z0-9_/.-]*(cash|bet|order)[a-zA-Z0-9_/.-]*\.js"' f*.js | tr -d '"' | sort -u | head -40 > more.txt || true
-          echo "== cash-out related strings =="
-          grep -ohiE '"[^"]{0,80}cash[_-]?out[^"]{0,80}"' f*.js | sort -u | head -80
-          echo "== order api paths =="
-          grep -ohE '"/?(api/ng/)?orders/[^"]{0,90}"' f*.js | sort -u | head -80
+          echo "== context around the cash-out POST =="
+          for f in f*.js; do grep -o '.\{700\}betCashoutVO.\{200\}' "$f"; done | head -c 4000; echo
+          echo "== cashable / cashout lite context =="
+          for f in f*.js; do grep -oiE '.{250}(cashableBet|cashoutLite|cashable/|cashout/|cashOut/)[^"]{0,120}"' "$f"; done | head -c 5000; echo
+          echo "== path strings with cash =="
+          grep -ohiE '"[^" ]*/[^" ]*cash[^" ]*"' f*.js | sort -u | head -60
