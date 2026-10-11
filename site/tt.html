@@ -93,7 +93,7 @@
   </div>
   <p class="note" id="sofa-note"></p>
   <p class="note" id="bt-note"></p>
-  <p class="note">Tags come from player stats only, not SportyBet's price: rating, full head-to-head, recent form, rest and career record. On 81,000 games the stats never saw: Strong (75%+) won 79–92%, Good (70–75%) won 73%, Lean (65–70%) won 67%. On SportyBet's own games 75%+ won 63 of 74 — a small sample, so keep stakes small.</p>
+  <p class="note">Tags come from player stats only, not SportyBet's price: rating, full head-to-head, recent form, rest and career record. On 81,000 games the stats never saw: Strong (75%+, both players 30+ games) won 79–92%, Good (70–75%, or 75%+ on a thinner record) won 73%, Lean (65–70%) won 67%. On SportyBet's own games 75%+ won 63 of 74 — a small sample, so keep stakes small.</p>
   <div class="seg" id="seg">
     <button type="button" data-mode="up" class="on">Upcoming</button>
     <button type="button" data-mode="res">Results</button>
@@ -362,7 +362,9 @@
   function levelOf(g) {
     var st = statSide(g);
     if (!st) return null;
-    if (st.pct >= 75) return "strong";
+    // Strong also needs a real record on both sides (30+ games each): a 75%+
+    // built on a thin record shows as Good instead.
+    if (st.pct >= 75) return Math.min(g.nH || 0, g.nA || 0) >= 30 ? "strong" : "good";
     if (st.pct >= 70) return "good";
     if (st.pct >= 65) return "lean";
     return null;
