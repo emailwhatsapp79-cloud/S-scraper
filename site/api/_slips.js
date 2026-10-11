@@ -2,9 +2,10 @@
 import { sql, rowToGame } from "./_db.js";
 import { fetchEvent, scoreOf, FOOTBALL_BASE } from "./_card.js";
 import { shareSelections } from "./_share.js";
-import { notifyBooked, notifySets, notifyFlags } from "./_push.js";
+import { notifyBooked, notifySets, notifyFlags, notifyMoments } from "./_push.js";
 import { placeOrder, loadGifts, priceLeg } from "./_fc.js";
 import { readSession, writeSession } from "./_fc_session.js";
+import { legIsHot } from "./_watch.js";
 
 let schemaReady = false;
 
@@ -511,6 +512,10 @@ export async function refreshSlips() {
   }
 
   let updated = 0;
+  const before = new Map();
+  for (const leg of legs) {
+    before.set(String(leg.slip_id) + "\t" + String(leg.game_id), leg);
+  }
   for (const leg of legs) {
     const snap = liveMap.get(leg.event_id);
     if (!snap) continue;
@@ -542,6 +547,14 @@ export async function refreshSlips() {
   const freshLegs = await sql`
     SELECT * FROM slip_legs
     WHERE slip_id IN (SELECT id FROM slips WHERE status IN ('open', 'live'))`;
+  for (const l of freshLegs) {
+    const old = before.get(String(l.slip_id) + "\t" + String(l.game_id));
+    l.prev_set_score = old ? old.set_score : null;
+    l.prev_played = old ? old.played : null;
+    l.prev_game_score = old ? old.game_score : null;
+    l.prev_status = old ? old.match_status : null;
+  }
+  try { await notifyMoments(freshLegs); } catch { /* scores still save */ }
   try { await notifySets(freshLegs); } catch { /* scores still save */ }
   try { await notifyFlags(freshLegs, open); } catch { /* scores still save */ }
   const grouped = new Map();
@@ -554,7 +567,7 @@ export async function refreshSlips() {
     const ls = grouped.get(slip.id) || [];
     const anyLost = ls.some((l) => l.won === "no");
     const allWon = ls.length > 0 && ls.every((l) => l.won === "yes");
-    const anyLive = ls.some((l) => l.match_status && /^(H1|H2|HT|1H|2H|LIVE|set\s*\d|Playing|1st set|2nd set|3rd set|Q[1-4]|OT|Overtime|Pause)/i.test(l.match_status));
+    const anyLive = ls.some((l) => l.match_status && /^(H1|H2|HT|1H|2H|LIVE|set\s*\d|Playing|1st set|2nd set|3rd set|4th set|5th set|Q[1-4]|OT|Overtime|Pause)/i.test(l.match_status));
     let status = "open";
     let returned = null;
     let settledAt = null;
@@ -578,7 +591,9 @@ export async function refreshSlips() {
   const slips = await listSlips();
   let pushed = 0;
   try { pushed = (await notifyBooked(slips)).sent; } catch { /* keep scores */ }
-  return { updated, pushed };
+  const now = Date.now();
+  const hot = freshLegs.some((l) => legIsHot(l, now));
+  return { updated, pushed, hot };
 }
 
 export async function dropTennisLeg(slipId, eventId, selection) {

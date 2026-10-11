@@ -68,19 +68,25 @@ async function vfHeartbeat() {
   return out;
 }
 
-// The public timer route (GitHub calls it every minute; it takes no key by the
-// owner's choice and only reads public SportyBet data). Each call refreshes
-// open slips so set alerts go out within a minute; the heavier eBasketball and
-// table tennis banking runs at most every 9 minutes. Calls closer than 45s
-// apart answer "skipped".
+// The public timer route (GitHub calls it; it takes no key by the owner's
+// choice and only reads public SportyBet data). Each call refreshes open
+// slips. While a booked game is on, or about to start, GitHub calls every 30
+// seconds so the phone hears "started", "winning" and "losing" quickly. Other
+// times it calls once a minute. Calls closer than 20s apart answer "skipped"
+// and still say whether a game is hot, so the fast loop does not drop back.
+// The heavier eBasketball and table tennis banking runs at most every 9 minutes.
 async function ebTick(res) {
   let out = { ok: true };
   try {
-    const rows = await sql`SELECT k, at FROM health WHERE k IN ('watch', 'eb')`;
+    const rows = await sql`SELECT k, v, at FROM health WHERE k IN ('watch', 'eb')`;
     const at = Object.fromEntries(rows.map((r) => [r.k, new Date(r.at).getTime()]));
     const now = Date.now();
-    if (now - (at.watch || 0) < 45 * 1000) {
+    if (now - (at.watch || 0) < 20 * 1000) {
       out.skipped = true;
+      try {
+        const row = rows.find((r) => r.k === "watch");
+        out.hot = !!(row && JSON.parse(row.v || "{}").hot);
+      } catch { out.hot = false; }
     } else {
       await touchHealth("watch", { started: true });
       try { out.slips = await refreshSlips(); } catch (e) { out.slips = { error: String(e?.message || e) }; }
@@ -114,7 +120,8 @@ async function ebTick(res) {
         // the GitHub workflow at ?s24push=1: scores24 blocks Vercel's servers.
         await touchHealth("eb", out);
       }
-      await touchHealth("watch", { slips: out.slips });
+      await touchHealth("watch", { hot: !!(out.slips && out.slips.hot), slips: out.slips });
+      out.hot = !!(out.slips && out.slips.hot);
     }
   } catch (e) { out = { ok: false, error: String(e?.message || e) }; }
   res.setHeader("Cache-Control", "no-store");

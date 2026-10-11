@@ -1,9 +1,11 @@
 # Every 10 minutes: also pass scores24's newest finished TT matches to the app.
-# Every minute: refresh open slips so live set alerts go out. Every ~10
-# minutes (the route decides): save the eBasketball card and table tennis results. Its prices only show about an
-# hour before tip-off, so without this most games are never priced. The route
+# Booked games: while one is on (or starts within 3 minutes) check it every
+# 30 seconds and ping the phone — started, winning, losing. Otherwise check
+# open slips once a minute. Every ~10 minutes (the route decides): save the
+# eBasketball card and table tennis results. Prices only show about an hour
+# before tip-off, so without this most games are never priced. The route
 # needs no key (it only reads SportyBet's public odds) and skips if it ran in
-# the last 4 minutes.
+# the last 20 seconds.
 #
 # GitHub's own */10 schedule proved unreliable (it went hours without firing),
 # so each run loops for ~5.5 hours, then starts the next run itself. The
@@ -35,18 +37,25 @@ jobs:
           echo "others=$n" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         if: steps.busy.outputs.others == '0'
-      - name: Check slips every minute, bank cards every ~10, for ~5.5 hours
+      - name: Watch live booked games every 30s, otherwise check once a minute, for ~5.5 hours
         if: steps.busy.outputs.others == '0'
         run: |
           end=$(( $(date +%s) + 330*60 ))
-          i=0
+          next_s24=0
           while [ "$(date +%s)" -lt "$end" ]; do
+            now=$(date +%s)
             # scores24 history every 10 minutes (it blocks Vercel, not GitHub)
-            if [ $((i % 10)) -eq 0 ]; then bash .github/s24-push.sh 1 1 || true; fi
-            i=$((i + 1))
-            curl -sS --max-time 55 "https://vfootball-screener.vercel.app/api/poll?eb=1" || true
-            echo
-            sleep 60
+            if [ "$now" -ge "$next_s24" ]; then
+              bash .github/s24-push.sh 1 1 || true
+              next_s24=$((now + 600))
+            fi
+            resp=$(curl -sS --max-time 55 "https://vfootball-screener.vercel.app/api/poll?eb=1" || true)
+            echo "$resp"
+            if printf '%s' "$resp" | grep -q '"hot":true'; then
+              sleep 30
+            else
+              sleep 60
+            fi
           done
       - name: Start the next run
         if: steps.busy.outputs.others == '0'
