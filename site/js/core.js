@@ -1775,6 +1775,22 @@
       card.appendChild(placed);
     }
 
+    // Live cash-out on SportyBet (read each minute by the server).
+    if (sp.orderId && (sp.status === "open" || sp.status === "live")) {
+      var co = sp.cashout;
+      var cbox = el("div", "codebox cashbox");
+      if (!co) cbox.appendChild(el("div", "mkt-t", "Cash-out: checking SportyBet…"));
+      else if (co.cashable && co.amount != null) {
+        cbox.appendChild(el("div", "mkt-t", "Cash out now"));
+        var amt = el("div", "cash-amt" + (co.amount >= sp.stake ? " up" : " down"), naira(co.amount));
+        cbox.appendChild(amt);
+        cbox.appendChild(el("div", "cash-sub", (co.amount >= sp.stake ? "above" : "below") + " your " + naira(sp.stake) + " stake"));
+      } else if (co.cashable) cbox.appendChild(el("div", "mkt-t", "Cash-out available"));
+      else cbox.appendChild(el("div", "mkt-t cash-off", "Cash-out suspended" + (co.reason ? " · " + co.reason : "")));
+      cbox.appendChild(el("div", "cash-sub", "Auto cash-out: on a 🚩 danger flag once the offer is at least your stake"));
+      card.appendChild(cbox);
+    }
+
     if (sp.shareCode) {
       var football = /football\.com/i.test(String(sp.shareUrl || "")) ||
         (sp.legs || []).some(function (l) { return l.sport === "fc"; });

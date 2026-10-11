@@ -1,0 +1,61 @@
+name: sb-js-probe
+on:
+  push:
+    branches: [ccr-59cf78c4-n7ktec]
+    paths: [.github/workflows/sb-js-probe.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - run: |
+          UA="Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/122.0 Mobile Safari/537.36"
+          mkdir js && cd js
+          for page in https://www.sportybet.com/ng/ https://www.sportybet.com/ng/my_accounts/bet_history/sport_bets https://www.sportybet.com/ng/m/my_accounts/bet_history; do
+            curl -sL -m 30 -H "User-Agent: $UA" "$page" -o p.html
+            grep -oE '(src|href)="[^"]+\.js[^"]*"' p.html | sed -E 's/^(src|href)="//; s/"$//' >> urls.txt
+          done
+          sort -u urls.txt | sed -E 's#^//#https://#; s#^/#https://www.sportybet.com/#' > u.txt
+          wc -l u.txt; i=0
+          while read u; do i=$((i+1)); curl -sL -m 30 -H "User-Agent: $UA" "$u" -o "f$i.js"; done < u.txt
+          # follow chunk files referenced inside the bundles once
+          grep -ohE '"[a-zA-Z0-9_/.-]*(cash|bet|order)[a-zA-Z0-9_/.-]*\.js"' f*.js | tr -d '"' | sort -u | head -40 > more.txt || true
+          # second level: any other script file the bundles mention (lazy chunks)
+          grep -ohE '[a-zA-Z0-9_./-]*static[a-zA-Z0-9_./-]*\.js' f*.js p.html 2>/dev/null | sort -u > chunks.txt || true
+          grep -ohE '"[a-zA-Z0-9_-]+\.[0-9a-f]{8,}\.(chunk\.)?js"' f*.js | tr -d '"' | sort -u >> chunks.txt || true
+          wc -l chunks.txt
+          base=$(sed -n '1p' u.txt | sed -E 's#/[^/]*$##')
+          j=100
+          while read c; do
+            j=$((j+1)); case "$c" in http*) url="$c";; /*) url="https://www.sportybet.com$c";; *) url="$base/$c";; esac
+            curl -sL -m 20 -H "User-Agent: $UA" "$url" -o "f$j.js"; [ $(stat -c%s "f$j.js") -gt 2000 ] || rm -f "f$j.js"
+          done < <(head -300 chunks.txt)
+          ls f*.js | wc -l
+          python3 - <<'PY'
+          import glob, re
+          seen = set()
+          for f in sorted(glob.glob("f*.js")):
+              t = open(f, encoding="utf-8", errors="ignore").read()
+              for m in re.finditer(r'var j="/realSportsGame/cashOut"', t):
+                  seg = t[m.start():m.start()+9000]
+                  for k in re.finditer(r'concat\(j[,)]|fetch\(j[,)]|\(j,\{', seg):
+                      print("== J use ==\n", seg[max(0, k.start()-900):k.start()+900].replace("\n", " "), "\n")
+              for m in re.finditer(r'realSportsGame/cashOut"', t):
+                  print("== CASHOUT literal in", f, "==\n", t[max(0, m.start()-1200):m.start()+600].replace("\n", " "), "\n")
+              for m in re.finditer(r'cashOutAmount|cashoutAmount', t):
+                  ctx = t[max(0, m.start()-300):m.start()+200]
+                  if "betId" in ctx and ("JSON.stringify" in ctx or "body" in ctx):
+                      print("== AMOUNT body ==\n", ctx.replace("\n", " "), "\n")
+              for m in re.finditer(r'betCashoutVO_DISABLED', t):
+                  print("== POST context in", f, "==\n", t[max(0, m.start()-900):m.start()+250].replace("\n", " "), "\n")
+              for m in re.finditer(r'["`]([^"`\s]{0,60}(?:[Cc]ash[Oo]ut|cashable|Cashable)[^"`\s]{0,60})["`]', t):
+                  v = m.group(1)
+                  if "/" in v and v not in seen:
+                      seen.add(v); print("PATH", v)
+              for m in re.finditer(r'(?:cashable|cashoutLite|cashOutLite|preCashout|cashoutInfo)', t):
+                  ctx = t[max(0, m.start()-160):m.start()+160]
+                  if "/" in ctx and ("fetch" in ctx or "url" in ctx.lower() or "api" in ctx.lower()):
+                      k = ctx[:60]
+                      if k not in seen:
+                          seen.add(k); print("CTX", ctx.replace("\n", " "))
+          PY

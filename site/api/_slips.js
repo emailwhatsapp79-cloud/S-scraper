@@ -119,6 +119,18 @@ export async function listSlips() {
   const slips = await sql`SELECT * FROM slips ORDER BY created_at DESC LIMIT 40`;
   const legs = await sql`SELECT * FROM slip_legs ORDER BY pos ASC`;
   const by = new Map(slips.map((s) => [s.id, { ...shapeSlip(s), legs: [] }]));
+  // Live SportyBet cash-out state, read every minute by the timer (_sb_bets.js).
+  try {
+    const cash = await sql`SELECT * FROM slip_cashout WHERE updated > now() - interval '30 minutes'`;
+    const byOrder = new Map(cash.map((c) => [c.order_id, c]));
+    for (const s of by.values()) {
+      const c = s.orderId && byOrder.get(s.orderId);
+      if (c) s.cashout = {
+        cashable: c.cashable === true, amount: c.amount == null ? null : Number(c.amount),
+        reason: c.reason || null, at: new Date(c.updated).getTime(),
+      };
+    }
+  } catch { /* no cash-out reads yet */ }
   for (const leg of legs) {
     const s = by.get(leg.slip_id);
     if (s) s.legs.push(shapeLeg(leg));
