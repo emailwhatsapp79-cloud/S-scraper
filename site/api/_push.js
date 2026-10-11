@@ -34,6 +34,23 @@ export async function saveSub(sub) {
     ON CONFLICT (endpoint) DO UPDATE SET p256dh = EXCLUDED.p256dh, auth = EXCLUDED.auth`;
 }
 
+/** One real server push to a single device, so turning pings on proves the
+ *  whole path (server -> push service -> phone), not just the page. */
+export async function testSub(sub) {
+  await ensure();
+  const [{ n }] = await sql`SELECT count(*)::int AS n FROM push_subs`;
+  try {
+    await webpush.sendNotification(
+      { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth } },
+      JSON.stringify({ title: "✅ Vantage pings work", body: "This came from the server, the same way slip updates will.", kind: "yes", url: "/book", tag: "test-" + Date.now() }),
+      { TTL: 900, urgency: "high" },
+    );
+    return { sent: true, devices: n };
+  } catch (e) {
+    return { sent: false, devices: n, code: e?.statusCode || String(e?.message || e).slice(0, 80) };
+  }
+}
+
 async function dropSub(endpoint) {
   await sql`DELETE FROM push_subs WHERE endpoint = ${endpoint}`;
 }

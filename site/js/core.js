@@ -1481,7 +1481,7 @@
     return out;
   }
 
-  function subscribePush() {
+  function subscribePush(test) {
     return fetch("/api/push").then(function (r) { return r.json(); }).then(function (d) {
       if (!d.publicKey || !navigator.serviceWorker) return;
       return navigator.serviceWorker.ready.then(function (reg) {
@@ -1496,8 +1496,8 @@
         return fetch("/api/push", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify(sub.toJSON())
-        });
+          body: JSON.stringify(Object.assign(sub.toJSON(), test ? { test: true } : {}))
+        }).then(function (r) { return r.json(); });
       });
     });
   }
@@ -1573,12 +1573,14 @@
     return Notification.requestPermission().then(function (p) {
       if (p !== "granted") throw new Error("Notifications are off");
       var ready = navigator.serviceWorker
-        ? navigator.serviceWorker.register("/sw.js").then(function () { return subscribePush(); })
+        ? navigator.serviceWorker.register("/sw.js").then(function () { return subscribePush(true); })
         : Promise.resolve();
-      return ready.then(function () {
+      return ready.then(function (d) {
         saveDevice({ pings: true });
-        ping("Pings on", "Yes, No, and the full bet — even if the phone is locked.", "ping-test", "yes");
-        return p;
+        var t = d && d.test;
+        if (!t) throw new Error("This phone could not sign up for pings");
+        if (!t.sent) throw new Error("Server push failed (" + t.code + ") — turn pings off and on again");
+        return t;
       });
     });
   }

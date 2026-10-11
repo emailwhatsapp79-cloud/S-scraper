@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,600;0,9..40,700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/css/app.css?v=20261011c">
+<link rel="stylesheet" href="/css/app.css?v=20261011d">
 </head>
 <body>
 <main class="wrap">
@@ -97,7 +97,7 @@
   <p class="lede" style="margin-bottom:8px">Turn the switch on above. First time, this phone will ask you to save a print. After that the empty key under 1–4–7 on the lock is fingerprint.</p>
   <p class="note" id="bio-note"></p>
 </main>
-<script src="/js/core.js?v=20261011c"></script>
+<script src="/js/core.js?v=20261011d"></script>
 <script>
 (function () {
   var V = window.VFS;
@@ -172,9 +172,10 @@
   pingBtn.addEventListener("click", function () {
     var on = pingBtn.getAttribute("aria-checked") !== "true";
     if (on) {
-      V.enablePings().then(function () {
+      V.enablePings().then(function (t) {
         sw(pingBtn, true);
-        note.textContent = "Pings on. You should have heard a Yes chime.";
+        note.textContent = "Test ping sent from the server (" + t.devices + " device" + (t.devices === 1 ? "" : "s") +
+          " signed up). No \u201cVantage pings work\u201d notification within 15 seconds? Allow notifications for this browser in the phone's settings and turn off battery saver for it.";
       }).catch(function (e) {
         sw(pingBtn, false);
         note.textContent = e.message || "Could not turn pings on";
