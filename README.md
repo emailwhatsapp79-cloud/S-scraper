@@ -150,3 +150,7 @@ Notes: `site/API_NOTES.md`.
 python3 -m unittest discover -s tests   # the rules, the ledger, the statistics
 ```
 
+
+## Licence
+
+Proprietary. Copyright (c) 2026 Dex, all rights reserved. See [LICENSE](LICENSE): no copying, use or redistribution without written permission.

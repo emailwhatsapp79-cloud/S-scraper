@@ -175,13 +175,14 @@ function shapeLeg(l) {
 // open, or legs left in the Betslip from before) get it worked out here from
 // the same stats % the card shows: 75%+ Strong, 70%+ Good, 65%+ Lean, else No
 // tag; backing the other side is "against".
-export function tagFromStats(stats, selection) {
+export function tagFromStats(stats, selection, minGames) {
   if (!stats || (selection !== "1" && selection !== "2")) return null;
+  const thin = minGames != null && minGames < 30;   // Strong needs 30+ games each
   const home = Number(stats.home) >= Number(stats.away);
   const pct = home ? Number(stats.home) : Number(stats.away);
   const mine = selection === "1" ? Number(stats.home) : Number(stats.away);
   const tag = (selection === "1") !== home ? "against"
-    : pct >= 75 ? "strong" : pct >= 70 ? "good" : pct >= 65 ? "lean" : "none";
+    : pct >= 75 ? (thin ? "good" : "strong") : pct >= 70 ? "good" : pct >= 65 ? "lean" : "none";
   return { tag, chance: Math.round(mine) / 100 };
 }
 
@@ -193,7 +194,7 @@ async function fillTTTags(legs) {
     const games = need.map((l) => ({ home: l.home, away: l.away, tourn: l.league, start: l.kickoff }));
     await forecastCard(games);
     need.forEach((l, i) => {
-      const t = tagFromStats(games[i].stats, l.selection);
+      const t = tagFromStats(games[i].stats, l.selection, Math.min(games[i].nH || 0, games[i].nA || 0));
       if (t) { l.tag = t.tag; if (l.chance == null) l.chance = t.chance; }
     });
   } catch { /* the slip still books, just untagged */ }
