@@ -84,6 +84,12 @@ async function ebTick(res) {
     } else {
       await touchHealth("watch", { started: true });
       try { out.slips = await refreshSlips(); } catch (e) { out.slips = { error: String(e?.message || e) }; }
+      // Owner-authorized: every minute, each open slip's SportyBet cash-out
+      // state and amount (shown in the app; used by the auto cash-out).
+      try {
+        const { readOpenBets } = await import("./_sb_bets.js");
+        out.bets = await readOpenBets();
+      } catch (e) { out.bets = { error: String(e?.message || e).slice(0, 120) }; }
       if (now - (at.eb || 0) >= 9 * 60 * 1000) {
         await touchHealth("eb", { started: true });
         Object.assign(out, await refreshEB());
@@ -104,15 +110,6 @@ async function ebTick(res) {
           const { trainTennis } = await import("./_tn_model.js");
           Object.assign(out.tn, await trainTennis(2000, 6000));
         } catch (e) { out.tn = { ...(out.tn || {}), error: String(e?.message || e).slice(0, 120) }; }
-        // SportyBet open bets (owner-authorized): shape-only discovery of the
-        // open-bet / cash-out replies, at most every 30 minutes.
-        try {
-          const last = await sql`SELECT at FROM health WHERE k = 'sb_probe'`;
-          if (!last[0] || now - new Date(last[0].at).getTime() > 30 * 60 * 1000) {
-            const { probeBets } = await import("./_sb_bets.js");
-            out.sbProbe = await probeBets();
-          }
-        } catch (e) { out.sbProbe = { error: String(e?.message || e).slice(0, 120) }; }
         // Full-league history (TT Elite Series, Czech Liga Pro, ...) arrives from
         // the GitHub workflow at ?s24push=1: scores24 blocks Vercel's servers.
         await touchHealth("eb", out);

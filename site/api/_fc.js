@@ -713,6 +713,31 @@ async function postOrder(session, order) {
   return { session: current, status: 401, body: { message: `${labelOf(current)} signed out. Connect again.` } };
 }
 
+// The same encrypted channel as placing a bet, for SportyBet's other
+// "type 2" calls (cashOut/data, cashOut). Returns the decrypted reply.
+export async function postSecure(session, path, payload) {
+  let current = session;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const { transId, key } = await orderChannel(current);
+    const res = await fetch(`${origin(current)}${path}`, {
+      method: "POST",
+      headers: headers(current, {
+        "Content-Type": "application/json;charset=UTF-8",
+        "encryption-type": "2",
+        transId,
+      }),
+      body: aesEncrypt(JSON.stringify(payload), key),
+    });
+    const body = readOrderBody(await res.text(), key);
+    if (attempt === 0 && authDead(res.status, body)) {
+      current = await refreshSession(current);
+      continue;
+    }
+    return { session: current, status: res.status, body };
+  }
+  return { session: current, status: 401, body: { message: `${labelOf(current)} signed out. Connect again.` } };
+}
+
 export async function placeOrder(session, legs, stake, gift) {
   const priced = [];
   for (const leg of legs) priced.push(await priceLeg(leg, session && session.book));
