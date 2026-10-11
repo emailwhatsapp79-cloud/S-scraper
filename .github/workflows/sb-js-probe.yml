@@ -25,7 +25,9 @@ jobs:
           seen = set()
           for f in sorted(glob.glob("f*.js")):
               t = open(f, encoding="utf-8", errors="ignore").read()
-              for m in re.finditer(r'betCashoutVO', t):
+              for m in re.finditer(r'realSportsGame/(?:cashOut|autoCashOut)', t):
+                  print("== RSG context in", f, "==\n", t[max(0, m.start()-700):m.start()+700].replace("\n", " "), "\n")
+              for m in re.finditer(r'betCashoutVO_DISABLED', t):
                   print("== POST context in", f, "==\n", t[max(0, m.start()-900):m.start()+250].replace("\n", " "), "\n")
               for m in re.finditer(r'["`]([^"`\s]{0,60}(?:[Cc]ash[Oo]ut|cashable|Cashable)[^"`\s]{0,60})["`]', t):
                   v = m.group(1)
