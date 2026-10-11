@@ -1,23 +1,25 @@
-# Manual only. GitHub would not let us write FILL_KEY, so a 10-min cron
-# just emails "failed" every run. The live 10-min bank is the Grok ping
-# (and Vercel daily cron). Add repo secret FILL_KEY (= Vercel GATE_SECRET)
-# then you can turn schedule back on.
+# Manual only. The eb-bank loop already calls the public vFootball heartbeat
+# (/api/poll?vfpub=1) every 5 minutes; run this to cover a gap, e.g. until a
+# running eb-bank loop restarts on newer workflow code. No key needed.
 name: vf-heartbeat
 on:
   workflow_dispatch:
+    inputs:
+      minutes:
+        description: How long to keep calling it (minutes)
+        default: "300"
 jobs:
   ping:
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 340
     steps:
-      - name: Bank vFootball
+      - name: Bank vFootball every 5 minutes
         env:
-          KEY: ${{ secrets.FILL_KEY }}
+          MINUTES: ${{ github.event.inputs.minutes }}
         run: |
-          set -euo pipefail
-          if [ -z "$KEY" ]; then
-            echo "FILL_KEY secret missing — add it in repo Settings → Secrets and Actions"
-            exit 1
-          fi
-          curl -fsS --max-time 55 -H "x-fill-key: $KEY" \
-            "https://vfootball-screener.vercel.app/api/poll?vf=1"
+          end=$(( $(date +%s) + ${MINUTES:-300}*60 ))
+          while [ "$(date +%s)" -lt "$end" ]; do
+            curl -sS --max-time 40 "https://vfootball-screener.vercel.app/api/poll?vfpub=1" | head -c 200 || true
+            echo
+            sleep 300
+          done
