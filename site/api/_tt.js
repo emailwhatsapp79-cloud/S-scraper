@@ -162,11 +162,14 @@ export async function fetchTTCard() {
 
 // SportyBet's short gameId is reused: a September game and today's game can
 // both be "12371", and the second then never got stored (or wrote over the
-// first's start time). The number in its eventId (sr:match:75060040) is never
-// reused, so that is the id; gameId only when there is no eventId.
+// first's start time). The eventId is never reused: its number when it is
+// sr:match:<digits>, the whole eventId when it is a scrambled one (Setka Cup),
+// gameId only when there is no eventId.
 export function sbGameId(ev) {
-  const m = String((ev && ev.eventId) || "").match(/(\d+)$/);
-  return m ? m[1] : String((ev && ev.gameId) || "");
+  const e = String((ev && ev.eventId) || "");
+  const m = e.match(/^sr:match:(\d+)$/);
+  if (m) return m[1];
+  return e || String((ev && ev.gameId) || "");
 }
 
 export function normalise(ev) {

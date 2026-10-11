@@ -33,6 +33,7 @@ test("ids come from the eventId, since SportyBet reuses the short gameId", () =>
   const ev = { gameId: "12371", eventId: "sr:match:75508772", homeTeamName: "A (x)", awayTeamName: "B (y)", markets: [] };
   assert.equal(normaliseEB(ev, "ESportsBattle").id, "75508772");
   assert.equal(normaliseEB({ ...ev, eventId: null }, "ESportsBattle").id, "12371");
+  assert.equal(normaliseEB({ ...ev, eventId: "sr:match:BjDiiQFQ4S9uOUQ7" }, "ESportsBattle").id, "sr:match:BjDiiQFQ4S9uOUQ7");
 });
 
 test("only a finished, untied score settles", () => {

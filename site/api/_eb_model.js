@@ -64,8 +64,10 @@ function winnerPrices(ev) {
 
 // SportyBet reuses the short gameId; the eventId's number is never reused.
 export function sbGameId(ev) {
-  const m = String((ev && ev.eventId) || "").match(/(\d+)$/);
-  return m ? m[1] : String((ev && ev.gameId) || "");
+  const e = String((ev && ev.eventId) || "");
+  const m = e.match(/^sr:match:(\d+)$/);
+  if (m) return m[1];
+  return e || String((ev && ev.gameId) || "");
 }
 
 /** SportyBet event -> stored game row shape. */
