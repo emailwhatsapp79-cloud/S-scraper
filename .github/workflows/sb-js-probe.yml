@@ -1,0 +1,26 @@
+name: sb-js-probe
+on:
+  push:
+    branches: [ccr-59cf78c4-n7ktec]
+    paths: [.github/workflows/sb-js-probe.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - run: |
+          UA="Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 Chrome/122.0 Mobile Safari/537.36"
+          mkdir js && cd js
+          for page in https://www.sportybet.com/ng/ https://www.sportybet.com/ng/my_accounts/bet_history/sport_bets https://www.sportybet.com/ng/m/my_accounts/bet_history; do
+            curl -sL -m 30 -H "User-Agent: $UA" "$page" -o p.html
+            grep -oE '(src|href)="[^"]+\.js[^"]*"' p.html | sed -E 's/^(src|href)="//; s/"$//' >> urls.txt
+          done
+          sort -u urls.txt | sed -E 's#^//#https://#; s#^/#https://www.sportybet.com/#' > u.txt
+          wc -l u.txt; i=0
+          while read u; do i=$((i+1)); curl -sL -m 30 -H "User-Agent: $UA" "$u" -o "f$i.js"; done < u.txt
+          # follow chunk files referenced inside the bundles once
+          grep -ohE '"[a-zA-Z0-9_/.-]*(cash|bet|order)[a-zA-Z0-9_/.-]*\.js"' f*.js | tr -d '"' | sort -u | head -40 > more.txt || true
+          echo "== cash-out related strings =="
+          grep -ohiE '"[^"]{0,80}cash[_-]?out[^"]{0,80}"' f*.js | sort -u | head -80
+          echo "== order api paths =="
+          grep -ohE '"/?(api/ng/)?orders/[^"]{0,90}"' f*.js | sort -u | head -80
