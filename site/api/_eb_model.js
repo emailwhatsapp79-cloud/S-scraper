@@ -62,11 +62,17 @@ function winnerPrices(ev) {
   return null;
 }
 
+// SportyBet reuses the short gameId; the eventId's number is never reused.
+export function sbGameId(ev) {
+  const m = String((ev && ev.eventId) || "").match(/(\d+)$/);
+  return m ? m[1] : String((ev && ev.gameId) || "");
+}
+
 /** SportyBet event -> stored game row shape. */
 export function normaliseEB(ev, tourn) {
   if (!ev || !ev.gameId || !ev.homeTeamName || !ev.awayTeamName) return null;
   return {
-    id: String(ev.gameId),
+    id: sbGameId(ev),
     eventId: ev.eventId || null,
     home: ev.homeTeamName,
     away: ev.awayTeamName,
