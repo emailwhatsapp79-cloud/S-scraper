@@ -78,7 +78,7 @@ function nameTokens(s) {
     .map(foldToken);
 }
 
-function nameKey(s) {
+export function nameKey(s) {
   // "Vorsulyak, Yaroslav" == "Yaroslav Vorsulyak"
   // Drop single-letter initials so "Krejci, R" still meets "Richard Krejci".
   return nameTokens(s).sort().join("|");

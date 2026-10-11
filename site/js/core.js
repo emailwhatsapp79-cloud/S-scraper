@@ -1706,6 +1706,9 @@
       sel.appendChild(document.createTextNode(" @ " + Number(l.price).toFixed(2)));
       if (l.tag) sel.appendChild(bookedTag(l.tag, l.chance));
       left.appendChild(sel);
+      (l.warn || []).forEach(function (w) {
+        left.appendChild(el("div", "leg-warn", "\u26a0\ufe0f " + w.name + " \u2014 " + w.text));
+      });
       if (st === "live" && l.livePrice != null && isFinite(l.livePrice)) {
         var live = el("div", "live-odds");
         live.appendChild(el("span", "lo-l", "Live odds"));

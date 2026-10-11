@@ -136,6 +136,11 @@ export async function listSlips() {
     const s = by.get(leg.slip_id);
     if (s) s.legs.push(shapeLeg(leg));
   }
+  // Watch-list players / poor records as big favourite on open slips' legs.
+  try {
+    const openLegs = [...by.values()].filter((s) => s.status === "open" || s.status === "live").flatMap((s) => s.legs);
+    if (openLegs.length) { const { annotateWatch } = await import("./_tt_watch.js"); await annotateWatch(openLegs); }
+  } catch { /* the slips still show */ }
   return [...by.values()];
 }
 
