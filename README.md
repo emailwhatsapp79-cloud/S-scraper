@@ -38,8 +38,14 @@ tennis (winner market `219`). Games the model leans on are tagged **Good** (our 
 games each); the record above the card says whether those tags have made money.
 
 Table tennis tags come from **player stats only**, never the price: rating
-gap, head-to-head, last-20 form, rest and career record, combined by a
-logistic fit (`statsHome` in `_ratings.js`). On 81k games it never saw, 75%+
+gap, head-to-head, last-20 form, rest and career record, plus the set scores —
+share of sets won over the last 20 (a run of 3–2s counts for less than 3–0s)
+and share of sets won head-to-head, the strongest input — combined by a
+logistic fit (`statsHome` in `_ratings.js`). A player with a thin record under
+one spelling is scored off their bigger record under another (Hanna/Anna,
+Oleksandr/Aleksandr, ...) when it is the same competition. There is no cap on
+how many games get a tag: on a card of ~160 games, ~90 are genuinely close
+(under 60%) and only ~3–6% of games ever reach 75%. On 81k games it never saw, 75%+
 (**Strong**) won 79–92% and 70–75% (**Good**) won 73%; on SportyBet's own games
 75%+ won 63 of 74. SportyBet's % is shown beside it, not mixed in. **Lean** is 65–70% (won 67%). Head-to-head comes from `tt_h2h`, the full history per pair (backfilled from 289k meetings, then kept up by `trainBatch`), not the players' last 80 games. Each game's
 pre-result stats % is stored (`pre_stats`) so the live record can be graded.
