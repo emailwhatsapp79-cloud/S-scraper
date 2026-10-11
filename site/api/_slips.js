@@ -554,8 +554,10 @@ export async function refreshSlips() {
     l.prev_game_score = old ? old.game_score : null;
     l.prev_status = old ? old.match_status : null;
   }
+  // Set / result / deciding-point updates first, so a shared "started" key
+  // goes out in that wording; then the in-set and football / eB moments.
+  try { await notifySets(freshLegs, open); } catch { /* scores still save */ }
   try { await notifyMoments(freshLegs); } catch { /* scores still save */ }
-  try { await notifySets(freshLegs); } catch { /* scores still save */ }
   try { await notifyFlags(freshLegs, open); } catch { /* scores still save */ }
   const grouped = new Map();
   for (const l of freshLegs) {

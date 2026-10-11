@@ -102,23 +102,24 @@ export async function notifyBooked(slips) {
 
     for (const l of sp.legs || []) {
       if (sp.status === "lost") break;   // once lost, only "Bet missed" below
+      if (l.sport === "tt" || l.sport === "tn") continue;   // live updates cover these (notifySets)
       if (l.won === true) {
         if (await sendOnce("leg-" + l.gameId + "-yes", {
           kind: "yes",
           sound: "/sounds/yes.wav",
           url: "/book",
-          title: "Yes",
-          body: (l.home || "") + " v " + (l.away || "") + " · " + (l.label || "") + " in",
+          title: "✅ " + (l.label || "Leg") + " won",
+          body: (l.home || "") + " v " + (l.away || ""),
         })) sent++;
       } else if (l.won === false) {
         if (await sendOnce("leg-" + l.gameId + "-no", {
           kind: "no",
           sound: "/sounds/no.wav",
           url: "/book",
-          title: "No",
-          body: (l.home || "") + " v " + (l.away || "") + " · " + (l.label || "") + " missed",
+          title: "❌ " + (l.label || "Leg") + " lost",
+          body: (l.home || "") + " v " + (l.away || ""),
         })) sent++;
-      } else if (active && l.kickoff) {
+      } else if (active && l.kickoff && l.sport !== "tt" && l.sport !== "tn") {
         const d = Number(l.kickoff) - now;
         if (d > 0 && d <= 5 * 60 * 1000) {
           if (await sendOnce("kick-" + l.gameId, {
@@ -137,8 +138,8 @@ export async function notifyBooked(slips) {
         kind: "yes",
         sound: "/sounds/yes.wav",
         url: "/ledger",
-        title: "Bet landed",
-        body: (sp.shareCode ? sp.shareCode + " · " : "") + (sp.legs || []).length + " legs in",
+        title: "🎉 " + (sp.shareCode || "Slip") + " WON " + (sp.legs || []).length + "/" + (sp.legs || []).length + "!",
+        body: "Payout " + naira(sp.returned || sp.potential) + " on " + naira(sp.stake) + " · congratulations",
       })) sent++;
     }
     if (sp.status === "lost" && recent) {
@@ -146,8 +147,8 @@ export async function notifyBooked(slips) {
         kind: "no",
         sound: "/sounds/no.wav",
         url: "/ledger",
-        title: "Bet missed",
-        body: (sp.shareCode ? sp.shareCode + " · " : "") + (sp.legs || []).length + " legs",
+        title: (sp.shareCode || "Slip") + " lost",
+        body: (sp.legs || []).filter((x) => x.won === true).length + "/" + (sp.legs || []).length + " legs won",
       })) sent++;
     }
   }
@@ -171,37 +172,100 @@ function lastName(s) {
   return t.includes(",") ? t.split(",")[0].trim() : (t.split(/\s+/).pop() || t);
 }
 
-export async function notifySets(legs) {
+// Live updates for every TT / tennis leg of an open slip, from the pick's side:
+// game started, every finished set (leads / trails / level), every point of
+// a deciding set, and the leg's result with the slip's tally. One push per
+// event (sendOnce keys), so nothing repeats.
+function pairsOf(text) {
+  return [...String(text || "").matchAll(/(\d+):(\d+)/g)].map((m) => [Number(m[1]), Number(m[2])]);
+}
+const naira = (n) => "₦" + Math.round(Number(n) || 0).toLocaleString("en-NG");
+
+export async function notifySets(legs, slips) {
   if (!Array.isArray(legs) || !legs.length) return { sent: 0 };
   try {
     const { loadPrefs } = await import("./_vault.js");
     if ((await loadPrefs()).pings === false) return { sent: 0 };
   } catch { return { sent: 0 }; }
   await ensure();
+  const bySlip = new Map();
+  for (const l of legs) {
+    if (!bySlip.has(l.slip_id)) bySlip.set(l.slip_id, []);
+    bySlip.get(l.slip_id).push(l);
+  }
+  const code = new Map((slips || []).map((s) => [String(s.id), s.share_code || ""]));
   let sent = 0;
   for (const l of legs) {
-    if (l.sport !== "tt" && l.sport !== "tn") continue;
-    if (l.won === "yes" || l.won === "no") continue;
-    const m = String(l.set_score || "").match(/^(\d+)\s*:\s*(\d+)$/);
-    if (!m) continue;
     const home = pickedHome(l.selection);
     if (home == null) continue;
-    const a = Number(m[1]), b = Number(m[2]);
-    const mine = home ? a : b, theirs = home ? b : a;
-    if (a + b === 0) continue;           // not started, or no set finished yet
+    const tn = l.sport === "tn";
+    if (l.sport !== "tt" && !tn) continue;
+    const mineName = lastName(home ? l.home : l.away);
+    const oppName = lastName(home ? l.away : l.home);
+    const all = bySlip.get(l.slip_id) || [];
+    const won = all.filter((x) => x.won === "yes").length;
+    const tally = (code.get(String(l.slip_id)) || "Slip") + " · " + won + "/" + all.length + " won";
+    const odds = Number(l.live_price) > 1 ? " · odds " + Number(l.live_price).toFixed(2) : "";
     const base = String(l.slip_id) + "-" + String(l.game_id);
-    const who = home ? l.home : l.away;
-    const verb = mine < theirs ? "behind" : mine > theirs ? "ahead" : "level";
-    // Sets needed to win: table tennis best of 5, tennis best of 3.
-    const need = l.sport === "tn" ? 2 : 3;
-    const brink = theirs === need - 1 && mine < theirs;   // opponent one set from winning
-    const lead = brink ? "🚨 One set from losing · " : mine < theirs ? "⚠️ " : mine > theirs ? "✅ " : "";
-    if (await sendOnce("set-" + base + "-" + a + ":" + b, {
-      kind: mine < theirs ? "no" : "kick",
-      url: "/book",
-      title: lead + lastName(l.home) + " " + a + "–" + b + " " + lastName(l.away) + " · " + lastName(who) + " " + verb,
-      body: (l.home || "") + " v " + (l.away || "") + " · your pick: " + (who || ""),
+    const flip = (p) => (home ? p : [p[1], p[0]]);
+
+    // Result of the leg.
+    if (l.won === "yes" || l.won === "no") {
+      const ss = pairsOf(l.set_score)[0];
+      const sets = ss ? flip(ss).join("–") : "";
+      const lost = all.some((x) => x.won === "no");
+      if (await sendOnce("res-" + base, l.won === "yes" ? {
+        kind: "yes", url: "/book",
+        title: "✅ " + mineName + " WON " + sets,
+        body: tally + (lost ? "" : " · " + (all.length - won) + " to go"),
+      } : {
+        kind: "no", url: "/book",
+        title: "❌ " + mineName + " lost " + sets,
+        body: (code.get(String(l.slip_id)) || "Slip") + " is lost",
+      })) sent++;
+      continue;
+    }
+    const st = String(l.match_status || "");
+    const live = /^(set\s*\d|\d+(st|nd|rd|th)|playing|.*break)/i.test(st);
+    if (!live) continue;
+    const ssRaw = pairsOf(l.set_score)[0] || [0, 0];
+    const [ms, ts] = flip(ssRaw);
+
+    // Game started.
+    if (await sendOnce("start-" + base, {
+      kind: "kick", url: "/book",
+      title: "▶ " + mineName + " v " + oppName + " started" + odds,
+      body: tally,
     })) sent++;
+
+    // A set just finished.
+    if (ms + ts > 0) {
+      const sets = pairsOf(l.game_score);
+      const last = sets[ms + ts - 1] ? flip(sets[ms + ts - 1]) : null;
+      const wonLast = last ? last[0] > last[1] : ms > ts;
+      const need = tn ? 2 : 3;
+      const state = ms > ts ? "leads " + ms + "–" + ts : ms < ts ? "trails " + ms + "–" + ts : "level " + ms + "–" + ts;
+      const brink = ts === need - 1 && ms < ts;
+      const icon = brink ? "🚨" : wonLast ? "✅" : "⚠️";
+      if (await sendOnce("set-" + base + "-" + ssRaw[0] + ":" + ssRaw[1], {
+        kind: wonLast ? "kick" : "no", url: "/book",
+        title: icon + " " + mineName + (wonLast ? " won" : " lost") + " set " + (ms + ts) + (last ? " " + last[0] + "–" + last[1] : "") + " · " + state,
+        body: tally + odds,
+      })) sent++;
+
+      // Every point of a deciding set.
+      if (ms === need - 1 && ts === need - 1) {
+        const pt = pairsOf(l.played)[0];
+        if (pt && pt[0] + pt[1] > 0) {
+          const [mp, tp] = flip(pt);
+          if (await sendOnce("pt-" + base + "-" + pt[0] + ":" + pt[1], {
+            kind: mp >= tp ? "kick" : "no", url: "/book",
+            title: "🚨 Deciding set · " + mineName + " " + mp + "–" + tp + " " + oppName,
+            body: tally + odds,
+          })) sent++;
+        }
+      }
+    }
   }
   return { sent };
 }

@@ -1453,21 +1453,22 @@
     }).forEach(function (sp) {
       var dead = sp.status === "lost";
       (sp.legs || []).forEach(function (l) {
-        if (dead) return;   // once lost, only "Bet missed" below
+        if (dead) return;   // once lost, only the slip's line below
+        if (l.sport === "tt" || l.sport === "tn") return;   // the server's live updates cover these
         if (l.won !== true && l.won !== false) return;
         var k = "leg-" + l.gameId + "-" + (l.won ? "yes" : "no");
         if (seen[k]) return;
         pingMark(k);
-        ping(l.won ? "Yes" : "No",
-          (l.home || "") + " v " + (l.away || "") + " · " + (l.label || ""),
+        ping((l.won ? "✅ " : "❌ ") + (l.label || "Leg") + (l.won ? " won" : " lost"),
+          (l.home || "") + " v " + (l.away || ""),
           k, l.won ? "yes" : "no");
       });
       if (sp.status !== "won" && sp.status !== "lost") return;
       var sk = "slip-" + sp.id + "-" + sp.status;
       if (seen[sk]) return;
       pingMark(sk);
-      ping(sp.status === "won" ? "Bet landed" : "Bet missed",
-        (sp.shareCode ? sp.shareCode + " · " : "") + sp.legs.length + " legs",
+      ping(sp.status === "won" ? "🎉 " + (sp.shareCode || "Slip") + " WON " + sp.legs.length + "/" + sp.legs.length + "!" : (sp.shareCode || "Slip") + " lost",
+        sp.status === "won" ? "Payout " + naira(sp.returned || sp.potential) + " · congratulations" : sp.legs.filter(function (x) { return x.won === true; }).length + "/" + sp.legs.length + " legs won",
         sk, sp.status === "won" ? "yes" : "no");
     });
   }
