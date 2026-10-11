@@ -57,6 +57,10 @@ async function ensure() {
     a TEXT NOT NULL, b TEXT NOT NULL, n INT NOT NULL DEFAULT 0, aw INT NOT NULL DEFAULT 0,
     PRIMARY KEY (a, b)
   )`;
+  // Sets in those meetings (sn = sets played, asw = a's sets won): a 3-0 and a
+  // 3-2 are not the same win, and the share of sets is the best h2h signal.
+  await sql`ALTER TABLE tt_h2h ADD COLUMN IF NOT EXISTS sn INT NOT NULL DEFAULT 0`;
+  await sql`ALTER TABLE tt_h2h ADD COLUMN IF NOT EXISTS asw INT NOT NULL DEFAULT 0`;
   await sql`CREATE INDEX IF NOT EXISTS tt_games_untrained
     ON tt_games (start_at) WHERE trained IS NOT TRUE`;
   ready = true;
@@ -158,12 +162,13 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
     if (h2hMap && !alreadySeen(H.rec, kA, st0)) {
       const [a, b] = pairOf(kH, kA);
       const k2 = a + ">" + b;
-      const r = h2hMap.get(k2) || { n: 0, aw: 0 };
+      const r = h2hMap.get(k2) || { n: 0, aw: 0, sn: 0, asw: 0 };
       const aWon = (hw ? kH : kA) === a;
-      r.n++; if (aWon) r.aw++;
+      const aSets = kH === a ? rh : ra;
+      r.n++; if (aWon) r.aw++; r.sn += rh + ra; r.asw += aSets;
       h2hMap.set(k2, r);
-      const d = h2hAdd.get(k2) || { n: 0, aw: 0 };
-      d.n++; if (aWon) d.aw++;
+      const d = h2hAdd.get(k2) || { n: 0, aw: 0, sn: 0, asw: 0 };
+      d.n++; if (aWon) d.aw++; d.sn += rh + ra; d.asw += aSets;
       h2hAdd.set(k2, d);
     }
     // walk-forward self-check, before the update
@@ -218,11 +223,13 @@ export async function trainBatch(limit = 2500, deadlineMs = 12000) {
   if (h2hAdd.size) {
     const list = [...h2hAdd];
     for (let i = 0; i < list.length; i += 300) {
-      const part = list.slice(i, i + 300).map(([k2, d]) => { const [a, b] = k2.split(">"); return [a, b, d.n, d.aw]; });
-      await sql`INSERT INTO tt_h2h (a, b, n, aw)
+      const part = list.slice(i, i + 300).map(([k2, d]) => { const [a, b] = k2.split(">"); return [a, b, d.n, d.aw, d.sn, d.asw]; });
+      await sql`INSERT INTO tt_h2h (a, b, n, aw, sn, asw)
         SELECT * FROM unnest(${part.map((x) => x[0])}::text[], ${part.map((x) => x[1])}::text[],
-                             ${part.map((x) => x[2])}::int[], ${part.map((x) => x[3])}::int[])
-        ON CONFLICT (a, b) DO UPDATE SET n = tt_h2h.n + EXCLUDED.n, aw = tt_h2h.aw + EXCLUDED.aw`;
+                             ${part.map((x) => x[2])}::int[], ${part.map((x) => x[3])}::int[],
+                             ${part.map((x) => x[4])}::int[], ${part.map((x) => x[5])}::int[])
+        ON CONFLICT (a, b) DO UPDATE SET n = tt_h2h.n + EXCLUDED.n, aw = tt_h2h.aw + EXCLUDED.aw,
+          sn = tt_h2h.sn + EXCLUDED.sn, asw = tt_h2h.asw + EXCLUDED.asw`;
     }
   }
   for (let i = 0; i < pre.length; i += 200) {
@@ -300,24 +307,30 @@ async function loadCardPlayers(games) {
 // 70-75% the player won 73%, 75-80% won 79%, 80-85% won 85%, 85%+ won 92%.
 // On SportyBet's own games, 75%+ won 63 of 74 (+10.9% at the posted price).
 // Inputs: rating gap, last-20 form gap (a hot streak counts slightly against,
-// it cools), head-to-head (the strongest), rest, career win rate.
-const STATS_W = { b: -0.012, elo: 0.5407, form: -0.591, h2h: 1.9413, rest: -0.0515, career: 0.1243 };
+// it cools), head-to-head, rest, career win rate, and from the set scores:
+// share of sets won over the last 20 (a run of 3-2s is weaker than 3-0s) and
+// share of sets won head-to-head (now the strongest input; it takes over most
+// of plain h2h wins, whose weight turns slightly negative alongside it).
+// Refit with the set inputs on the same 81k unseen games: 70-75% won 72%,
+// 75-80% won 78%, 80-85% won 84%, 85%+ won 91%; 9% more games reach 70%+.
+const STATS_W = { b: -0.0169, elo: 0.4444, form: -1.0269, h2h: -0.7784, rest: -0.0443, career: 0.1434,
+  setForm: 1.1308, h2hSet: 4.8315 };
 const pairOf = (x, y) => (x < y ? [x, y] : [y, x]);
 // { hw, hn } for x against y out of the full head-to-head map, or null.
 function h2hOf(map, x, y) {
   if (!map) return null;
   const [a, b] = pairOf(x, y);
   const r = map.get(a + ">" + b);
-  if (!r) return { hw: 0, hn: 0 };
-  return { hw: x === a ? r.aw : r.n - r.aw, hn: r.n };
+  if (!r) return { hw: 0, hn: 0, hs: 0, hsn: 0 };
+  return { hw: x === a ? r.aw : r.n - r.aw, hn: r.n, hs: x === a ? r.asw : r.sn - r.asw, hsn: r.sn };
 }
 async function loadH2H(pairs) {
   const map = new Map();
   const list = [...new Set(pairs.map(([x, y]) => pairOf(x, y).join(">")))];
   for (let i = 0; i < list.length; i += 400) {
     const part = list.slice(i, i + 400);
-    const rows = await sql`SELECT a, b, n, aw FROM tt_h2h WHERE (a || '>' || b) = ANY(${part})`;
-    for (const r of rows) map.set(r.a + ">" + r.b, { n: r.n, aw: r.aw });
+    const rows = await sql`SELECT a, b, n, aw, sn, asw FROM tt_h2h WHERE (a || '>' || b) = ANY(${part})`;
+    for (const r of rows) map.set(r.a + ">" + r.b, { n: r.n, aw: r.aw, sn: r.sn || 0, asw: r.asw || 0 });
   }
   return map;
 }
@@ -327,9 +340,19 @@ export function statsHome(H, A, kH, kA, start, full) {
   const recH = H.rec || [], recA = A.rec || [];
   if (!recH.length || !recA.length) return null;
   const form = (rec) => { const r = rec.slice(-20); return r.reduce((s, x) => s + (x.won ? 1 : 0), 0) / r.length; };
-  let hw = 0, hn = 0;
-  if (full) { hw = full.hw; hn = full.hn; }
+  let hw = 0, hn = 0, hs = 0, hsn = 0;
+  if (full) { hw = full.hw; hn = full.hn; hs = full.hs || 0; hsn = full.hsn || 0; }
   else for (const x of recH) if (x.vs === kA) { hn++; if (x.won) hw++; }
+  // Sets head-to-head; from the record when the full table has none yet.
+  if (!hsn) {
+    hs = 0;
+    for (const x of recH) if (x.vs === kA && isFinite(Number(x.sw)) && isFinite(Number(x.sl))) { hs += Number(x.sw); hsn += Number(x.sw) + Number(x.sl); }
+  }
+  const setForm = (rec) => {
+    let w = 0, n = 0;
+    for (const x of rec.slice(-20)) { const a = Number(x.sw), b = Number(x.sl); if (isFinite(a) && isFinite(b)) { w += a; n += a + b; } }
+    return n ? w / n : 0.5;
+  };
   const t = Number(start) || Date.now();
   const rest = (p) => Math.log1p(p.last ? Math.min(Math.max(0, (t - p.last) / 60000), 600) : 600);
   const car = (p) => { const c = ((p.w || 0) + 1) / ((p.n || 0) + 2); return Math.log(c / (1 - c)); };
@@ -338,7 +361,9 @@ export function statsHome(H, A, kH, kA, start, full) {
     + STATS_W.form * (form(recH) - form(recA))
     + STATS_W.h2h * ((hw + 1) / (hn + 2) - 0.5) * Math.min(hn, 10) / 10
     + STATS_W.rest * (rest(H) - rest(A))
-    + STATS_W.career * (car(H) - car(A));
+    + STATS_W.career * (car(H) - car(A))
+    + STATS_W.setForm * (setForm(recH) - setForm(recA))
+    + STATS_W.h2hSet * ((hs + 2) / (hsn + 4) - 0.5) * Math.min(hn, 10) / 10;
   return 1 / (1 + Math.exp(-z));
 }
 
@@ -355,11 +380,13 @@ function alreadySeen(rec, oppKey, start) {
 
 // Sets the fields the page reads (pct / ours / book / nH / nA / h2hRec /
 // formH / formA) on one game, from whatever player rows it is handed.
-function scoreOne(players, ha, g, h2hMap) {
+function scoreOne(players, ha, g, h2hMap, alias) {
   const kH = nameKey(g.home), kA = nameKey(g.away);
+  // The record's own keys (another spelling when the card's was thin).
+  const eH = (alias && alias.get(kH)) || kH, eA = (alias && alias.get(kA)) || kA;
   const H = players[kH];
   const h2h = {};
-  if (H && H.rec) h2h[kH + ">" + kA] = h2hFromRec(H.rec, kA, g.start, g.tourn);
+  if (H && H.rec) h2h[kH + ">" + kA] = h2hFromRec(H.rec, eA, g.start, g.tourn);
   const f = forecastTT({ players, h2h, ha }, g);
   const book = g.win ? winPctBook(g.win.home, g.win.away) : null;
   const h2hN = f.h2hRec ? f.h2hRec.n : 0;
@@ -374,19 +401,69 @@ function scoreOne(players, ha, g, h2hMap) {
   g.nH = f.nH; g.nA = f.nA;
   g.h2hRec = f.h2hRec;
   g.formH = f.formH; g.formA = f.formA;
-  const s = statsHome(players[kH], players[kA], kH, kA, g.start, h2hOf(h2hMap, kH, kA));
+  const s = statsHome(players[kH], players[kA], eH, eA, g.start, h2hOf(h2hMap, eH, eA));
   g.stats = s == null ? null : { home: Math.round(s * 100), away: 100 - Math.round(s * 100) };
   return g;
 }
 
 /** Forecast the upcoming card off the rating store. */
+// The same given name spelled from Ukrainian, Russian or English: SportyBet's
+// "Lapa, Hanna" (29 games) is the Setka feed's "Anna Lapa" (467).
+const GIVEN = [
+  ["HANNA", "ANNA"], ["OLEKSANDR", "ALEKSANDR", "ALEXANDR", "ALEXANDER"], ["OLEKSII", "OLEKSIY", "ALEKSEI", "ALEKSEY", "ALEXEI", "ALEXEY"],
+  ["YEVHEN", "YEVHENII", "EVGENII", "EVGENIY", "EVGENY", "YEVGENIY"], ["SERHII", "SERHIY", "SERGEI", "SERGEY", "SERGII", "SERGIY"],
+  ["MYKOLA", "NIKOLAI", "NIKOLAY"], ["MYKHAILO", "MIKHAIL", "MYKHAYLO"], ["DMYTRO", "DMITRII", "DMITRIY", "DMITRY"],
+  ["ANDRII", "ANDRIY", "ANDREI", "ANDREY"], ["YURII", "YURIY", "YURI"], ["VIKTOR", "VICTOR"], ["VOLODYMYR", "VLADIMIR"],
+  ["PAVLO", "PAVEL"], ["PETRO", "PETR"], ["OLENA", "ELENA", "YELENA"], ["YULIIA", "YULIA", "IULIIA"], ["NATALIIA", "NATALIA", "NATALYA"],
+  ["KATERYNA", "EKATERINA", "YEKATERINA"], ["TETIANA", "TATIANA", "TATYANA"], ["IRYNA", "IRINA"], ["MARIIA", "MARIA"],
+  ["VALERII", "VALERIY", "VALERY"], ["VITALII", "VITALIY", "VITALY"], ["ANATOLII", "ANATOLIY", "ANATOLY"], ["HENNADII", "GENNADII", "GENNADY"],
+].map((g) => g.map(foldToken));
+function nameVariants(key) {
+  const toks = String(key || "").split("|");
+  const out = new Set();
+  toks.forEach((t, i) => {
+    for (const g of GIVEN) if (g.includes(t)) for (const v of g) if (v !== t) {
+      const c = toks.slice(); c[i] = v; out.add(c.sort().join("|"));
+    }
+  });
+  return [...out];
+}
+
+// Card key -> the key of the same player's bigger record under another
+// spelling, when the card's own record is thin (< 30) and the other has played
+// the same competition ("setkacup" also matches "setkacupwomen").
+async function aliasThin(games, players) {
+  const alias = new Map();
+  const want = new Map();
+  for (const g of games) for (const nm of [g.home, g.away]) {
+    const k = nameKey(nm);
+    if (!k || alias.has(k) || (players[k] && players[k].n >= 30)) continue;
+    const vs = nameVariants(k);
+    if (vs.length) want.set(k, { vs, T: tournKey(g.tourn) });
+  }
+  const all = [...new Set([...want.values()].flatMap((w) => w.vs))];
+  if (!all.length) return alias;
+  const rows = await sql`SELECT * FROM tt_ratings WHERE name_key = ANY(${all.slice(0, 400)})`;
+  const byKey = new Map(rows.map((r) => [r.name_key, parsePlayer(r)]));
+  for (const [k, w] of want) {
+    const own = players[k] ? players[k].n : 0;
+    const best = w.vs.map((v) => byKey.get(v)).filter((p) => p && p.n > own && (!w.T || Object.keys(p.tourn || {}).some((t) => t.startsWith(w.T) || w.T.startsWith(t))))
+      .sort((a, b) => b.n - a.n)[0];
+    if (best) { alias.set(k, best.key); players[k] = best; }
+  }
+  return alias;
+}
+
 export async function forecastCard(games) {
   await ensure();
   const players = await loadCardPlayers(games);
+  let alias = new Map();
+  try { alias = await aliasThin(games, players); } catch { alias = new Map(); }
+  const eff = (nm) => { const k = nameKey(nm); return alias.get(k) || k; };
   const ha = homeAdv(await loadMeta());
   let h2hMap = null;
-  try { h2hMap = await loadH2H(games.map((g) => [nameKey(g.home), nameKey(g.away)])); } catch { h2hMap = null; }
-  for (const g of games) scoreOne(players, ha, g, h2hMap);
+  try { h2hMap = await loadH2H(games.map((g) => [eff(g.home), eff(g.away)])); } catch { h2hMap = null; }
+  for (const g of games) scoreOne(players, ha, g, h2hMap, alias);
   return games;
 }
 
