@@ -542,7 +542,7 @@ export async function refreshSlips() {
   const freshLegs = await sql`
     SELECT * FROM slip_legs
     WHERE slip_id IN (SELECT id FROM slips WHERE status IN ('open', 'live'))`;
-  try { await notifySets(freshLegs); } catch { /* scores still save */ }
+  try { await notifySets(freshLegs, open); } catch { /* scores still save */ }
   try { await notifyFlags(freshLegs, open); } catch { /* scores still save */ }
   const grouped = new Map();
   for (const l of freshLegs) {
