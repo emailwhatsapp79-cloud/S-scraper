@@ -1787,7 +1787,7 @@
         cbox.appendChild(el("div", "cash-sub", (co.amount >= sp.stake ? "above" : "below") + " your " + naira(sp.stake) + " stake"));
       } else if (co.cashable) cbox.appendChild(el("div", "mkt-t", "Cash-out available"));
       else cbox.appendChild(el("div", "mkt-t cash-off", "Cash-out suspended" + (co.reason ? " · " + co.reason : "")));
-      cbox.appendChild(el("div", "cash-sub", "Auto cash-out: on a 🚩 danger flag once the offer is at least your stake"));
+      cbox.appendChild(el("div", "cash-sub", "Auto cash-out: paused · 🚩 flags and alerts are on"));
       card.appendChild(cbox);
     }
 
