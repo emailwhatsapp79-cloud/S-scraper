@@ -184,6 +184,28 @@ function scoreMoment(leg, base) {
   };
 }
 
+// Football (virtual or real): half-time, and every 10 minutes of the match
+// clock (10', 20' ... 80'), each with how the score sits against the pick. A
+// virtual match is over in a few real minutes, so a check can jump several
+// marks; only the latest mark passed is sent.
+export function clockMoment(leg, base) {
+  if (!leg || leg.sport === "tt" || leg.sport === "tn" || leg.sport === "eb") return null;
+  const status = String(leg.match_status || "");
+  const sc = parsePair(leg.set_score) || [0, 0];
+  const story = scoreStory(leg.selection, sc[0], sc[1]);
+  const how = story ? story.title : dash(sc[0], sc[1]);
+  const kind = story ? kindOf(story.tone) : "kick";
+  if (/^(HT|half)/i.test(status)) {
+    return { key: "ht-" + base, kind, title: "\u23f8 Half-time \u00b7 " + how, body: body(leg, "") };
+  }
+  if (!isLiveStatus(status)) return null;
+  const m = String(leg.played || "").match(/^(\d+)/);
+  if (!m) return null;
+  const mark = Math.floor(Number(m[1]) / 10) * 10;
+  if (mark < 10 || mark > 80) return null;
+  return { key: "min-" + base + "-" + mark, kind, title: "\u23f1 " + mark + "' \u00b7 " + how, body: body(leg, "") };
+}
+
 export function legMoments(leg) {
   if (!leg || leg.won === "yes" || leg.won === "no") return [];
   const base = String(leg.slip_id) + "-" + String(leg.game_id);
@@ -207,6 +229,8 @@ export function legMoments(leg) {
   }
   const inset = insetMoment(leg, base);
   if (inset) out.push(inset);
+  const clock = clockMoment(leg, base);
+  if (clock) out.push(clock);
   // The start ping already includes the score. A separate "Winning · 1–0"
   // only goes out once the game was already on and the score then changed.
   const starting = isLiveStatus(leg.match_status) && !isLiveStatus(leg.prev_status);

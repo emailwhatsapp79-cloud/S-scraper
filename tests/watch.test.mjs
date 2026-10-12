@@ -136,3 +136,15 @@ test("the timer line names the game and the pick, never the stake", () => {
   assert.match(live.text, /this set 3–2/);
   assert.equal(JSON.stringify(live).includes("stake"), false);
 });
+
+test("football pings half-time and each 10-minute mark with the score against the pick", async () => {
+  const { clockMoment } = await import("../site/api/_watch.js");
+  const leg = { sport: "fb", selection: "1", home: "BVB", away: "SVE", set_score: "1:0", match_status: "H1", played: "23:10" };
+  const m = clockMoment(leg, "s-g");
+  assert.equal(m.key, "min-s-g-20");
+  assert.match(m.title, /20' · Winning · 1–0/);
+  assert.equal(clockMoment({ ...leg, match_status: "HT", played: "45:00" }, "s-g").key, "ht-s-g");
+  assert.equal(clockMoment({ ...leg, played: "07:00" }, "s-g"), null);
+  assert.equal(clockMoment({ ...leg, played: "90:00" }, "s-g"), null);
+  assert.equal(clockMoment({ ...leg, sport: "tt" }, "s-g"), null);
+});
