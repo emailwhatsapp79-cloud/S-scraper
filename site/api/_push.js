@@ -136,7 +136,7 @@ export async function notifyBooked(slips) {
           sound: "/sounds/yes.wav",
           url: "/book",
           title: "✅ " + (l.label || "Leg") + " won",
-          body: (l.home || "") + " v " + (l.away || ""),
+          body: (l.home || "") + " v " + (l.away || "") + (l.setScore ? " · FT " + l.setScore.replace(":", "–") : ""),
         })) sent++;
       } else if (l.won === false) {
         if (await sendOnce("leg-" + l.gameId + "-no", {
@@ -144,7 +144,7 @@ export async function notifyBooked(slips) {
           sound: "/sounds/no.wav",
           url: "/book",
           title: "❌ " + (l.label || "Leg") + " lost",
-          body: (l.home || "") + " v " + (l.away || ""),
+          body: (l.home || "") + " v " + (l.away || "") + (l.setScore ? " · FT " + l.setScore.replace(":", "–") : ""),
         })) sent++;
       } else if (active && l.kickoff && l.sport !== "tt" && l.sport !== "tn") {
         const d = Number(l.kickoff) - now;
