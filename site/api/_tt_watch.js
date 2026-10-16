@@ -4,7 +4,7 @@
 //     keep an eye on), matched on the name key so "Michal Oracz" and
 //     "Oracz, Michal" are the same;
 //   - anyone whose record as SportyBet's big favourite (1.40 or shorter, last
-//     90 days) has more losses than the prices said, by 1.5 or more (last 45 days).
+//     45 days) has more losses than the prices said, by 1.5 or more.
 // Plus two things that cap the tag on the page (tt.html levelOf):
 //   - a women's game (either player has a Setka Cup Women record): Strong
 //     there won 4 of 7 on SportyBet's games against 82% in men's, so the owner
