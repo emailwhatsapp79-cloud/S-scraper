@@ -51,7 +51,14 @@ async function vfHeartbeat() {
     catch (e) { logErr("vf.settle", e); settled = { error: String(e?.message || e) }; }
   }
   let pack = null;
-  if (Date.now() < budget - 2000) {
+  // The pack re-reads up to 8,000 settled games; every 5 minutes that was a
+  // large share of the database's monthly data transfer. Six-hourly is plenty.
+  let packFresh = false;
+  try {
+    const [m] = await sql`SELECT built_at FROM vf_model WHERE k = 'pack'`;
+    packFresh = !!(m && m.built_at && Date.now() - new Date(m.built_at).getTime() < 6 * 3600e3);
+  } catch { packFresh = false; }
+  if (!packFresh && Date.now() < budget - 2000) {
     try {
       const p = await rebuildVF();
       pack = { nGames: p.nGames, edge: p.edge, holdout: p.holdout, builtAt: p.builtAt };
@@ -187,12 +194,12 @@ export default async function handler(req, res) {
   if (url.searchParams.get("s24push") === "1") return s24Push(req, res);
   if (url.searchParams.get("tnpush") === "1") return tnPush(req, res);
   // vFootball heartbeat from the GitHub timer. Public odds and results only, so
-  // no key — and at most once per 4 minutes, whoever calls it.
+  // no key — and at most once per 12 minutes, whoever calls it (data budget).
   if (url.searchParams.get("vfpub") === "1") {
     res.setHeader("Cache-Control", "no-store");
     try {
       const [row] = await sql`SELECT at FROM health WHERE k = 'vf'`;
-      if (row && Date.now() - new Date(row.at).getTime() < 4 * 60 * 1000) return res.status(200).json({ ok: true, skipped: true });
+      if (row && Date.now() - new Date(row.at).getTime() < 12 * 60 * 1000) return res.status(200).json({ ok: true, skipped: true });
     } catch { /* first run */ }
     return res.status(200).json(await vfHeartbeat());
   }
