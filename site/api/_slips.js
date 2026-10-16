@@ -115,10 +115,17 @@ function round2(n) {
   return Math.round(Number(n) * 100) / 100;
 }
 
-export async function listSlips() {
+// Only the legs of the slips returned: reading every leg ever booked on each
+// timer tick (every 30-60s) was most of the database's monthly data transfer.
+export async function listSlips(opts = {}) {
   await ensureSlips();
-  const slips = await sql`SELECT * FROM slips ORDER BY created_at DESC LIMIT 40`;
-  const legs = await sql`SELECT * FROM slip_legs ORDER BY pos ASC`;
+  const limit = Number(opts.limit) || 40;
+  const slips = opts.hours
+    ? await sql`SELECT * FROM slips WHERE created_at > now() - make_interval(hours => ${Number(opts.hours)})
+        OR status IN ('open', 'live') ORDER BY created_at DESC LIMIT ${limit}`
+    : await sql`SELECT * FROM slips ORDER BY created_at DESC LIMIT ${limit}`;
+  const ids = slips.map((s) => s.id);
+  const legs = ids.length ? await sql`SELECT * FROM slip_legs WHERE slip_id = ANY(${ids}) ORDER BY pos ASC` : [];
   const by = new Map(slips.map((s) => [s.id, { ...shapeSlip(s), legs: [] }]));
   // Live SportyBet cash-out state, read every minute by the timer (_sb_bets.js).
   try {
@@ -595,7 +602,8 @@ export async function refreshSlips() {
         WHERE id = ${slip.id}`;
     }
   }
-  const slips = await listSlips();
+  // The timer only needs slips that are on or settled in the last day or so.
+  const slips = await listSlips({ limit: 15, hours: 36 });
   let pushed = 0;
   try { pushed = (await notifyBooked(slips)).sent; } catch { /* keep scores */ }
   const now = Date.now();
