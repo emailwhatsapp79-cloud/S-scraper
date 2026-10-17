@@ -19,6 +19,8 @@ const WATCH = [
   "Oracz, Jacek", "Oracz, Michal", "Oracz, Lukasz",
   "Ostrovskyi, Pavlo", "Osadchyi, Oleksandr", "Osipov, Sergey",
   "Tuzhylin, Oleksandr", "Fomin, Andriej", "Guzik, Michal", "Jadach, Oskar",
+  // 17 Oct, slip MUC6FM: Oanta lost from 2-0 up (Good), Berezynskyi 0-3 (Strong).
+  "Oanta, Mihail", "Berezynskyi, Serhii",
 ];
 const WATCH_KEYS = new Set(WATCH.map(nameKey));
 
