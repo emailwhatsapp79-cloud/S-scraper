@@ -271,14 +271,33 @@ function h2hFromRec(rec, oppKey, start, tourn) {
   return row;
 }
 
+// Card rows kept between loads on a warm instance. Each row's record is ~4 KB
+// and a card read pulled ~900 KB of them, most of Neon's free transfer, so only
+// rows whose `updated` moved (training rewrote them) are fetched again.
+const CARD_ROWS = new Map();
+
 async function loadCardPlayers(games) {
   const exact = new Set();
   for (const g of games) { exact.add(nameKey(g.home)); exact.add(nameKey(g.away)); }
   const keyList = [...exact].filter(Boolean);
   const players = {};
   if (keyList.length) {
-    const rows = await sql`SELECT * FROM tt_ratings WHERE name_key = ANY(${keyList})`;
-    for (const r of rows) { const p = parsePlayer(r); players[p.key] = p; }
+    const stamps = await sql`SELECT name_key, updated FROM tt_ratings WHERE name_key = ANY(${keyList})`;
+    const stale = [];
+    for (const s of stamps) {
+      const at = new Date(s.updated).getTime() || 0;
+      const hit = CARD_ROWS.get(s.name_key);
+      if (hit && hit.at === at) players[s.name_key] = parsePlayer(hit.row);
+      else stale.push(s.name_key);
+    }
+    if (stale.length) {
+      const rows = await sql`SELECT * FROM tt_ratings WHERE name_key = ANY(${stale})`;
+      for (const r of rows) {
+        CARD_ROWS.set(r.name_key, { at: new Date(r.updated).getTime() || 0, row: r });
+        const p = parsePlayer(r); players[p.key] = p;
+      }
+    }
+    if (CARD_ROWS.size > 4000) CARD_ROWS.clear();
   }
   // Surname-only fuzzy used to attach the most-played "Kowalczyk" to a
   // different Marcin. Only fill a miss when exactly one row has every token.
