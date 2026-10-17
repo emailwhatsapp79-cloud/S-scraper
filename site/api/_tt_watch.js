@@ -21,6 +21,8 @@ const WATCH = [
   "Tuzhylin, Oleksandr", "Fomin, Andriej", "Guzik, Michal", "Jadach, Oskar",
   // 17 Oct, slip MUC6FM: Oanta lost from 2-0 up (Good), Berezynskyi 0-3 (Strong).
   "Oanta, Mihail", "Berezynskyi, Serhii",
+  // 17 Oct, slip PHVZHG: Seeman (Lean) 0-2 down to Cmil.
+  "Seeman, Jan",
 ];
 const WATCH_KEYS = new Set(WATCH.map(nameKey));
 
