@@ -145,7 +145,10 @@ export async function listSlips(opts = {}) {
   }
   // Watch-list players / poor records as big favourite on open slips' legs.
   try {
-    const openLegs = [...by.values()].filter((s) => s.status === "open" || s.status === "live").flatMap((s) => s.legs);
+    // Table-tennis legs only: the checks read tt_games, so a tennis or football
+    // name would always show "0 SportyBet-priced games".
+    const openLegs = [...by.values()].filter((s) => s.status === "open" || s.status === "live")
+      .flatMap((s) => s.legs).filter((l) => l.sport === "tt");
     if (openLegs.length) { const { annotateWatch } = await import("./_tt_watch.js"); await annotateWatch(openLegs); }
   } catch { /* the slips still show */ }
   return [...by.values()];
