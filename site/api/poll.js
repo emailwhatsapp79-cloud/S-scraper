@@ -107,7 +107,8 @@ async function ebTick(res) {
         const { readOpenBets } = await import("./_sb_bets.js");
         out.bets = await readOpenBets();
       } catch (e) { out.bets = { error: String(e?.message || e).slice(0, 120) }; }
-      if (now - (at.eb || 0) >= 9 * 60 * 1000) {
+      // Card banking and training every 30 minutes (was 9): data budget on Neon's free plan.
+      if (now - (at.eb || 0) >= 30 * 60 * 1000) {
         await touchHealth("eb", { started: true });
         Object.assign(out, await refreshEB());
         // Keep the table tennis card current with the app closed: games
@@ -161,6 +162,11 @@ async function s24Push(req, res) {
   let body = req.body;
   if (typeof body === "string") { try { body = JSON.parse(body); } catch { body = null; } }
   const out = { ok: true };
+  // At most every 25 minutes, whatever the workflow's cadence (data budget).
+  try {
+    const [row] = await sql`SELECT at FROM health WHERE k = 's24'`;
+    if (row && Date.now() - new Date(row.at).getTime() < 25 * 60 * 1000) return res.status(200).json({ ok: true, skipped: true });
+  } catch { /* first run */ }
   try { Object.assign(out, await ingestS24Pages(body && body.pages)); }
   catch (e) { return res.status(500).json({ ok: false, error: String(e?.message || e).slice(0, 160) }); }
   try {
@@ -194,12 +200,12 @@ export default async function handler(req, res) {
   if (url.searchParams.get("s24push") === "1") return s24Push(req, res);
   if (url.searchParams.get("tnpush") === "1") return tnPush(req, res);
   // vFootball heartbeat from the GitHub timer. Public odds and results only, so
-  // no key — and at most once per 12 minutes, whoever calls it (data budget).
+  // no key — and at most once per 30 minutes, whoever calls it (data budget).
   if (url.searchParams.get("vfpub") === "1") {
     res.setHeader("Cache-Control", "no-store");
     try {
       const [row] = await sql`SELECT at FROM health WHERE k = 'vf'`;
-      if (row && Date.now() - new Date(row.at).getTime() < 12 * 60 * 1000) return res.status(200).json({ ok: true, skipped: true });
+      if (row && Date.now() - new Date(row.at).getTime() < 30 * 60 * 1000) return res.status(200).json({ ok: true, skipped: true });
     } catch { /* first run */ }
     return res.status(200).json(await vfHeartbeat());
   }

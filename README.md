@@ -54,7 +54,7 @@ last-20 wins, last-10 share of games won, head-to-head, rest and career record,
 fitted on a year of SportyBet's own singles results (`tn_games`, 40k matches).
 On the newest 4,725 it never saw: **Strong** (80%+) won 85%, **Good** (75–80%)
 won 80%, **Lean** (70–75%) won 75%. Players need 10+ matches. The timer pulls
-new results and learns them every ~10 minutes; `tn-backfill` reloads history. Prices only appear an hour or so before tip-off, so
+new results and learns them every ~30 minutes; `tn-backfill` reloads history. Prices only appear an hour or so before tip-off, so
 `.github/workflows/eb-bank.yml` calls `/api/poll?eb=1` every 10 minutes (one run
 loops ~5.5 hours, then starts the next; GitHub's own schedule only restarts it), and any
 open page of the app banks it every 5. That route needs no key — it only reads
@@ -63,11 +63,11 @@ public odds — and skips if it ran in the last 4 minutes.
 Table tennis history for the leagues SportyBet only partly lists (TT Elite
 Series, Czech Liga Pro, TT Cup, ...) comes from scores24, which blocks every
 Vercel server but not GitHub's. So the same loop runs `.github/s24-push.sh`
-every 10 minutes: it fetches the newest finished matches and POSTs them to
+every 30 minutes: it fetches the newest finished matches and POSTs them to
 `/api/poll?s24push=1`, which only accepts GitHub's signed OIDC token for this
 repo (`_oidc.js`, no stored secret), saves the rows and trains on them at once.
 After a gap, run **s24-backfill** from the Actions tab (days back, pages per
-league). Games SportyBet adds late are banked within 10 minutes and get their
+league). Games SportyBet adds late are banked within 30 minutes and get their
 stats the moment the card is read.
 
 ## The vFootball screen
