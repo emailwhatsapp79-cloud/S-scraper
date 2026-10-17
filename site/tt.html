@@ -379,6 +379,9 @@
     else if (st.pct >= 70) lvl = "good";
     else if (st.pct >= 65) lvl = "lean";
     if (!lvl) return null;
+    // Owner's rule: a game with a watch-list or poor-big-favourite-record
+    // player is never tagged, so it never reaches a slip.
+    if ((g.warn || []).some(function (w) { return !w.hot; })) return null;
     // Women's games: Strong there won 4 of 7 — kept to Lean at most.
     if (g.women) return "lean";
     // The pick's opponent has beaten the price 2+ times today: never Strong.
