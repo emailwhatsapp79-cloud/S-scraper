@@ -381,7 +381,10 @@
     if (!lvl) return null;
     // Owner's rule: a game with a watch-list or poor-big-favourite-record
     // player is never tagged, so it never reaches a slip.
-    if ((g.warn || []).some(function (w) { return !w.hot; })) return null;
+    // Pick-side checks (a loss earlier today as favourite or 0-3, under 10
+    // SportyBet-priced games) stop the tag only when that side is the pick.
+    var side = st.home ? "home" : "away";
+    if ((g.warn || []).some(function (w) { return !w.hot && (!w.pick || w.side === side); })) return null;
     // Women's games: Strong there won 4 of 7 — kept to Lean at most.
     if (g.women) return "lean";
     // The pick's opponent has beaten the price 2+ times today: never Strong.

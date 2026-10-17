@@ -12,6 +12,9 @@
 //   - a hot underdog: the pick's opponent has already beaten the price as the
 //     underdog 2+ times today (Lagos day), like Tymchenko on 11 Oct — capped at
 //     Good, never Strong.
+// And two pick-side checks (formFlags) that stop the tag when the picked
+// player has fewer than 10 SportyBet-priced games in 45 days, or already lost
+// today as the favourite or by 0-3.
 import { sql } from "./_db.js";
 import { nameKey } from "./_tt.js";
 
@@ -58,6 +61,33 @@ export function warnFor(name, rec) {
   return parts.length ? { name, watch: WATCH_KEYS.has(k), text: parts.join("; ") } : null;
 }
 
+export const MIN_PRICED = 10;
+
+/** Per name key: { priced, slump } from deduped priced rows. `priced` counts
+ *  SportyBet-priced finished games (Seeman's 68% on 17 Oct rested on 359 games
+ *  from other feeds and 1 priced one); `slump` describes a loss earlier today
+ *  (Lagos day) as the favourite or by 0-3, like his 0-3 to Sabuka before
+ *  losing our pick. */
+export function formFlags(rows, now = Date.now()) {
+  const lag = 3600e3;
+  const dayStart = Math.floor((now + lag) / 86400e3) * 86400e3 - lag;
+  const out = new Map();
+  const get = (k) => out.get(k) || (out.set(k, { priced: 0, slump: null }), out.get(k));
+  for (const r of rows) {
+    const wh = Number(r.win_home), wa = Number(r.win_away), rh = Number(r.r_home), ra = Number(r.r_away);
+    if (!(wh > 1 && wa > 1) || rh === ra) continue;
+    for (const [nm, my, ot, won, sw, sl] of [[r.home, wh, wa, rh > ra, rh, ra], [r.away, wa, wh, ra > rh, ra, rh]]) {
+      const x = get(nameKey(nm));
+      x.priced++;
+      if (Number(r.start_at) < dayStart || won) continue;
+      const opp = (nm === r.home ? r.away : r.home).split(",")[0];
+      if (my < ot) x.slump = `lost ${sw}-${sl} to ${opp} today as the favourite (@${my})`;
+      else if (sw === 0 && sl === 3 && !x.slump) x.slump = `lost 0-3 to ${opp} today`;
+    }
+  }
+  return out;
+}
+
 /** Per name key: wins as the price underdog since the start of the Lagos day. */
 export function upsetsToday(rows, now = Date.now()) {
   const lag = 3600e3;
@@ -85,10 +115,12 @@ export async function annotateWatch(games) {
   const recs = favRecords(rows);
   // Same-day results come in through several feeds; count each meeting once.
   const seen = new Set();
-  const today = upsetsToday(rows.filter((r) => {
+  const once = rows.filter((r) => {
     const k = [nameKey(r.home), nameKey(r.away)].sort().join(">") + "@" + Math.floor(Number(r.start_at) / 900000);
     if (seen.has(k)) return false; seen.add(k); return true;
-  }));
+  });
+  const today = upsetsToday(once);
+  const flags = formFlags(once);
   let women = new Set();
   try {
     const keys = [...new Set(names.map(nameKey))];
@@ -112,6 +144,12 @@ export async function annotateWatch(games) {
         warn.push({ side, name: g[side], hot: true, text: `\ud83d\udd25 beat the price ${hot} times today as the underdog` });
         (g.hot || (g.hot = {}))[side] = hot;
       }
+      // Pick-side checks: they stop a tag only when this side is the pick.
+      const f = flags.get(nameKey(g[side])) || { priced: 0, slump: null };
+      if (f.priced < MIN_PRICED) {
+        warn.push({ side, name: g[side], pick: true, text: `only ${f.priced} SportyBet-priced game${f.priced === 1 ? "" : "s"} in 45 days` });
+      }
+      if (f.slump) warn.push({ side, name: g[side], pick: true, text: f.slump });
     }
     if (warn.length) g.warn = warn;
     if (women.has(nameKey(g.home)) || women.has(nameKey(g.away))) g.women = true;
