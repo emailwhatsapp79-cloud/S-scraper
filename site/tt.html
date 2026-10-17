@@ -498,11 +498,12 @@
     window.scrollTo(0, y);
   }
 
-  // Only pull a fresh card + repaint at most once a minute (or when forced), so
-  // the background fill loop doesn't visibly refresh the page every second.
+  // Only pull a fresh card + repaint at most every 3 minutes (or when forced), so
+  // the background fill loop doesn't visibly refresh the page every second, and
+  // an open tab stays inside Neon's free data transfer.
   var lastPaint = Date.now();
   function repaint(force) {
-    if (!force && Date.now() - lastPaint < 60000) return Promise.resolve();
+    if (!force && Date.now() - lastPaint < 180000) return Promise.resolve();
     lastPaint = Date.now();
     return fetch("/api/tt").then(readJson).then(function (d) { if (d && d.ok) apply(d); })
       .catch(function () {});
@@ -553,7 +554,7 @@
         if (keep) return new Promise(function (ok) { setTimeout(ok, 600); }).then(fillPass);
         var done = f && f.settled != null ? comma(f.settled) : document.getElementById("s-settled").textContent;
         sn.textContent = done + " finished" + (note ? " · " + note : "") + " — keeps filling at night with the tab closed";
-        return repaint(true).then(function () {
+        return repaint(false).then(function () {
           setTimeout(fillPass, 120000);
         });
       });
