@@ -381,10 +381,10 @@
     if (!lvl) return null;
     // Owner's rule: a game with a watch-list or poor-big-favourite-record
     // player is never tagged, so it never reaches a slip.
-    // Pick-side checks (a loss earlier today as favourite or 0-3, under 10
-    // SportyBet-priced games) stop the tag only when that side is the pick.
-    var side = st.home ? "home" : "away";
-    if ((g.warn || []).some(function (w) { return !w.hot && (!w.pick || w.side === side); })) return null;
+    // The pick-side notes (a loss earlier today, under 10 SportyBet-priced
+    // games) only show: on 14 days of graded picks the ones they would have
+    // dropped won as often as the rest (Strong: 81% vs 75%).
+    if ((g.warn || []).some(function (w) { return !w.hot && !w.pick; })) return null;
     // Women's games: Strong there won 4 of 7 — kept to Lean at most.
     if (g.women) return "lean";
     // The pick's opponent has beaten the price 2+ times today: never Strong.
