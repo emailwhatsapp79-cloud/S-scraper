@@ -12,9 +12,10 @@
 //   - a hot underdog: the pick's opponent has already beaten the price as the
 //     underdog 2+ times today (Lagos day), like Tymchenko on 11 Oct — capped at
 //     Good, never Strong.
-// And two pick-side checks (formFlags) that stop the tag when the picked
-// player has fewer than 10 SportyBet-priced games in 45 days, or already lost
-// today as the favourite or by 0-3.
+// And two pick-side notes (formFlags), shown on the card but not stopping the
+// tag: the picked player has fewer than 10 SportyBet-priced games in 45 days,
+// or already lost today as the favourite or by 0-3. Backtested on 14 days of
+// graded picks, the games they flag won as often as the rest.
 import { sql } from "./_db.js";
 import { nameKey } from "./_tt.js";
 
