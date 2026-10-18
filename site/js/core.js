@@ -1720,6 +1720,12 @@
         if (dir) live.appendChild(el("span", "lo-a " + dir, dir === "dn" ? "\u2193" : "\u2191"));
         left.appendChild(live);
       }
+      // Struggle meter: how comfortably a live TT / tennis pick is going.
+      if (st === "live" && l.struggle && l.struggle.level) {
+        var icon = { comfortable: "\ud83d\udcaa", tight: "\ud83d\ude2c", struggling: "\ud83d\udea8" }[l.struggle.level] || "";
+        var word = l.struggle.level.charAt(0).toUpperCase() + l.struggle.level.slice(1);
+        left.appendChild(el("div", "leg-struggle " + l.struggle.level, icon + " " + word + (l.struggle.text ? " \u2014 " + l.struggle.text : "")));
+      }
     }
     row.appendChild(left);
 

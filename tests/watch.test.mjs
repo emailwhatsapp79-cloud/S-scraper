@@ -148,3 +148,25 @@ test("football pings half-time and each 10-minute mark with the score against th
   assert.equal(clockMoment({ ...leg, played: "90:00" }, "s-g"), null);
   assert.equal(clockMoment({ ...leg, sport: "tt" }, "s-g"), null);
 });
+
+test("struggleOf reads how a live pick is going", async () => {
+  const { struggleOf } = await import("../site/api/_watch.js");
+  // Kuzyshyn (home) 2-0 up but set 2 went 20-18.
+  const kuz = struggleOf({ sport: "tt", selection: "1", gameScore: "11:8 20:18 0:0" });
+  assert.equal(kuz.level, "tight");
+  assert.match(kuz.text, /only edged set 2 20-18/);
+  // Zhurba cruising.
+  assert.equal(struggleOf({ sport: "tt", selection: "1", gameScore: "11:8 11:7 5:2" }).level, "comfortable");
+  // Seeman (away) 0-2 down: struggling.
+  const see = struggleOf({ sport: "tt", selection: "2", gameScore: "12:10 11:9 0:0" });
+  assert.equal(see.level, "struggling");
+  // Level 1-1 having just lost set 2: struggling; well behind in the current set too.
+  assert.equal(struggleOf({ sport: "tt", selection: "1", gameScore: "11:5 6:11 2:2" }).level, "struggling");
+  assert.equal(struggleOf({ sport: "tt", selection: "1", gameScore: "11:5 11:6 3:8" }).level, "struggling");
+  // Tennis: a 7-5 set is tight; a break down in the current set is struggling.
+  assert.equal(struggleOf({ sport: "tn", selection: "2", gameScore: "5:7 2:2" }).level, "tight");
+  assert.equal(struggleOf({ sport: "tn", selection: "1", gameScore: "6:2 1:3" }).level, "struggling");
+  // Not started, football, or no pick side: nothing to show.
+  assert.equal(struggleOf({ sport: "tt", selection: "1", gameScore: "0:0" }), null);
+  assert.equal(struggleOf({ sport: "fc", selection: "1", gameScore: "1:0" }), null);
+});

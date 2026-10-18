@@ -294,3 +294,40 @@ export function watchLine(leg) {
   ].join("|");
   return { id, key, live: !!live, text: bits.join(" · ") };
 }
+
+// How comfortably a live TT or tennis pick is going, from the per-set scores
+// ("11:8 20:18 4:7", home first, current set last). Comfortable: every set
+// won by 3+ and not behind in the current one. Tight: a set won by 2 or less
+// (or at deuce), a set dropped, level in sets, or a little behind now.
+// Struggling: behind in sets, just lost the last set when level, or well
+// behind in the current set (4+ points in TT, 2+ games in tennis).
+export function struggleOf(leg) {
+  if (!leg || (leg.selection !== "1" && leg.selection !== "2")) return null;
+  const tt = leg.sport === "tt", tn = leg.sport === "tn";
+  if (!tt && !tn) return null;
+  const sets = String(leg.gameScore || "").trim().split(/\s+/)
+    .map((s) => s.match(/^(\d+):(\d+)$/)).filter(Boolean).map((m) => [Number(m[1]), Number(m[2])]);
+  if (!sets.length) return null;
+  const done = (a, b) => tt
+    ? Math.max(a, b) >= 11 && Math.abs(a - b) >= 2
+    : (Math.max(a, b) >= 6 && Math.abs(a - b) >= 2) || Math.max(a, b) === 7;
+  let won = 0, lost = 0, lastLost = false, close = false, cur = null;
+  const notes = [];
+  sets.forEach(([h, a], i) => {
+    const me = leg.selection === "1" ? h : a, op = leg.selection === "1" ? a : h;
+    if (done(h, a)) {
+      if (me > op) { won++; lastLost = false; if (me - op <= 2) { close = true; notes.push(`only edged set ${i + 1} ${me}-${op}`); } }
+      else { lost++; lastLost = true; notes.push(`lost set ${i + 1} ${me}-${op}`); }
+    } else if (i === sets.length - 1 && me + op > 0) cur = { me, op, n: i + 1 };
+  });
+  if (!won && !lost && !cur) return null;
+  const big = tt ? 4 : 2, small = tt ? 2 : 1;
+  const behindBig = cur && cur.op - cur.me >= big, behindSmall = cur && cur.op - cur.me >= small;
+  if (behindSmall) notes.push(`behind ${cur.me}-${cur.op} in set ${cur.n}`);
+  let level = "comfortable";
+  if (lost > won || (lastLost && lost === won) || behindBig) level = "struggling";
+  else if (close || lost > 0 || (won === lost && won > 0) || behindSmall) level = "tight";
+  const text = notes.length ? notes.slice(-2).reverse().join(" · ")
+    : `${won}-${lost} in sets` + (cur ? `, ${cur.me}-${cur.op} in set ${cur.n}` : "");
+  return { level, text };
+}
