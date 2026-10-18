@@ -5,7 +5,7 @@ import { shareSelections } from "./_share.js";
 import { notifyBooked, notifySets, notifyFlags, notifyMoments } from "./_push.js";
 import { placeOrder, loadGifts, priceLeg } from "./_fc.js";
 import { readSession, writeSession } from "./_fc_session.js";
-import { legIsHot, watchLine } from "./_watch.js";
+import { legIsHot, watchLine, struggleOf } from "./_watch.js";
 
 let schemaReady = false;
 
@@ -187,6 +187,8 @@ function shapeLeg(l) {
     status: l.match_status || "",
     played: l.played || "",
     setScore: l.set_score || "",
+    gameScore: l.game_score || "",
+    struggle: l.won == null ? struggleOf({ sport: l.sport, selection: l.selection, gameScore: l.game_score }) : null,
     ht: l.ht_home == null ? null : { home: l.ht_home, away: l.ht_away },
     ft: l.ft_home == null ? null : { home: l.ft_home, away: l.ft_away },
     won: l.won == null ? null : l.won === "yes",
