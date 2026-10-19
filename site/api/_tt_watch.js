@@ -27,6 +27,8 @@ const WATCH = [
   "Oanta, Mihail", "Berezynskyi, Serhii",
   // 17 Oct, slip PHVZHG: Seeman (Lean) 0-2 down to Cmil.
   "Seeman, Jan",
+  // 19 Oct, slip WEVZ3H: Fastov lost 0-3 to Aldayev as favourite (5 of 11 as favourite).
+  "Fastov, Andrii",
 ];
 const WATCH_KEYS = new Set(WATCH.map(nameKey));
 
