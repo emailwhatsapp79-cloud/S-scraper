@@ -32,8 +32,18 @@ jobs:
         id: busy
         env:
           GH_TOKEN: ${{ github.token }}
+        # The run that starts us is still finishing its last step when we begin,
+        # so a single check saw it as "another loop" and exited, and the chain
+        # died (19 Oct, 16:17 UTC: no pings for hours). Re-check for up to 5
+        # minutes before giving up, so a predecessor that is only wrapping up
+        # never stops us.
         run: |
-          n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow eb-bank.yml --status in_progress --json databaseId --jq "[.[] | select(.databaseId != ${{ github.run_id }})] | length")
+          n=1
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow eb-bank.yml --status in_progress --json databaseId --jq "[.[] | select(.databaseId != ${{ github.run_id }})] | length")
+            [ "$n" = "0" ] && break
+            sleep 30
+          done
           echo "others=$n" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         if: steps.busy.outputs.others == '0'
