@@ -29,6 +29,8 @@ const WATCH = [
   "Seeman, Jan",
   // 19 Oct, slip WEVZ3H: Fastov lost 0-3 to Aldayev as favourite (5 of 11 as favourite).
   "Fastov, Andrii",
+  // 20 Oct, slip RB3GJ0: Kovshun lost 0-2, won 2-2, then trailed the decider v Kolesnykov.
+  "Kovshun, Yaroslav",
 ];
 const WATCH_KEYS = new Set(WATCH.map(nameKey));
 
