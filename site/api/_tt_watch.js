@@ -31,6 +31,8 @@ const WATCH = [
   "Fastov, Andrii",
   // 20 Oct, slip RB3GJ0: Kovshun lost 0-2, won 2-2, then trailed the decider v Kolesnykov.
   "Kovshun, Yaroslav",
+  // 24 Oct, slip WTCVHB: Rak (Lean) led sets early then lost them 8-11, 7-11 v Haiseniuk.
+  "Rak, Serhii",
 ];
 const WATCH_KEYS = new Set(WATCH.map(nameKey));
 
