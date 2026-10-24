@@ -33,6 +33,8 @@ const WATCH = [
   "Kovshun, Yaroslav",
   // 24 Oct, slip WTCVHB: Rak (Lean) led sets early then lost them 8-11, 7-11 v Haiseniuk.
   "Rak, Serhii",
+  // 24 Oct, slip MPJMW4: Boltenkov led 2-1 in sets, then lost 9-11, 5-11 to Sydorenko V.
+  "Boltenkov, Denys",
 ];
 const WATCH_KEYS = new Set(WATCH.map(nameKey));
 
