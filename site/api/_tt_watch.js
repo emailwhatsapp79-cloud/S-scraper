@@ -35,6 +35,8 @@ const WATCH = [
   "Rak, Serhii",
   // 24 Oct, slip MPJMW4: Boltenkov led 2-1 in sets, then lost 9-11, 5-11 to Sydorenko V.
   "Boltenkov, Denys",
+  // 25 Oct, slip R0536P: Gomilko led Khamurda 2-1 in sets, then lost 7-11, 8-11.
+  "Gomilko, Oleksandr",
 ];
 const WATCH_KEYS = new Set(WATCH.map(nameKey));
 
