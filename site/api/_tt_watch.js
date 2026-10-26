@@ -37,6 +37,8 @@ const WATCH = [
   "Boltenkov, Denys",
   // 25 Oct, slip R0536P: Gomilko led Khamurda 2-1 in sets, then lost 7-11, 8-11.
   "Gomilko, Oleksandr",
+  // 26 Oct, slip HFCHDH: Chepurnyi led Kovalchuk 2-1 in sets, then lost 7-11, 12-14.
+  "Chepurnyi, Artem",
 ];
 const WATCH_KEYS = new Set(WATCH.map(nameKey));
 
