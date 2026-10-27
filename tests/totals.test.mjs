@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 // _slips.js opens a Neon client on import; a placeholder URL is enough, no query runs.
 process.env.DATABASE_URL ||= "postgres://u:p@localhost/db";
-const { dcHit } = await import("../site/api/_slips.js");
+const { dcHit, decidedTotal } = await import("../site/api/_slips.js");
 
 test("match totals", () => {
   assert.equal(dcHit("O205.5", 110, 100), true);
@@ -27,4 +27,14 @@ test("existing selections unchanged", () => {
   assert.equal(dcHit("1", 2, 1), true);
   assert.equal(dcHit("X2", 1, 1), true);
   assert.equal(dcHit("2:1", 2, 1), true);
+});
+
+test("totals settle early once the live score passes the line", () => {
+  assert.equal(decidedTotal("O1.5", 1, 2), true);   // 3 goals: over 1.5 already in
+  assert.equal(decidedTotal("O2.5", 1, 1), null);   // still open
+  assert.equal(decidedTotal("U3.5", 2, 2), false);  // 4 goals: under 3.5 already gone
+  assert.equal(decidedTotal("AU2.5", 0, 3), false);
+  assert.equal(decidedTotal("HO0.5", 1, 0), true);
+  assert.equal(decidedTotal("U241.5", 100, 98), null);
+  assert.equal(decidedTotal("1", 2, 0), null);       // not a totals pick
 });
