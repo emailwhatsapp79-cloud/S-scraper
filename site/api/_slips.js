@@ -118,6 +118,18 @@ export function dcHit(selection, home, away) {
   return null;
 }
 
+/** A totals leg whose result can't change any more, from the live score:
+ *  goals and points only go up, so an over already passed has won and an
+ *  under already passed has lost. Anything still open returns null. */
+export function decidedTotal(selection, home, away) {
+  if (home == null || away == null) return null;
+  const ou = String(selection || "").match(/^(H|A)?(O|U)(\d+(?:\.\d+)?)$/);
+  if (!ou) return null;
+  const v = ou[1] === "H" ? home : ou[1] === "A" ? away : home + away;
+  if (v <= Number(ou[3])) return null;
+  return ou[2] === "O";
+}
+
 function round2(n) {
   return Math.round(Number(n) * 100) / 100;
 }
@@ -543,7 +555,8 @@ export async function refreshSlips() {
   for (const leg of legs) {
     const snap = liveMap.get(leg.event_id);
     if (!snap) continue;
-    const won = snap.ended ? dcHit(leg.selection, snap.ftHome, snap.ftAway) : null;
+    const won = snap.ended ? dcHit(leg.selection, snap.ftHome, snap.ftAway)
+      : decidedTotal(leg.selection, snap.ftHome, snap.ftAway);
     const wonText = won == null ? null : (won ? "yes" : "no");
     // Only record a genuine in-play price — never the prematch echo of a game
     // that hasn't kicked off, so "Live odds" means what it says.
