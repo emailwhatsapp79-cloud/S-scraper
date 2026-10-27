@@ -118,6 +118,22 @@ export function dcHit(selection, home, away) {
   return null;
 }
 
+/** In-play price of the exact market / line / outcome a leg was booked on
+ *  (in-play copy only), or null while that line is closed or suspended. */
+export function marketPrice(ev, leg) {
+  if (!ev) return null;
+  const spec = String(leg.specifier || "");
+  // Only the in-play copy (product 1): the frozen pre-match copy would just
+  // repeat the booked price while the live line is suspended (half time).
+  const ms = (ev.markets || []).filter((m) => String(m.id) === String(leg.market_id) && String(m.specifier || "") === spec && Number(m.product) === 1);
+  for (const m of ms) {
+    const o = (m.outcomes || []).find((x) => String(x.id) === String(leg.outcome_id));
+    const p = o && o.isActive !== 0 ? parseFloat(o.odds) : NaN;
+    if (isFinite(p) && p > 1) return p;
+  }
+  return null;
+}
+
 /** A totals leg whose result can't change any more, from the live score:
  *  goals and points only go up, so an over already passed has won and an
  *  under already passed has lost. Anything still open returns null. */
@@ -540,11 +556,17 @@ export async function refreshSlips() {
     const fc = legs.some((l) => l.event_id === id && l.sport === "fc");
     const tn = legs.some((l) => l.event_id === id && (l.sport === "tn" || l.sport === "tt"));
     const eb = legs.some((l) => l.event_id === id && l.sport === "eb");
-    return fetchEvent(id, eb ? { marketId: "219" } : tn ? { marketId: "186,199" } : {}, fc ? FOOTBALL_BASE : undefined);
+    // Legs booked on another market (totals, team totals) need that market in
+    // the snapshot too, or they never get a live price.
+    const extra = [...new Set(legs.filter((l) => l.event_id === id && l.market_id).map((l) => String(l.market_id)))];
+    const base = eb ? "219" : tn ? "186,199" : "1,10,60";
+    const marketId = [...new Set([...base.split(","), ...extra])].join(",");
+    return fetchEvent(id, { marketId }, fc ? FOOTBALL_BASE : undefined);
   }));
+  const rawById = new Map();
   for (const ev of snaps) {
     const snap = scoreOf(ev);
-    if (snap && snap.eventId) liveMap.set(snap.eventId, snap);
+    if (snap && snap.eventId) { liveMap.set(snap.eventId, snap); rawById.set(snap.eventId, ev); }
   }
 
   let updated = 0;
@@ -560,8 +582,9 @@ export async function refreshSlips() {
     const wonText = won == null ? null : (won ? "yes" : "no");
     // Only record a genuine in-play price — never the prematch echo of a game
     // that hasn't kicked off, so "Live odds" means what it says.
-    const livePrice = snap.live && snap.prices && isFinite(snap.prices[leg.selection])
-      ? snap.prices[leg.selection]
+    const livePrice = !snap.live ? null
+      : leg.market_id && leg.outcome_id ? marketPrice(rawById.get(leg.event_id), leg)
+      : snap.prices && isFinite(snap.prices[leg.selection]) ? snap.prices[leg.selection]
       : null;
     await sql`
       UPDATE slip_legs SET
