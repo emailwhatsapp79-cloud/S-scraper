@@ -108,6 +108,13 @@ export function dcHit(selection, home, away) {
   if (selection === "1X") return home >= away;
   if (selection === "X2") return away >= home;
   if (selection === "12") return home !== away;
+  // Totals: "O205.5" / "U241.5" on the match, "HU4.5" / "AO0.5" on one team's score.
+  const ou = String(selection || "").match(/^(H|A)?(O|U)(\d+(?:\.\d+)?)$/);
+  if (ou) {
+    const v = ou[1] === "H" ? home : ou[1] === "A" ? away : home + away, line = Number(ou[3]);
+    if (v === line) return null; // whole-number line landing exactly: void
+    return ou[2] === "O" ? v > line : v < line;
+  }
   return null;
 }
 
