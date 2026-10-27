@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 // _slips.js opens a Neon client on import; a placeholder URL is enough, no query runs.
 process.env.DATABASE_URL ||= "postgres://u:p@localhost/db";
-const { dcHit, decidedTotal } = await import("../site/api/_slips.js");
+const { dcHit, decidedTotal, marketPrice } = await import("../site/api/_slips.js");
 
 test("match totals", () => {
   assert.equal(dcHit("O205.5", 110, 100), true);
@@ -37,4 +37,16 @@ test("totals settle early once the live score passes the line", () => {
   assert.equal(decidedTotal("HO0.5", 1, 0), true);
   assert.equal(decidedTotal("U241.5", 100, 98), null);
   assert.equal(decidedTotal("1", 2, 0), null);       // not a totals pick
+});
+
+test("live price of the exact line booked", () => {
+  const ev = { markets: [
+    { id: "18", specifier: "total=2.5", product: 3, outcomes: [{ id: "12", odds: "1.80" }, { id: "13", odds: "2.00" }] },
+    { id: "18", specifier: "total=2.5", product: 1, outcomes: [{ id: "12", odds: "1.40", isActive: 1 }, { id: "13", odds: "2.90", isActive: 1 }] },
+    { id: "18", specifier: "total=3.5", product: 1, outcomes: [{ id: "13", odds: "1.20", isActive: 1 }] },
+  ] };
+  assert.equal(marketPrice(ev, { market_id: "18", specifier: "total=2.5", outcome_id: "13" }), 2.9);
+  assert.equal(marketPrice(ev, { market_id: "18", specifier: "total=3.5", outcome_id: "13" }), 1.2);
+  assert.equal(marketPrice(ev, { market_id: "18", specifier: "total=4.5", outcome_id: "13" }), null);
+  assert.equal(marketPrice(null, { market_id: "18" }), null);
 });
