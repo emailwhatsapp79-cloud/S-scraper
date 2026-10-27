@@ -1641,9 +1641,12 @@
 
   function matchState(l) {
     if (isHeld(l) && l.won !== true && l.won !== false) return "held";
-    if (l.won === true || l.won === false || /^(end|finish|retir|walkover|abandon|closed)/i.test(l.status || "")) return "ended";
+    if (/^(end|finish|retir|walkover|abandon|closed)/i.test(l.status || "")) return "ended";
+    // A totals leg can be settled mid-game (over already passed): it keeps
+    // showing the live score and clock until the match itself ends.
     if (isTT(l) && /^(set\s*\d|Playing|LIVE)/i.test(l.status || "")) return "live";
-    if (!isTT(l) && /^(H1|H2|HT|1H|2H|LIVE)/i.test(l.status || "")) return "live";
+    if (!isTT(l) && /^(H1|H2|HT|1H|2H|LIVE|Q[1-4]|OT|Overtime|Pause|Halftime)/i.test(l.status || "")) return "live";
+    if (l.won === true || l.won === false) return "ended";
     if (l.kickoff && Number(l.kickoff) <= Date.now() - 15000) return "live";
     return "wait";
   }
@@ -1755,8 +1758,8 @@
     row.appendChild(mid);
 
     var mark;
-    if (l.won === true) mark = el("div", "yes", "Yes");
-    else if (l.won === false) mark = el("div", "no", "No");
+    if (l.won === true) mark = el("div", "yes", st === "live" ? "Yes \u00b7 LIVE" : "Yes");
+    else if (l.won === false) mark = el("div", "no", st === "live" ? "No \u00b7 LIVE" : "No");
     else if (st === "held") mark = el("div", "held-pill", "Held");
     else if (st === "live") mark = el("div", "live-pill", "LIVE");
     else mark = el("div", "wait-pill", "Wait");
