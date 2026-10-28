@@ -108,6 +108,9 @@ export function dcHit(selection, home, away) {
   if (selection === "1X") return home >= away;
   if (selection === "X2") return away >= home;
   if (selection === "12") return home !== away;
+  // Draw no bet ("D1" / "D2"): a draw refunds the leg, so it doesn't sink the slip.
+  if (selection === "D1") return home >= away;
+  if (selection === "D2") return away >= home;
   // Totals: "O205.5" / "U241.5" on the match, "HU4.5" / "AO0.5" on one team's score.
   const ou = String(selection || "").match(/^(H|A)?(O|U)(\d+(?:\.\d+)?)$/);
   if (ou) {
@@ -130,6 +133,30 @@ function isFootballLeg(leg) {
   const sp = String(leg.sport || "fb");
   if (sp !== "fb" && sp !== "fc") return false;
   return !/setka|elite series|liga pro|tt cup|challenger series|table tennis/i.test(String(leg.league || ""));
+}
+
+/** First-half totals ("1U2.5", "1HO0.5"): final once the second half has a
+ *  score line or the match is over; during the first half an over already
+ *  passed has won and an under already passed has lost. */
+export function firstHalfResult(base, snap) {
+  const ps = String(snap.gameScore || "").trim().split(/\s+/).map((x) => x.match(/^(\d+):(\d+)$/)).filter(Boolean);
+  if (ps.length >= 2 || (snap.ended && ps.length)) return dcHit(base, Number(ps[0][1]), Number(ps[0][2]));
+  if (ps.length === 1 && snap.live) return decidedTotal(base, Number(ps[0][1]), Number(ps[0][2]));
+  return null;
+}
+
+export function dcHitCorners(base, ck) {
+  return ck ? dcHit(base, ck.home, ck.away) : null;
+}
+
+async function cornersOf(eventId) {
+  const id = String(eventId || "").replace("sr:match:", "");
+  if (!/^\d+$/.test(id)) return null;
+  try {
+    const r = await fetch(`https://lsc.fn.sportradar.com/sportybet/en/Etc:UTC/gismo/match_details/${id}`, { headers: { "user-agent": "Mozilla/5.0 Chrome/122" } });
+    const v = (await r.json())?.doc?.[0]?.data?.values?.["124"]?.value;
+    return v && Number.isFinite(+v.home) && Number.isFinite(+v.away) ? { home: +v.home, away: +v.away } : null;
+  } catch { return null; }
 }
 
 /** In-play price of the exact market / line / outcome a leg was booked on
@@ -594,9 +621,18 @@ export async function refreshSlips() {
     // Football markets settle on 90 minutes: past regular time (extra time,
     // penalties) grade on the two halves only, and that result is final.
     const reg = isFootballLeg(leg) ? regularTime(snap.gameScore) : null;
-    const won = reg ? dcHit(leg.selection, reg.home, reg.away)
-      : snap.ended ? dcHit(leg.selection, snap.ftHome, snap.ftAway)
-      : decidedTotal(leg.selection, snap.ftHome, snap.ftAway);
+    const sel = String(leg.selection || "");
+    let won;
+    if (/^1/.test(sel)) won = firstHalfResult(sel.slice(1), snap);
+    else if (/^C/.test(sel)) {
+      // Corners come from Sportradar's match stats once the match is over.
+      won = leg.won === "yes" ? true : leg.won === "no" ? false
+        : (snap.ended || reg) ? dcHitCorners(sel.slice(1), await cornersOf(leg.event_id)) : null;
+    } else {
+      won = reg ? dcHit(sel, reg.home, reg.away)
+        : snap.ended ? dcHit(sel, snap.ftHome, snap.ftAway)
+        : decidedTotal(sel, snap.ftHome, snap.ftAway);
+    }
     const wonText = won == null ? null : (won ? "yes" : "no");
     // Only record a genuine in-play price — never the prematch echo of a game
     // that hasn't kicked off, so "Live odds" means what it says.
