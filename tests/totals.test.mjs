@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 // _slips.js opens a Neon client on import; a placeholder URL is enough, no query runs.
 process.env.DATABASE_URL ||= "postgres://u:p@localhost/db";
-const { dcHit, decidedTotal, marketPrice, regularTime } = await import("../site/api/_slips.js");
+const { dcHit, decidedTotal, marketPrice, regularTime, firstHalfResult, dcHitCorners } = await import("../site/api/_slips.js");
 
 test("match totals", () => {
   assert.equal(dcHit("O205.5", 110, 100), true);
@@ -60,4 +60,24 @@ test("football past 90 minutes grades on regular time", () => {
   assert.deepEqual(regularTime("1:0 0:1 5:3"), { home: 1, away: 1 });
   assert.equal(regularTime("1:0 0:1"), null);
   assert.equal(regularTime(""), null);
+});
+
+test("first-half totals", () => {
+  assert.equal(firstHalfResult("U2.5", { gameScore: "1:0 2:1", ended: false, live: true }), true);  // 1-0 at the break
+  assert.equal(firstHalfResult("O0.5", { gameScore: "0:0 1:0", ended: true }), false);
+  assert.equal(firstHalfResult("O1.5", { gameScore: "1:1", live: true }), true);   // passed during the half
+  assert.equal(firstHalfResult("U1.5", { gameScore: "1:0", live: true }), null);   // still open
+  assert.equal(firstHalfResult("HU1.5", { gameScore: "2:0 0:0", ended: true }), false);
+});
+
+test("corners", () => {
+  assert.equal(dcHitCorners("O8.5", { home: 6, away: 4 }), true);
+  assert.equal(dcHitCorners("AO2.5", { home: 6, away: 2 }), false);
+  assert.equal(dcHitCorners("O8.5", null), null);
+});
+
+test("draw no bet", () => {
+  assert.equal(dcHit("D1", 2, 1), true);
+  assert.equal(dcHit("D1", 1, 1), true);   // refunded
+  assert.equal(dcHit("D2", 2, 1), false);
 });
