@@ -118,6 +118,20 @@ export function dcHit(selection, home, away) {
   return null;
 }
 
+/** Score after the two halves once a football match has gone past them
+ *  (a third period = extra time or penalties); null before that. */
+export function regularTime(gameScore) {
+  const ps = String(gameScore || "").trim().split(/\s+/).map((x) => x.match(/^(\d+):(\d+)$/)).filter(Boolean);
+  if (ps.length < 3) return null;
+  return { home: Number(ps[0][1]) + Number(ps[1][1]), away: Number(ps[0][2]) + Number(ps[1][2]) };
+}
+
+function isFootballLeg(leg) {
+  const sp = String(leg.sport || "fb");
+  if (sp !== "fb" && sp !== "fc") return false;
+  return !/setka|elite series|liga pro|tt cup|challenger series|table tennis/i.test(String(leg.league || ""));
+}
+
 /** In-play price of the exact market / line / outcome a leg was booked on
  *  (in-play copy only), or null while that line is closed or suspended. */
 export function marketPrice(ev, leg) {
@@ -577,7 +591,11 @@ export async function refreshSlips() {
   for (const leg of legs) {
     const snap = liveMap.get(leg.event_id);
     if (!snap) continue;
-    const won = snap.ended ? dcHit(leg.selection, snap.ftHome, snap.ftAway)
+    // Football markets settle on 90 minutes: past regular time (extra time,
+    // penalties) grade on the two halves only, and that result is final.
+    const reg = isFootballLeg(leg) ? regularTime(snap.gameScore) : null;
+    const won = reg ? dcHit(leg.selection, reg.home, reg.away)
+      : snap.ended ? dcHit(leg.selection, snap.ftHome, snap.ftAway)
       : decidedTotal(leg.selection, snap.ftHome, snap.ftAway);
     const wonText = won == null ? null : (won ? "yes" : "no");
     // Only record a genuine in-play price — never the prematch echo of a game
