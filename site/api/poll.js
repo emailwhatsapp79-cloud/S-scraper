@@ -79,9 +79,9 @@ async function vfHeartbeat() {
 // choice and only reads public SportyBet data). Each call refreshes open
 // slips. While a booked game is on, or about to start, GitHub calls every 30
 // seconds so the phone hears "started", "winning" and "losing" quickly. Other
-// times it calls once a minute. Calls closer than 20s apart answer "skipped"
+// times it calls every 3 minutes. Calls closer than 20s apart answer "skipped"
 // and still say whether a game is hot, so the fast loop does not drop back.
-// The heavier eBasketball and table tennis banking runs at most every 9 minutes.
+// The heavier eBasketball and table tennis banking runs at most once an hour.
 async function ebTick(res) {
   let out = { ok: true };
   try {
@@ -107,8 +107,9 @@ async function ebTick(res) {
         const { readOpenBets } = await import("./_sb_bets.js");
         out.bets = await readOpenBets();
       } catch (e) { out.bets = { error: String(e?.message || e).slice(0, 120) }; }
-      // Card banking and training every 30 minutes (was 9): data budget on Neon's free plan.
-      if (now - (at.eb || 0) >= 30 * 60 * 1000) {
+      // Card banking and training every 60 minutes (was 30, before that 9): the
+      // data budget on Neon's free plan ran out on 28 Oct.
+      if (now - (at.eb || 0) >= 60 * 60 * 1000) {
         await touchHealth("eb", { started: true });
         Object.assign(out, await refreshEB());
         // Keep the table tennis card current with the app closed: games

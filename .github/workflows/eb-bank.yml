@@ -1,7 +1,7 @@
 # Every 10 minutes: also pass scores24's newest finished TT matches to the app.
 # Booked games: while one is on (or starts within 3 minutes) check it every
 # 30 seconds and ping the phone — started, winning, losing. Otherwise check
-# open slips once a minute. Every ~10 minutes (the route decides): save the
+# open slips every 3 minutes. Every ~10 minutes (the route decides): save the
 # eBasketball card and table tennis results. Prices only show about an hour
 # before tip-off, so without this most games are never priced. The route
 # needs no key (it only reads SportyBet's public odds) and skips if it ran in
@@ -47,7 +47,7 @@ jobs:
           echo "others=$n" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         if: steps.busy.outputs.others == '0'
-      - name: Watch live booked games every 30s, otherwise check once a minute, for ~5.5 hours
+      - name: Watch live booked games every 30s, otherwise check every 3 minutes, for ~5.5 hours
         if: steps.busy.outputs.others == '0'
         run: |
           end=$(( $(date +%s) + 330*60 ))
@@ -67,10 +67,12 @@ jobs:
             fi
             resp=$(curl -sS --max-time 55 "https://vfootball-screener.vercel.app/api/poll?eb=1" || true)
             echo "$resp"
+            # Idle ticks every 3 minutes (was 1): Neon's free plan ran out of data
+            # transfer on 28 Oct. A live or about-to-start booked game still gets 30s.
             if printf '%s' "$resp" | grep -q '"hot":true'; then
               sleep 30
             else
-              sleep 60
+              sleep 180
             fi
           done
       - name: Start the next run

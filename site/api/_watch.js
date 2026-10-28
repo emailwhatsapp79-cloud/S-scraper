@@ -23,7 +23,8 @@ export function legIsHot(leg, now) {
   const k = Number(leg.kickoff);
   if (!isFinite(k) || k <= 0) return false;
   const t = Number(now);
-  return k - t <= 3 * 60 * 1000 && t - k <= 10 * 60 * 1000;
+  // 4 minutes ahead: idle checks run every 3, so the fast loop starts before kick-off.
+  return k - t <= 4 * 60 * 1000 && t - k <= 10 * 60 * 1000;
 }
 
 function parsePair(text) {
