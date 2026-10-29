@@ -33,6 +33,8 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 - **Rate every game of the day, all leagues, men's and women's** (women are only excluded in TT and tennis), then screen (29 Oct).
 - **Corners are off by default** (`NO_CORNERS=1`): the corner slip lost and the corner checks make a run take ~10 minutes instead of ~30 seconds (29 Oct).
 - Watch for **big mismatches outside cups too** (Al Nassr, Gangwon): skip unders on a team that can run up the score.
+- **Head-to-head too: drop a line the two teams broke in 2+ of their last 8 meetings** (29 Oct: Braga had scored 3+ against Famalicao in 2 of 8, and their under 2.5 was at risk). Football "never met" games are flagged, not dropped (lower-league cup ties often have no shared history). Built into `fb_lines.mjs`.
+- On a long slip, **weigh a cash-out when the last games kick off**: once the early legs are in, the late games hold all the risk (29 Oct: TBRDT2 was 8 of 10 with Braga and Hoek left).
 - Markets checked in football: total goals, team goals, first-half goals, corners (total and each team), double chance, both teams to score, draw no bet.
 - **One line per game.** At the same hit rate, take the line with **more room**, not the higher price (28 Oct).
 - **Cup ties with a big favourite (1.40 or shorter): no total-goals under and no under on the favourite's goals** (28 Oct; Leverkusen won 5-2 against Nuremberg, and their last 10 were against equals). Built into `fb_lines.mjs`.
@@ -42,4 +44,5 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 - First-half legs are fine on test slips. On a main slip, flag them: they can swing the slip on a coin flip (28 Oct, Bayern).
 
 ## Cash out
+- When reporting live slips: give the exact Lagos time, each match's minute and score, and each leg's odds now (29 Oct).
 - Cash-out is a judgement call; auto cash-out stays paused. Compare the offer with the slip's real value (remaining legs' chance × payout). Take it when it's clearly above that.
