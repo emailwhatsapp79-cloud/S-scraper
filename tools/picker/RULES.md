@@ -34,6 +34,8 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 - **One line per game.** At the same hit rate, take the line with **more room**, not the higher price (28 Oct).
 - **Cup ties with a big favourite (1.40 or shorter): no total-goals under and no under on the favourite's goals** (28 Oct; Leverkusen won 5-2 against Nuremberg, and their last 10 were against equals). Built into `fb_lines.mjs`.
 - Football settles on **90 minutes**; extra time and penalties don't count (Vantage grades it that way since PR #68).
+- **NBA overs are riskier than unders**: one cold shooting night sinks an over (29 Oct, Pistons v Hornets 186 against over 201.5, after 14/16 cleared it). Prefer unders; take an over only with a big cushion.
+- **NBA stays on ₦100 test slips** until teams have about 15+ regular-season games; early samples include preseason.
 - First-half legs are fine on test slips. On a main slip, flag them: they can swing the slip on a coin flip (28 Oct, Bayern).
 
 ## Cash out
