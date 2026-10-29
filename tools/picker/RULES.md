@@ -30,6 +30,9 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 
 ## Football (`fb_lines.mjs`) and NBA (`nba_lines.mjs`)
 - A line qualifies only if it **cleared 85%+** of both teams' recent games (last 10 each in football, this season's games in the NBA) and pays 1.20–1.39.
+- **Rate every game of the day, all leagues, men's and women's** (women are only excluded in TT and tennis), then screen (29 Oct).
+- **Corners are off by default** (`NO_CORNERS=1`): the corner slip lost and the corner checks make a run take ~10 minutes instead of ~30 seconds (29 Oct).
+- Watch for **big mismatches outside cups too** (Al Nassr, Gangwon): skip unders on a team that can run up the score.
 - Markets checked in football: total goals, team goals, first-half goals, corners (total and each team), double chance, both teams to score, draw no bet.
 - **One line per game.** At the same hit rate, take the line with **more room**, not the higher price (28 Oct).
 - **Cup ties with a big favourite (1.40 or shorter): no total-goals under and no under on the favourite's goals** (28 Oct; Leverkusen won 5-2 against Nuremberg, and their last 10 were against equals). Built into `fb_lines.mjs`.
