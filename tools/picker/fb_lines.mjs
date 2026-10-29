@@ -15,7 +15,7 @@ for (const eid of ids) {
     g[side] = await Promise.all(ms.map(async (m) => {
       const me = m.teams.home.uid === T[side].uid; const f = me ? m.result.home : m.result.away, a = me ? m.result.away : m.result.home;
       const p1 = m.periods?.p1; const hf = p1 ? (me ? p1.home : p1.away) : null, ha = p1 ? (me ? p1.away : p1.home) : null;
-      const det = await get(`match_details/${m._id}`); const ck = det?.values?.["124"]?.value;
+      const det = process.env.NO_CORNERS ? null : await get(`match_details/${m._id}`); const ck = det?.values?.["124"]?.value;
       const cf = ck ? (me ? ck.home : ck.away) : null, ca = ck ? (me ? ck.away : ck.home) : null;
       return { f, a, tot: f + a, hf, ha, cf, ca };
     }));
