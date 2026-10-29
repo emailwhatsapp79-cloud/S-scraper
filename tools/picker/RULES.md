@@ -39,6 +39,13 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 - **One line per game.** At the same hit rate, take the line with **more room**, not the higher price (28 Oct).
 - **Cup ties with a big favourite (1.40 or shorter): no total-goals under and no under on the favourite's goals** (28 Oct; Leverkusen won 5-2 against Nuremberg, and their last 10 were against equals). Built into `fb_lines.mjs`.
 - Football settles on **90 minutes**; extra time and penalties don't count (Vantage grades it that way since PR #68).
+- **Before a leg goes on a slip, a deep check** (29 Oct, owner: "rating something alone doesn't mean that just because it played under 16/17"):
+  - **Both sides of the line**: look at how often the other side landed and where the main line sits (`nba_both.mjs` prints every line, over and under). An alternative line far from the bookmaker's main line is not "free"; say how far it is.
+  - **Head-to-head in the NBA too**: drop a line the two teams broke in 2+ of their last 8 meetings (Pelicans v Kings under 248.5 cleared 16/17 this season but went over in 2 of 8 meetings, 256 and 273).
+  - **Missing players**: list injuries and suspensions (ESPN summary) and say which way they push the line.
+  - **Team strength**: league position and goal difference; a leader against a mid-table side is a "can run up the score" case for unders on the leader (Flamengo 1st v Vasco 13th).
+  - TT: `tt_deep.mjs` prints the last 10 meetings and both players' last 12 with set points. Drop a pick whose recent results alternate win/loss (Petrea, 29 Oct: about half of his last 12).
+  - Football: `fb_deep.mjs` prints both teams' last 20 with half-times and the last 8 meetings.
 - **NBA overs are riskier than unders**: one cold shooting night sinks an over (29 Oct, Pistons v Hornets 186 against over 201.5, after 14/16 cleared it). Prefer unders; take an over only with a big cushion.
 - **NBA stays on ₦100 test slips** until teams have about 15+ regular-season games; early samples include preseason.
 - First-half legs are fine on test slips. On a main slip, flag them: they can swing the slip on a coin flip (28 Oct, Bayern).
