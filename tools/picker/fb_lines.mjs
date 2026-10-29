@@ -21,6 +21,27 @@ for (const eid of ids) {
     }));
   }
   const all = [...g.home, ...g.away];
+  // Owner's rule (29 Oct, Braga v Famalicao): also check the two teams' meetings.
+  const vs = await get(`stats_team_versus/${T.home.uid}/${T.away.uid}`);
+  const h2h = (vs?.matches || []).filter((m) => m.result && m.result.home != null && !m.walkover).slice(0, 8).map((m) => {
+    const me = m.teams.home.uid === T.home.uid, p1 = m.periods?.p1;
+    return { h: me ? m.result.home : m.result.away, a: me ? m.result.away : m.result.home, hh: p1 ? (me ? p1.home : p1.away) : null, ha: p1 ? (me ? p1.away : p1.home) : null };
+  });
+  let cur = {};
+  const holds = (label, x) => {
+    const { tot, over, desc } = cur, cmp = (v) => v == null ? true : over ? v > tot : v < tot;
+    if (label.startsWith("Total goals")) return cmp(x.h + x.a);
+    if (label.startsWith("1st half goals")) return cmp(x.hh == null ? null : x.hh + x.ha);
+    if (label.startsWith(`1st half ${ev.homeTeamName} goals`)) return cmp(x.hh);
+    if (label.startsWith(`1st half ${ev.awayTeamName} goals`)) return cmp(x.ha);
+    if (label.startsWith(`${ev.homeTeamName} goals`)) return cmp(x.h);
+    if (label.startsWith(`${ev.awayTeamName} goals`)) return cmp(x.a);
+    if (label.startsWith(`Double chance: ${ev.homeTeamName}`)) return x.h >= x.a;
+    if (label.startsWith(`Double chance: ${ev.awayTeamName}`)) return x.a >= x.h;
+    if (label.startsWith("Both teams score")) return desc === "Yes" ? x.h > 0 && x.a > 0 : x.h === 0 || x.a === 0;
+    if (label.startsWith("Draw no bet")) return label.endsWith(ev.homeTeamName) ? x.h >= x.a : x.a >= x.h;
+    return true;
+  };
   // Owner's rule (28 Oct, Leverkusen 5-2 v Nuremberg): in a cup tie with a big
   // favourite (1X2 price 1.40 or shorter), no total-goals under and no under on
   // the favourite's own goals. Their last 10 are against equals, not minnows.
@@ -30,11 +51,17 @@ for (const eid of ids) {
   const bigFav = cup ? (pr("Home") <= 1.4 ? "home" : pr("Away") <= 1.4 ? "away" : null) : null;
   const blocked = (label) => bigFav && /Under/.test(label) && (/^Total goals|^1st half goals/.test(label) || label.startsWith((bigFav === "home" ? ev.homeTeamName : ev.awayTeamName) + " goals") || label.startsWith("1st half " + (bigFav === "home" ? ev.homeTeamName : ev.awayTeamName)));
   const res = [];
-  const test = (label, odds, hits, n) => { if (odds >= 1.2 && odds < 1.4 && n && !blocked(label)) res.push({ label, odds, hit: hits, n }); };
+  const test = (label, odds, hits, n) => {
+    if (!(odds >= 1.2 && odds < 1.4 && n) || blocked(label)) return;
+    const broke = h2h.filter((x) => !holds(label, x)).length;
+    if (broke >= 2) return; // broke it in 2+ of their last 8 meetings
+    res.push({ label, odds, hit: hits, n, h2h: h2h.length ? `${h2h.length - broke}/${h2h.length}` : "never met" });
+  };
   for (const m of ev.markets || []) {
     const tot = /total=([\d.]+)/.exec(m.specifier || "")?.[1];
     for (const o of m.outcomes || []) {
       const odds = +o.odds, over = /^Over/.test(o.desc);
+      cur = { tot: +tot, over, desc: o.desc };
       if (m.id === "18" && tot) test(`Total goals ${o.desc}`, odds, all.filter((x) => over ? x.tot > +tot : x.tot < +tot).length, all.length);
       if (m.id === "19" && tot) test(`${ev.homeTeamName} goals ${o.desc}`, odds, g.home.filter((x) => over ? x.f > +tot : x.f < +tot).length + g.away.filter((x) => over ? x.a > +tot : x.a < +tot).length, all.length);
       if (m.id === "20" && tot) test(`${ev.awayTeamName} goals ${o.desc}`, odds, g.away.filter((x) => over ? x.f > +tot : x.f < +tot).length + g.home.filter((x) => over ? x.a > +tot : x.a < +tot).length, all.length);
@@ -67,6 +94,6 @@ for (const eid of ids) {
   console.log(`  ${ev.awayTeamName} last ${g.away.length}: ${g.away.map((x) => x.f + "-" + x.a).join(" ")}`);
   console.log(`  corners for-against: ${ev.homeTeamName} ${g.home.map((x) => x.cf + "-" + x.ca).join(" ")} | ${ev.awayTeamName} ${g.away.map((x) => x.cf + "-" + x.ca).join(" ")}`);
   const good = res.filter((r) => r.n >= 12 && r.hit / r.n >= 0.85).slice(0, 6);
-  for (const r of good) console.log(`  ✓ ${r.label} @${r.odds} — ${r.hit}/${r.n}`);
+  for (const r of good) console.log(`  ✓ ${r.label} @${r.odds} — ${r.hit}/${r.n} | h2h ${r.h2h}`);
   if (!good.length) console.log("  (nothing at 1.20-1.39 cleared 85%+)");
 }
