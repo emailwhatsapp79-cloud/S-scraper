@@ -12,7 +12,7 @@ const niceLabel = (sel, sport, ev) => {
 const legs = [];
 for (const a of specs) {
   const [eid, mdesc, odesc, sel, sport] = a.split("|");
-  const ev = (await fetch(`https://www.sportybet.com/api/ng/factsCenter/event?eventId=${eid}&productId=3`, { headers: H }).then((r) => r.json())).data;
+  const ev = (await fetch(`https://www.sportybet.com/api/ng/factsCenter/event?eventId=${encodeURIComponent(eid)}&productId=3`, { headers: H }).then((r) => r.json())).data;
   let hit = null;
   for (const m of ev.markets || []) {
     const full = m.desc + (m.specifier && !m.desc.match(/[\d.]+$/) ? " [" + m.specifier + "]" : "");

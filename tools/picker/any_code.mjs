@@ -3,8 +3,9 @@ const { shareSelections } = await import(process.cwd() + "/api/_share.js");
 const H = { "User-Agent": "Mozilla/5.0 (Linux; Android 13) Chrome/120 Mobile Safari/537.36", Accept: "application/json", Origin: "https://www.sportybet.com", Referer: "https://www.sportybet.com/ng/m/" };
 const legs = [];
 for (const a of process.argv.slice(2)) {
-  const [eid, mdesc, odesc] = a.split("|");
-  const ev = (await fetch(`https://www.sportybet.com/api/ng/factsCenter/event?eventId=${eid}&productId=3`, { headers: H }).then((r) => r.json())).data;
+  // Some TT event ids contain "|", so the market and outcome are the last two parts.
+  const parts = a.split("|"), odesc = parts.pop(), mdesc = parts.pop(), eid = parts.join("|");
+  const ev = (await fetch(`https://www.sportybet.com/api/ng/factsCenter/event?eventId=${encodeURIComponent(eid)}&productId=3`, { headers: H }).then((r) => r.json())).data;
   let hit = null;
   for (const m of ev.markets || []) {
     const full = m.desc + (m.specifier && !m.desc.match(/[\d.]+$/) ? " [" + m.specifier + "]" : "");
