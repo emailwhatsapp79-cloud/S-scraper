@@ -64,8 +64,12 @@ for (const eid of ids) {
     (favName && (label.startsWith(favName + " goals") || label.startsWith("1st half " + favName + " goals"))) ||
     (bigFav && (/^Total goals|^1st half goals/.test(label) || label.startsWith((bigFav === "home" ? ev.homeTeamName : ev.awayTeamName) + " goals") || label.startsWith("1st half " + (bigFav === "home" ? ev.homeTeamName : ev.awayTeamName)))));
   const res = [];
-  const test = (label, odds, hits, n) => {
+  // Owner's rule (30 Oct, Colo-Colo 6-1): on one team's goals, each half of
+  // the sample must clear 80% on its own (the team's goals for, and the
+  // opponent's goals against), so a strong record can't hide a leaky defence.
+  const test = (label, odds, hits, n, parts) => {
     if (!(odds >= 1.2 && odds < 1.4 && n) || blocked(label)) return;
+    if (parts && parts.some(([h, k]) => k && h / k < 0.8)) return;
     const rec = h2h.filter((x) => x.recent), old = h2h.filter((x) => !x.recent);
     const bR = rec.filter((x) => !holds(label, x)).length, bO = old.filter((x) => !holds(label, x)).length;
     if (bR >= 2 || bR + bO >= 3) return;
@@ -80,16 +84,16 @@ for (const eid of ids) {
         const odds = +o.odds, over = /^Over/.test(o.desc);
         cur = { tot: +tot, over, desc: o.desc };
         if (m.id === "18" && tot) test(`Total goals ${o.desc}`, odds, all.filter((x) => over ? x.tot > +tot : x.tot < +tot).length, all.length);
-        if (m.id === "19" && tot) test(`${ev.homeTeamName} goals ${o.desc}`, odds, g.home.filter((x) => over ? x.f > +tot : x.f < +tot).length + g.away.filter((x) => over ? x.a > +tot : x.a < +tot).length, all.length);
-        if (m.id === "20" && tot) test(`${ev.awayTeamName} goals ${o.desc}`, odds, g.away.filter((x) => over ? x.f > +tot : x.f < +tot).length + g.home.filter((x) => over ? x.a > +tot : x.a < +tot).length, all.length);
+        if (m.id === "19" && tot) { const a = g.home.filter((x) => over ? x.f > +tot : x.f < +tot).length, b = g.away.filter((x) => over ? x.a > +tot : x.a < +tot).length; test(`${ev.homeTeamName} goals ${o.desc}`, odds, a + b, all.length, [[a, g.home.length], [b, g.away.length]]); }
+        if (m.id === "20" && tot) { const a = g.away.filter((x) => over ? x.f > +tot : x.f < +tot).length, b = g.home.filter((x) => over ? x.a > +tot : x.a < +tot).length; test(`${ev.awayTeamName} goals ${o.desc}`, odds, a + b, all.length, [[a, g.away.length], [b, g.home.length]]); }
         if (m.id === "10") {
           if (o.desc === "Home or Draw") test("Double chance: " + ev.homeTeamName + " or draw", odds, g.home.filter((x) => x.f >= x.a).length + g.away.filter((x) => x.f <= x.a).length, all.length);
           if (o.desc === "Draw or Away") test("Double chance: " + ev.awayTeamName + " or draw", odds, g.away.filter((x) => x.f >= x.a).length + g.home.filter((x) => x.f <= x.a).length, all.length);
         }
         const H1 = all.filter((x) => x.hf != null), CK = all.filter((x) => x.cf != null);
         if (m.id === "68" && tot) test(`1st half goals ${o.desc}`, odds, H1.filter((x) => over ? x.hf + x.ha > +tot : x.hf + x.ha < +tot).length, H1.length);
-        if (m.id === "69" && tot) test(`1st half ${ev.homeTeamName} goals ${o.desc}`, odds, g.home.filter((x) => x.hf != null && (over ? x.hf > +tot : x.hf < +tot)).length + g.away.filter((x) => x.ha != null && (over ? x.ha > +tot : x.ha < +tot)).length, H1.length);
-        if (m.id === "70" && tot) test(`1st half ${ev.awayTeamName} goals ${o.desc}`, odds, g.away.filter((x) => x.hf != null && (over ? x.hf > +tot : x.hf < +tot)).length + g.home.filter((x) => x.ha != null && (over ? x.ha > +tot : x.ha < +tot)).length, H1.length);
+        if (m.id === "69" && tot) { const a = g.home.filter((x) => x.hf != null && (over ? x.hf > +tot : x.hf < +tot)).length, b = g.away.filter((x) => x.ha != null && (over ? x.ha > +tot : x.ha < +tot)).length; test(`1st half ${ev.homeTeamName} goals ${o.desc}`, odds, a + b, H1.length, [[a, g.home.filter((x) => x.hf != null).length], [b, g.away.filter((x) => x.ha != null).length]]); }
+        if (m.id === "70" && tot) { const a = g.away.filter((x) => x.hf != null && (over ? x.hf > +tot : x.hf < +tot)).length, b = g.home.filter((x) => x.ha != null && (over ? x.ha > +tot : x.ha < +tot)).length; test(`1st half ${ev.awayTeamName} goals ${o.desc}`, odds, a + b, H1.length, [[a, g.away.filter((x) => x.hf != null).length], [b, g.home.filter((x) => x.ha != null).length]]); }
         if (m.id === "166" && tot) test(`Corners ${o.desc}`, odds, CK.filter((x) => over ? x.cf + x.ca > +tot : x.cf + x.ca < +tot).length, CK.length);
         if (m.id === "900300" && tot) test(`${ev.homeTeamName} corners ${o.desc}`, odds, g.home.filter((x) => x.cf != null && (over ? x.cf > +tot : x.cf < +tot)).length + g.away.filter((x) => x.ca != null && (over ? x.ca > +tot : x.ca < +tot)).length, CK.length);
         if (m.id === "900301" && tot) test(`${ev.awayTeamName} corners ${o.desc}`, odds, g.away.filter((x) => x.cf != null && (over ? x.cf > +tot : x.cf < +tot)).length + g.home.filter((x) => x.ca != null && (over ? x.ca > +tot : x.ca < +tot)).length, CK.length);
