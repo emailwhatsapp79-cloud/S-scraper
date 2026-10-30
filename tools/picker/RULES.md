@@ -11,7 +11,7 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 - State clearly at the top when a code has tennis legs ("⚠️ includes N tennis legs").
 - Give the realistic chance of the whole slip winning.
 - Keep main slips to about 4–6 legs; long slips are for ₦100 tests only.
-- **Several codes on one day must not all share the same legs** (30 Oct: Esenler's goals under 2.5 sat on all four codes; Esenler scored 3 in 12 minutes and every ticket died at once). Build the backup codes from different games so one bad leg can't sink everything.
+- **A leg may sit on every code only if it is a banker**: it passes every check with no warning at all (no favourite under, no thin head-to-head, no "shaky before", no price drift). Everything else varies between codes, so one doubtful leg can't sink every ticket (30 Oct, owner: shared legs are what make the odds; the mistake was sharing a doubtful one. Esenler, an under on a 1.87 favourite, sat on all four codes and sank them all).
 
 ## Table tennis (`best_now.mjs`, `tt_nodb.mjs` while the database is down)
 - Tags: Strong ≥75% (30+ games each), Good ≥70%, Lean ≥65%. Prefer Strong, then Good, Leans only if needed.
@@ -42,6 +42,8 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 - **One line per game.** At the same hit rate, take the line with **more room**, not the higher price (28 Oct).
 - **No under on the favourite's own goals when the favourite is priced under 2.00**, in any game, league or cup (30 Oct). Esenler at 1.87 went from 0-1 down to 3-1, Flamengo scored 4, Leverkusen 5: a favourite that falls behind keeps attacking. Use the total line or the underdog's goals instead. Built into `fb_lines.mjs`.
 - **Head-to-head meetings older than 2 years count less** (30 Oct): two breaks in the last 2 years drop a line; older breaks only drop it when there are 3+ breaks in all; under 3 recent meetings is flagged "thin". Built into `fb_lines.mjs`.
+- **Drop a leg whose price drifts 25%+ before kickoff** (e.g. 1.30 → 1.63 or more): the bookmaker has news we don't (30 Oct: Coventry U21 over 2.5 went 1.30 → 1.86 and finished 1-0).
+- **Total over 1.5: the weaker attack must not blank often** (no more than 4 of their last 20). The over then rests on one team (30 Oct: Seraing v Liege over 1.5 finished 1-0; Liege had failed to score in 7 of their last 20).
 - **Cup ties with a big favourite (1.40 or shorter): no total-goals under and no under on the favourite's goals** (28 Oct; Leverkusen won 5-2 against Nuremberg, and their last 10 were against equals). Built into `fb_lines.mjs`.
 - Football settles on **90 minutes**; extra time and penalties don't count (Vantage grades it that way since PR #68).
 - **Before a leg goes on a slip, a deep check** (29 Oct, owner: "rating something alone doesn't mean that just because it played under 16/17"):
