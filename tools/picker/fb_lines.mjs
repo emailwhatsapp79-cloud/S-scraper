@@ -45,6 +45,8 @@ for (const eid of ids) {
     if (label.startsWith(`Double chance: ${ev.homeTeamName}`)) return x.h >= x.a;
     if (label.startsWith(`Double chance: ${ev.awayTeamName}`)) return x.a >= x.h;
     if (label.startsWith("Both teams score")) return desc === "Yes" ? x.h > 0 && x.a > 0 : x.h === 0 || x.a === 0;
+    if (label.startsWith(`Win: ${ev.homeTeamName}`)) return x.h > x.a;
+    if (label.startsWith(`Win: ${ev.awayTeamName}`)) return x.a > x.h;
     if (label.startsWith("Draw no bet")) return label.endsWith(ev.homeTeamName) ? x.h >= x.a : x.a >= x.h;
     return true;
   };
@@ -86,6 +88,11 @@ for (const eid of ids) {
         if (m.id === "18" && tot) test(`Total goals ${o.desc}`, odds, all.filter((x) => over ? x.tot > +tot : x.tot < +tot).length, all.length);
         if (m.id === "19" && tot) { const a = g.home.filter((x) => over ? x.f > +tot : x.f < +tot).length, b = g.away.filter((x) => over ? x.a > +tot : x.a < +tot).length; test(`${ev.homeTeamName} goals ${o.desc}`, odds, a + b, all.length, [[a, g.home.length], [b, g.away.length]]); }
         if (m.id === "20" && tot) { const a = g.away.filter((x) => over ? x.f > +tot : x.f < +tot).length, b = g.home.filter((x) => over ? x.a > +tot : x.a < +tot).length; test(`${ev.awayTeamName} goals ${o.desc}`, odds, a + b, all.length, [[a, g.away.length], [b, g.home.length]]); }
+        // Owner's rule (31 Oct): straight wins count too when they pass.
+        if (m.id === "1" && (o.desc === "Home" || o.desc === "Away")) {
+          const side = o.desc === "Home" ? "home" : "away", other = side === "home" ? "away" : "home";
+          test(`Win: ${side === "home" ? ev.homeTeamName : ev.awayTeamName}`, odds, g[side].filter((x) => x.f > x.a).length + g[other].filter((x) => x.f < x.a).length, all.length);
+        }
         if (m.id === "10") {
           if (o.desc === "Home or Draw") test("Double chance: " + ev.homeTeamName + " or draw", odds, g.home.filter((x) => x.f >= x.a).length + g.away.filter((x) => x.f <= x.a).length, all.length);
           if (o.desc === "Draw or Away") test("Double chance: " + ev.awayTeamName + " or draw", odds, g.away.filter((x) => x.f >= x.a).length + g.home.filter((x) => x.f <= x.a).length, all.length);
