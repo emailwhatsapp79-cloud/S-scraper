@@ -38,6 +38,9 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 - On a long slip, **weigh a cash-out when the last games kick off**: once the early legs are in, the late games hold all the risk (29 Oct: TBRDT2 was 8 of 10 with Braga and Hoek left).
 - Markets checked in football: total goals, team goals, first-half goals, corners (total and each team), double chance, both teams to score, draw no bet.
 - **One line per game.** At the same hit rate, take the line with **more room**, not the higher price (28 Oct).
+- **No under on the favourite's own goals when the favourite is priced under 2.00**, in any game, league or cup (30 Oct). Esenler at 1.87 went from 0-1 down to 3-1, Flamengo scored 4, Leverkusen 5: a favourite that falls behind keeps attacking. Use the total line or the underdog's goals instead. Built into `fb_lines.mjs`.
+- **Head-to-head meetings older than 2 years count less** (30 Oct): two breaks in the last 2 years drop a line; older breaks only drop it when there are 3+ breaks in all; under 3 recent meetings is flagged "thin". Built into `fb_lines.mjs`.
+- **Deep pass on 20 games each** (`LASTN=20`, 40 games per match) after the first pass on 10: about a quarter of the 10-game passes fail it (30 Oct, 79 games → 58 lines).
 - **Cup ties with a big favourite (1.40 or shorter): no total-goals under and no under on the favourite's goals** (28 Oct; Leverkusen won 5-2 against Nuremberg, and their last 10 were against equals). Built into `fb_lines.mjs`.
 - Football settles on **90 minutes**; extra time and penalties don't count (Vantage grades it that way since PR #68).
 - **Before a leg goes on a slip, a deep check** (29 Oct, owner: "rating something alone doesn't mean that just because it played under 16/17"):
