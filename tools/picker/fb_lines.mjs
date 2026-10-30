@@ -10,7 +10,7 @@ for (const eid of ids) {
   const mi = await get(`match_info/${eid.replace("sr:match:", "")}`); const T = mi?.match?.teams; if (!T) continue;
   const g = {};
   for (const side of ["home", "away"]) {
-    const d = await get(`stats_team_lastx/${T[side].uid}/10`);
+    const d = await get(`stats_team_lastx/${T[side].uid}/${process.env.LASTN || 10}`);
     const ms = (d?.matches || []).filter((m) => m.result && m.result.home != null);
     g[side] = await Promise.all(ms.map(async (m) => {
       const me = m.teams.home.uid === T[side].uid; const f = me ? m.result.home : m.result.away, a = me ? m.result.away : m.result.home;
@@ -25,8 +25,12 @@ for (const eid of ids) {
   const vs = await get(`stats_team_versus/${T.home.uid}/${T.away.uid}`);
   const h2h = (vs?.matches || []).filter((m) => m.result && m.result.home != null && !m.walkover).slice(0, 8).map((m) => {
     const me = m.teams.home.uid === T.home.uid, p1 = m.periods?.p1;
-    return { h: me ? m.result.home : m.result.away, a: me ? m.result.away : m.result.home, hh: p1 ? (me ? p1.home : p1.away) : null, ha: p1 ? (me ? p1.away : p1.home) : null };
+    return { h: me ? m.result.home : m.result.away, a: me ? m.result.away : m.result.home, hh: p1 ? (me ? p1.home : p1.away) : null, ha: p1 ? (me ? p1.away : p1.home) : null,
+      recent: (m.time?.uts || 0) * 1000 > Date.now() - 2 * 365 * 86400e3 };
   });
+  // Owner's rule (30 Oct): meetings older than 2 years count less (squads and
+  // coaches change). Two recent breaks drop the line; old breaks only count
+  // when three or more breaks in all.
   let cur = {};
   const holds = (label, x) => {
     const { tot, over, desc } = cur, cmp = (v) => v == null ? true : over ? v > tot : v < tot;
@@ -49,13 +53,22 @@ for (const eid of ids) {
   const x12 = (ev.markets || []).find((m) => String(m.id) === "1");
   const pr = (d) => +((x12?.outcomes || []).find((o) => o.desc === d)?.odds || 99);
   const bigFav = cup ? (pr("Home") <= 1.4 ? "home" : pr("Away") <= 1.4 ? "away" : null) : null;
-  const blocked = (label) => bigFav && /Under/.test(label) && (/^Total goals|^1st half goals/.test(label) || label.startsWith((bigFav === "home" ? ev.homeTeamName : ev.awayTeamName) + " goals") || label.startsWith("1st half " + (bigFav === "home" ? ev.homeTeamName : ev.awayTeamName)));
+  // Owner's rule (30 Oct, Esenler 3-1 after 0-1; Flamengo 4-1; Leverkusen 5-2):
+  // in any game, no under on the favourite's own goals when the favourite is
+  // priced under 2.00. A favourite that falls behind keeps attacking.
+  const fav = pr("Home") < 2 && pr("Home") <= pr("Away") ? "home" : pr("Away") < 2 && pr("Away") < pr("Home") ? "away" : null;
+  const favName = fav ? (fav === "home" ? ev.homeTeamName : ev.awayTeamName) : null;
+  const blocked = (label) => /Under/.test(label) && (
+    (favName && (label.startsWith(favName + " goals") || label.startsWith("1st half " + favName + " goals"))) ||
+    (bigFav && (/^Total goals|^1st half goals/.test(label) || label.startsWith((bigFav === "home" ? ev.homeTeamName : ev.awayTeamName) + " goals") || label.startsWith("1st half " + (bigFav === "home" ? ev.homeTeamName : ev.awayTeamName)))));
   const res = [];
   const test = (label, odds, hits, n) => {
     if (!(odds >= 1.2 && odds < 1.4 && n) || blocked(label)) return;
-    const broke = h2h.filter((x) => !holds(label, x)).length;
-    if (broke >= 2) return; // broke it in 2+ of their last 8 meetings
-    res.push({ label, odds, hit: hits, n, h2h: h2h.length ? `${h2h.length - broke}/${h2h.length}` : "never met" });
+    const rec = h2h.filter((x) => x.recent), old = h2h.filter((x) => !x.recent);
+    const bR = rec.filter((x) => !holds(label, x)).length, bO = old.filter((x) => !holds(label, x)).length;
+    if (bR >= 2 || bR + bO >= 3) return;
+    const h2hTxt = !h2h.length ? "never met" : `${rec.length - bR}/${rec.length} last 2y` + (old.length ? `, ${old.length - bO}/${old.length} older` : "") + (rec.length < 3 ? " (thin)" : "");
+    res.push({ label, odds, hit: hits, n, h2h: h2hTxt });
   };
   for (const m of ev.markets || []) {
     const tot = /total=([\d.]+)/.exec(m.specifier || "")?.[1];
@@ -93,7 +106,7 @@ for (const eid of ids) {
   console.log(`  ${ev.homeTeamName} last ${g.home.length}: ${g.home.map((x) => x.f + "-" + x.a).join(" ")}`);
   console.log(`  ${ev.awayTeamName} last ${g.away.length}: ${g.away.map((x) => x.f + "-" + x.a).join(" ")}`);
   console.log(`  corners for-against: ${ev.homeTeamName} ${g.home.map((x) => x.cf + "-" + x.ca).join(" ")} | ${ev.awayTeamName} ${g.away.map((x) => x.cf + "-" + x.ca).join(" ")}`);
-  const good = res.filter((r) => r.n >= 12 && r.hit / r.n >= 0.85).slice(0, 6);
+  const good = res.filter((r) => r.n >= (process.env.LASTN ? 2.4 * process.env.LASTN : 12) && r.hit / r.n >= 0.85).slice(0, 6);
   for (const r of good) console.log(`  ✓ ${r.label} @${r.odds} — ${r.hit}/${r.n} | h2h ${r.h2h}`);
   if (!good.length) console.log("  (nothing at 1.20-1.39 cleared 85%+)");
 }
