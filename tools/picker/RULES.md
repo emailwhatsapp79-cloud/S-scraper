@@ -11,6 +11,7 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 - State clearly at the top when a code has tennis legs ("⚠️ includes N tennis legs").
 - Give the realistic chance of the whole slip winning.
 - Keep main slips to about 4–6 legs; long slips are for ₦100 tests only.
+- **Several codes on one day must not all share the same legs** (30 Oct: Esenler's goals under 2.5 sat on all four codes; Esenler scored 3 in 12 minutes and every ticket died at once). Build the backup codes from different games so one bad leg can't sink everything.
 
 ## Table tennis (`best_now.mjs`, `tt_nodb.mjs` while the database is down)
 - Tags: Strong ≥75% (30+ games each), Good ≥70%, Lean ≥65%. Prefer Strong, then Good, Leans only if needed.
