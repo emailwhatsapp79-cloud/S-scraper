@@ -57,14 +57,32 @@ for (const eid of ids) {
   const x12 = (ev.markets || []).find((m) => String(m.id) === "1");
   const pr = (d) => +((x12?.outcomes || []).find((o) => o.desc === d)?.odds || 99);
   const bigFav = cup ? (pr("Home") <= 1.4 ? "home" : pr("Away") <= 1.4 ? "away" : null) : null;
-  // Owner's rule (30 Oct, Esenler 3-1 after 0-1; Flamengo 4-1; Leverkusen 5-2):
-  // in any game, no under on the favourite's own goals when the favourite is
-  // priced under 2.00. A favourite that falls behind keeps attacking.
-  const fav = pr("Home") < 2 && pr("Home") <= pr("Away") ? "home" : pr("Away") < 2 && pr("Away") < pr("Home") ? "away" : null;
-  const favName = fav ? (fav === "home" ? ev.homeTeamName : ev.awayTeamName) : null;
-  const blocked = (label) => /Under/.test(label) && (
-    (favName && (label.startsWith(favName + " goals") || label.startsWith("1st half " + favName + " goals"))) ||
-    (bigFav && (/^Total goals|^1st half goals/.test(label) || label.startsWith((bigFav === "home" ? ev.homeTeamName : ev.awayTeamName) + " goals") || label.startsWith("1st half " + (bigFav === "home" ? ev.homeTeamName : ev.awayTeamName)))));
+  // Owner's rules (31 Oct, replacing the "favourite under 2.00" rule): what
+  // sinks a one-team under is attacking strength, not the price (Esenler,
+  // Colo-Colo, Fylde could score a lot; Visakha as favourite to win was fine).
+  // A one-team under (full time or first half) needs, over the last 10: the
+  // team's average under the line minus 1 (first half: 60% of the line), the team reaching the line at most
+  // once, and the opponent conceding that many at most once.
+  const weakAttack = (side, line, half) => {
+    const me = g10[side], op = g10[side === "home" ? "away" : "home"];
+    const f = (x) => half ? x.hf : x.f, a = (x) => half ? x.ha : x.a;
+    const mine = me.filter((x) => f(x) != null), theirs = op.filter((x) => a(x) != null);
+    if (!mine.length || !theirs.length) return false;
+    const avg = mine.reduce((s, x) => s + f(x), 0) / mine.length;
+    return avg <= (half ? line * 0.6 : line - 1) && mine.filter((x) => f(x) > line).length <= 1 && theirs.filter((x) => a(x) > line).length <= 1;
+  };
+  const blocked = (label) => {
+    if (!/Under/.test(label)) return false;
+    const line = +(/Under ([\d.]+)$/.exec(label)?.[1] || 0);
+    // Total goals under only at 4.5 or more: a lower total needs both teams to stay quiet (Kaluga 2-2).
+    if (/^Total goals/.test(label) && line < 4.5) return true;
+    for (const side of ["home", "away"]) {
+      const nm = side === "home" ? ev.homeTeamName : ev.awayTeamName;
+      if (label.startsWith(nm + " goals") && !weakAttack(side, line, false)) return true;
+      if (label.startsWith("1st half " + nm + " goals") && !weakAttack(side, line, true)) return true;
+    }
+    return !!(bigFav && (/^Total goals|^1st half goals/.test(label) || label.startsWith((bigFav === "home" ? ev.homeTeamName : ev.awayTeamName) + " goals") || label.startsWith("1st half " + (bigFav === "home" ? ev.homeTeamName : ev.awayTeamName))));
+  };
   const res = [];
   // Owner's rule (30 Oct, Colo-Colo 6-1): on one team's goals, each half of
   // the sample must clear 80% on its own (the team's goals for, and the
