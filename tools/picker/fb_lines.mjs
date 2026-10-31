@@ -72,10 +72,22 @@ for (const eid of ids) {
     return avg <= (half ? line * 0.6 : line - 1) && mine.filter((x) => f(x) > line).length <= 1 && theirs.filter((x) => a(x) > line).length <= 1;
   };
   const blocked = (label) => {
+    // Owner's rule (30 Oct, Seraing v Liege 1-0): a total over needs both
+    // attacks; neither side may have failed to score in more than 4 of its last 20.
+    if (/^Total goals Over/.test(label)) return g.home.filter((x) => x.f === 0).length > 4 || g.away.filter((x) => x.f === 0).length > 4;
     if (!/Under/.test(label)) return false;
     const line = +(/Under ([\d.]+)$/.exec(label)?.[1] || 0);
     // Total goals under only at 4.5 or more: a lower total needs both teams to stay quiet (Kaluga 2-2).
     if (/^Total goals/.test(label) && line < 4.5) return true;
+    // Owner's rule (31 Oct, Jerv 5-0 on a total under 5.5): no total-goals
+    // under in a mismatch, in any competition. A mismatch is a favourite at
+    // 1.50 or shorter, or a side that scored 3+ in 3 of its last 10 against an
+    // opponent that conceded 3+ in 3 of its last 10 (Jerv 4/10 v Eik 5/10).
+    if (/^Total goals/.test(label)) {
+      if (Math.min(pr("Home"), pr("Away")) <= 1.5) return true;
+      const runUp = (me, op) => me.filter((x) => x.f >= 3).length >= 3 && op.filter((x) => x.a >= 3).length >= 3;
+      if (runUp(g10.home, g10.away) || runUp(g10.away, g10.home)) return true;
+    }
     for (const side of ["home", "away"]) {
       const nm = side === "home" ? ev.homeTeamName : ev.awayTeamName;
       if (label.startsWith(nm + " goals") && !weakAttack(side, line, false)) return true;
