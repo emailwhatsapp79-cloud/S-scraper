@@ -489,6 +489,36 @@ function quoteScore(ev, sel, hint = {}) {
   };
 }
 
+function quoteGoalLine(ev, gl, hint = {}) {
+  const [, half, side, ou, line] = gl;
+  const id = half ? (side === "H" ? "69" : side === "A" ? "70" : "68") : (side === "H" ? "19" : side === "A" ? "20" : "18");
+  const outcome = `${ou === "O" ? "Over" : "Under"} ${line}`;
+  const wantId = hint.outcomeId ? String(hint.outcomeId) : "";
+  const started = /^(H1|H2|HT|LIVE|Playing)/i.test(String(ev.matchStatus || ""));
+  const markets = (ev.markets || []).filter((m) => marketOpen(m) && String(m.id) === id &&
+    String(m.specifier || "").split("|").includes(`total=${line}`));
+  markets.sort((a, b) => {
+    const liveA = Number(a.product) === 1 ? 1 : 0, liveB = Number(b.product) === 1 ? 1 : 0;
+    return started ? liveB - liveA : liveA - liveB;
+  });
+  for (const m of markets) {
+    const o = (m.outcomes || []).find((x) => wantId ? String(x.id || "") === wantId : String(x.desc || "") === outcome);
+    const odds = Number(o && o.odds);
+    if (!o || !(odds > 1) || o.isActive === 0) continue;
+    return {
+      eventId: String(ev.eventId),
+      sportId: (ev.sport && ev.sport.id) || SPORT_ID,
+      marketId: String(m.id),
+      outcomeId: String(o.id || ""),
+      specifier: String(m.specifier || ""),
+      product: String(m.product ?? 3),
+      odds,
+      probability: o.probability != null ? String(o.probability) : "",
+    };
+  }
+  return null;
+}
+
 export function quote(ev, selection, hint = {}) {
   const sel = String(selection || "");
   if (/^\d+:\d+$/.test(sel)) return ev ? quoteScore(ev, sel, hint) : null;
@@ -498,6 +528,11 @@ export function quote(ev, selection, hint = {}) {
   const want = (tt || eb)
     ? (sel === "1" ? ["Winner", "Home"] : sel === "2" ? ["Winner", "Away"] : null)
     : WANT[sel];
+  // Football goal lines (the picker's slips): U4.5 / O1.5 total, HU2.5 / AO0.5
+  // one team, a leading 1 for the first half. SportyBet market ids: 18 total,
+  // 19 home, 20 away; 68 / 69 / 70 the same for the first half.
+  const gl = !tt && !eb && !tennis && sel.match(/^(1)?(H|A)?(O|U)(\d+(?:\.\d+)?)$/);
+  if (gl) return ev ? quoteGoalLine(ev, gl, hint) : null;
   if (!ev || !want) return null;
   const [desc, outcome] = want;
   const markets = (ev.markets || []).filter((m) => marketOpen(m) && (
@@ -557,7 +592,8 @@ export async function priceLeg(leg, book, opts = {}) {
   const score = /^\d+:\d+$/.test(String(leg.selection || ""));
   const eb = leg.sport === "eb";
   const tt = !score && !eb && (isTableLeg(leg) || leg.sport === "tn");
-  let ev = await fetchEvent(leg.eventId, eb ? { marketId: "219" } : tt ? { marketId: "186" } : (score ? { marketId: "199" } : {}), base);
+  const goal = !score && !eb && !tt && /^(1)?(H|A)?(O|U)\d+(\.\d+)?$/.test(String(leg.selection || ""));
+  let ev = await fetchEvent(leg.eventId, eb ? { marketId: "219" } : tt ? { marketId: "186" } : score ? { marketId: "199" } : goal ? { marketId: "18,19,20,68,69,70" } : {}, base);
   let q = quote(ev, leg.selection, { outcomeId: leg.outcomeId, sport: leg.sport });
   if (!q && sporty && score) {
     ev = await fetchEvent(leg.eventId, { marketId: "199" }, base);

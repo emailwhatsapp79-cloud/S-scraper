@@ -89,3 +89,15 @@ test("a small price drop is allowed, a real drop is not", () => {
   assert.equal(movedTooFar(1.25, 1.40), false);
   assert.equal(movedTooFar(1.25, 1.10), true);
 });
+
+test("goal lines price from their own markets", () => {
+  const ou = (id, line, under, over, status = 0) => ({ id, product: 3, status, specifier: `total=${line}`, outcomes: [{ id: "12", desc: `Over ${line}`, odds: over, isActive: 1 }, { id: "13", desc: `Under ${line}`, odds: under, isActive: 1 }] });
+  const ev = { eventId: "sr:match:1", sport: { id: "sr:sport:1" }, matchStatus: "Not start", markets: [ou("18", "4.5", "1.21", "4.4"), ou("19", "2.5", "1.25", "3.6"), ou("20", "0.5", "4.1", "1.24"), ou("68", "0.5", "3.5", "1.26"), ou("18", "3.5", "1.5", "2.4", 1)] };
+  assert.equal(quote(ev, "U4.5").odds, 1.21);
+  assert.equal(quote(ev, "U4.5").marketId, "18");
+  assert.equal(quote(ev, "HU2.5").marketId, "19");
+  assert.equal(quote(ev, "AO0.5").odds, 1.24);
+  assert.equal(quote(ev, "1O0.5").marketId, "68");
+  assert.equal(quote(ev, "U3.5"), null); // suspended market
+  assert.equal(quote(ev, "HU1.5"), null); // no such line
+});
