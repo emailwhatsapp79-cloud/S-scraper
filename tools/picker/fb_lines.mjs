@@ -108,13 +108,15 @@ for (const eid of ids) {
   // the sample must clear 80% on its own (the team's goals for, and the
   // opponent's goals against), so a strong record can't hide a leaky defence.
   const test = (label, odds, hits, n, parts) => {
-    if (!(odds >= 1.2 && odds < 1.4 && n) || blocked(label)) return;
+    // Owner's price bands (1 Nov): 1.10-1.19 padding, 1.20-1.39 normal,
+    // 1.40-1.70 only at 90%+ with clean recent head-to-head (checked below).
+    if (!(odds >= 1.1 && odds <= 1.7 && n) || blocked(label)) return;
     if (parts && parts.some(([h, k]) => k && h / k < 0.8)) return;
     const rec = h2h.filter((x) => x.recent), old = h2h.filter((x) => !x.recent);
     const bR = rec.filter((x) => !holds(label, x)).length, bO = old.filter((x) => !holds(label, x)).length;
     if (bR >= 2 || bR + bO >= 3) return;
     const h2hTxt = !h2h.length ? "never met" : `${rec.length - bR}/${rec.length} last 2y` + (old.length ? `, ${old.length - bO}/${old.length} older` : "") + (rec.length < 3 ? " (thin)" : "");
-    res.push({ label, odds, hit: hits, n, h2h: h2hTxt });
+    res.push({ label, odds, hit: hits, n, h2h: h2hTxt, cleanH2h: bR === 0 && rec.length >= 3 });
   };
   const scan = (g, test) => {
     const all = [...g.home, ...g.away];
@@ -167,7 +169,8 @@ for (const eid of ids) {
   console.log(`  ${ev.homeTeamName} last ${g10.home.length}: ${g10.home.map((x) => x.f + "-" + x.a).join(" ")}`);
   console.log(`  ${ev.awayTeamName} last ${g10.away.length}: ${g10.away.map((x) => x.f + "-" + x.a).join(" ")}`);
   if (!process.env.NO_CORNERS) console.log(`  corners for-against: ${ev.homeTeamName} ${g10.home.map((x) => x.cf + "-" + x.ca).join(" ")} | ${ev.awayTeamName} ${g10.away.map((x) => x.cf + "-" + x.ca).join(" ")}`);
-  const good = res.filter((r) => r.n >= 12 && r.hit / r.n >= 0.85).slice(0, 6);
-  for (const r of good) console.log(`  ✓ ${r.label} @${r.odds} — ${r.hit}/${r.n} | h2h ${r.h2h}${r.warn ? " | " + r.warn : ""}`);
-  if (!good.length) console.log("  (nothing at 1.20-1.39 cleared 85%+)");
+  const good = res.filter((r) => r.n >= 12 && (r.odds < 1.4 ? r.hit / r.n >= 0.85 : r.hit / r.n >= 0.9 && r.cleanH2h)).slice(0, 6);
+  for (const r of good) r.band = r.odds < 1.2 ? "padding" : r.odds >= 1.4 ? "long (max 2 a slip)" : "";
+  for (const r of good) console.log(`  ✓ ${r.label} @${r.odds} — ${r.hit}/${r.n} | h2h ${r.h2h}${r.band ? " | " + r.band : ""}${r.warn ? " | " + r.warn : ""}`);
+  if (!good.length) console.log("  (nothing at 1.10-1.70 cleared the bar)");
 }
