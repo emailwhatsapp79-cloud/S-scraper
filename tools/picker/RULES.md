@@ -5,12 +5,12 @@ The owner's rules for building slips, and why each one exists. The scripts in th
 Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the database; football, NBA and `tt_nodb.mjs` do not), e.g. `node ../tools/picker/fb_lines.mjs <eventId> ...`.
 
 ## Every slip
-- No leg under **1.20** (26 Oct) and none at **1.40 or more** (27 Oct). On our own 427 graded legs, 1.40–1.49 won 56% and 1.50+ won 50%.
+- Legs priced **1.20–1.39** (26–27 Oct; the 1 Nov 1.10–1.70 football trial was dropped the same day for the first-day window). On our own 427 graded legs, 1.40–1.49 won 56% and 1.50+ won 50%.
 - **No player or team in two legs** of one slip (24 Oct, Rak lost both of his legs on WTCVHB).
 - **Show every warning** on every leg, including pick-side notes like "lost earlier today", when giving a code (27 Oct: Loboda's loss as favourite was left out).
 - State clearly at the top when a code has tennis legs ("⚠️ includes N tennis legs").
 - Give the realistic chance of the whole slip winning.
-- Keep main slips to about 4–6 legs; long slips are for ₦100 tests only.
+- **The main slip is the best legs, not a size.** No cap on legs or odds (1 Nov, owner: a strong leg on a short main slip sank everything anyway).
 - **A leg may sit on every code only if it is a banker**: it passes every check with no warning at all (no favourite under, no thin head-to-head, no "shaky before", no price drift). Everything else varies between codes, so one doubtful leg can't sink every ticket (30 Oct, owner: shared legs are what make the odds; the mistake was sharing a doubtful one. Esenler, an under on a 1.87 favourite, sat on all four codes and sank them all).
 
 ## Table tennis (`best_now.mjs`, `tt_nodb.mjs` while the database is down)
@@ -31,30 +31,24 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 
 ## Football (`fb_lines.mjs`) and NBA (`nba_lines.mjs`)
 - A line qualifies only if it **cleared 85%+** of both teams' **last 10 games each** (football: all competitions; NBA: the last 10 this season) at the right price (30 Oct: 20 games reach back about 5 months, with different players and sometimes a different coach).
-- **Football price bands** (1 Nov, replacing the 1.20 floor and 1.40 ceiling for football; the 1.20–1.39 range was throwing away about 85% of strong lines, since bookies price 85%+ lines at 1.05–1.18):
-  - **1.10–1.19:** allowed at 85%+, as **padding**. Cheap legs add little odds (ten 1.10s = 2.6), so they fill a slip, not make it.
-  - **1.20–1.39:** normal, 85%+.
-  - **1.40–1.70:** only at **90%+** with **clean recent head-to-head** (no break in the last 2 years, 3+ meetings), and **at most 2 a slip** (our legs at 1.40+ won only 50–56%).
-  - TT and tennis keep 1.20–1.39.
-  Built into `fb_lines.mjs` (the band shows on each line).
 - **Football games 11–20 are a warning, not a drop**: a line that cleared under 75% of them is shown "⚠️ shaky before", so pick the cleaner leg (30 Oct: BK Olympic looked 17/20 on 10 games, but scored 3+ in 6 of their last 20).
 - **Head-to-head: the last 8 meetings, in football and the NBA** (TT keeps 20: they meet that often in a week). Teams meet 2–4 times a year, so 10+ meetings would reach back 3–5 years.
 - **Rate every game of the day, all leagues, men's and women's** (women are only excluded in TT and tennis), then screen (29 Oct).
 - **Corners are off by default** (`NO_CORNERS=1`): the corner slip lost and the corner checks make a run take ~10 minutes instead of ~30 seconds (29 Oct).
-- Watch for **big mismatches outside cups too** (Al Nassr, Gangwon): skip unders on a team that can run up the score.
 - **Head-to-head too: drop a line the two teams broke in 2+ of their last 8 meetings** (29 Oct: Braga had scored 3+ against Famalicao in 2 of 8, and their under 2.5 was at risk). Football "never met" games are flagged, not dropped (lower-league cup ties often have no shared history). Built into `fb_lines.mjs`.
 - On a long slip, **weigh a cash-out when the last games kick off**: once the early legs are in, the late games hold all the risk (29 Oct: TBRDT2 was 8 of 10 with Braga and Hoek left).
 - Markets checked in football: total goals, team goals, first-half goals, corners (total and each team), **home win / away win** (31 Oct), double chance (home or draw, draw or away), both teams to score, draw no bet. Any of them goes on a slip when it passes the same checks.
-- **Slip mix: results and balanced unders first, overs last** (1 Nov). Per game, when lines pass at a similar rate, take a result (win, double chance, draw no bet) first, then an under (one-team, first-half, or total 4.5+ in a balanced game), and an over only if nothing else passes. **At most 2 overs / "to score" legs per slip.** Built into `pool_mix.py` (one line per game for the slip pool) and checked again on each team's last 20 by `deep_auto.mjs`.
+- **Unders: no under where the favourite is strong and likes scoring** (owner, 1 Nov; replaces the 30 Oct-1 Nov under rules: total 4.5+ only, weak attack, cup favourite, mismatch).
+  - **Strong v weak** (favourite at 1.70 or shorter, underdog at 4.00 or longer, or a high scorer against a leaky defence): no total or first-half total under, and no under on the **favourite's** goals. An under on the **weak team's** goals is fine. If the favourite keeps scoring, book its over / to score instead.
+  - **A favourite that likes scoring** (2+ goals in 5 of its last 10): no total under and no under on its goals.
+  - Every other under, in balanced games (total, one team, first half), is judged on the numbers alone.
+  Losses behind it: Jerv 7-0, Cliftonville 7-1, Aluminij 5-0, Colo-Colo 6-1, Esenler, Flamengo, Leverkusen. Built into `fb_lines.mjs`.
+- **The best legs go in**, whatever the market: win, double chance, under, over, first half (owner, 1 Nov: no market order and no cap on overs; first-half legs are fine when they are strong).
 - **One line per game.** At the same hit rate, take the line with **more room**, not the higher price (28 Oct).
-- **Total goals under only at 4.5 or more** at full time (31 Oct: a lower total needs both teams to stay quiet; Kaluga under 3.5 went 2-2, while under 4.5 on low-scoring games keeps landing). Lower unders go on **one team** instead (under 2.5 / 3.5, or a first-half team under). First-half totals are still allowed. Built into `fb_lines.mjs`.
-- **No unders in a mismatch, in any competition** (31 Oct, tightened 1 Nov). Every under that lost was a strong team against a weak one (Jerv 7-0, Cliftonville 7-1, Aluminij 5-0, Colo-Colo 6-1, Esenler, Flamengo); unders in balanced games kept landing. A mismatch is a favourite at **1.70 or shorter**, or an underdog at **4.00 or longer**, or a side that scored 3+ in 3 of its last 10 against an opponent that conceded 3+ in 3 of its last 10. In a mismatch: no total-goals under and no first-half total under, and no under on the favourite's own goals (full time or first half). Back the strong side instead: win, double chance or to score. Built into `fb_lines.mjs`.
-- **One-team unders need a weak attack, not a long price** (31 Oct, replacing the 30 Oct "favourite under 2.00" rule). What sank Esenler, Colo-Colo and Fylde was attacking strength. Over the last 10: the team's average goals is at most the line minus 1 (first half: 60% of the line), the team went over the line at most once, and the opponent conceded over the line at most once. A strong team is still fine to **win, draw or score** (Visakha or draw won 3-0 as favourite); only unders on its goals are blocked. Built into `fb_lines.mjs`.
 - **Head-to-head meetings older than 2 years count less** (30 Oct): two breaks in the last 2 years drop a line; older breaks only drop it when there are 3+ breaks in all; under 3 recent meetings is flagged "thin". Built into `fb_lines.mjs`.
 - **One team's goals: each side must clear 80% on its own** (30 Oct: Colo-Colo under 3.5 lost 6-1; Colo-Colo's tight record hid that Concepcion had conceded 3+ in 4 of their last 20). The team's goals scored and the opponent's goals conceded are checked separately, not just added together. Built into `fb_lines.mjs`.
 - **Drop a leg whose price drifts 25%+ before kickoff** (e.g. 1.30 → 1.63 or more): the bookmaker has news we don't (30 Oct: Coventry U21 over 2.5 went 1.30 → 1.86 and finished 1-0).
 - **Total over 1.5: the weaker attack must not blank often** (no more than 4 of their last 20). The over then rests on one team (30 Oct: Seraing v Liege over 1.5 finished 1-0; Liege had failed to score in 7 of their last 20). Built into `fb_lines.mjs` for every total over (31 Oct).
-- **Cup ties with a big favourite (1.40 or shorter): no total-goals under and no under on the favourite's goals** (28 Oct; Leverkusen won 5-2 against Nuremberg, and their last 10 were against equals). Built into `fb_lines.mjs`.
 - Football settles on **90 minutes**; extra time and penalties don't count (Vantage grades it that way since PR #68).
 - **Before a leg goes on a slip, a deep check** (29 Oct, owner: "rating something alone doesn't mean that just because it played under 16/17"):
   - **Both sides of the line**: look at how often the other side landed and where the main line sits (`nba_both.mjs` prints every line, over and under). An alternative line far from the bookmaker's main line is not "free"; say how far it is.
@@ -65,7 +59,6 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
   - Football: `fb_deep.mjs` prints both teams' last 20 with half-times and the last 8 meetings.
 - **NBA overs are riskier than unders**: one cold shooting night sinks an over (29 Oct, Pistons v Hornets 186 against over 201.5, after 14/16 cleared it). Prefer unders; take an over only with a big cushion.
 - **NBA stays on ₦100 test slips** until teams have about 15+ regular-season games; early samples include preseason.
-- First-half legs are fine on test slips. On a main slip, flag them: they can swing the slip on a coin flip (28 Oct, Bayern).
 
 ## Cash out
 - When reporting live slips: give the exact Lagos time, each match's minute and score, and each leg's odds now (29 Oct).

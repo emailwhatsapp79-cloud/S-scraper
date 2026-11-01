@@ -50,67 +50,40 @@ for (const eid of ids) {
     if (label.startsWith("Draw no bet")) return label.endsWith(ev.homeTeamName) ? x.h >= x.a : x.a >= x.h;
     return true;
   };
-  // Owner's rule (28 Oct, Leverkusen 5-2 v Nuremberg): in a cup tie with a big
-  // favourite (1X2 price 1.40 or shorter), no total-goals under and no under on
-  // the favourite's own goals. Their last 10 are against equals, not minnows.
-  const cup = /cup|pokal|copa|coupe|coppa|trophy|taça|beker/i.test(ev.sport?.category?.tournament?.name || "");
   const x12 = (ev.markets || []).find((m) => String(m.id) === "1");
   const pr = (d) => +((x12?.outcomes || []).find((o) => o.desc === d)?.odds || 99);
-  const bigFav = cup ? (pr("Home") <= 1.4 ? "home" : pr("Away") <= 1.4 ? "away" : null) : null;
-  // Owner's rules (31 Oct, replacing the "favourite under 2.00" rule): what
-  // sinks a one-team under is attacking strength, not the price (Esenler,
-  // Colo-Colo, Fylde could score a lot; Visakha as favourite to win was fine).
-  // A one-team under (full time or first half) needs, over the last 10: the
-  // team's average under the line minus 1 (first half: 60% of the line), the team reaching the line at most
-  // once, and the opponent conceding that many at most once.
-  const weakAttack = (side, line, half) => {
-    const me = g10[side], op = g10[side === "home" ? "away" : "home"];
-    const f = (x) => half ? x.hf : x.f, a = (x) => half ? x.ha : x.a;
-    const mine = me.filter((x) => f(x) != null), theirs = op.filter((x) => a(x) != null);
-    if (!mine.length || !theirs.length) return false;
-    const avg = mine.reduce((s, x) => s + f(x), 0) / mine.length;
-    return avg <= (half ? line * 0.6 : line - 1) && mine.filter((x) => f(x) > line).length <= 1 && theirs.filter((x) => a(x) > line).length <= 1;
-  };
   const blocked = (label) => {
     // Owner's rule (30 Oct, Seraing v Liege 1-0): a total over needs both
     // attacks; neither side may have failed to score in more than 4 of its last 20.
     if (/^Total goals Over/.test(label)) return g.home.filter((x) => x.f === 0).length > 4 || g.away.filter((x) => x.f === 0).length > 4;
     if (!/Under/.test(label)) return false;
-    const line = +(/Under ([\d.]+)$/.exec(label)?.[1] || 0);
-    // Total goals under only at 4.5 or more: a lower total needs both teams to stay quiet (Kaluga 2-2).
-    if (/^Total goals/.test(label) && line < 4.5) return true;
-    // Owner's rule (31 Oct, Jerv 5-0 on a total under 5.5): no total-goals
-    // under in a mismatch, in any competition. A mismatch is a favourite at
-    // 1.50 or shorter, or a side that scored 3+ in 3 of its last 10 against an
-    // opponent that conceded 3+ in 3 of its last 10 (Jerv 4/10 v Eik 5/10).
-    // Owner's rule (1 Nov): every under that lost was a strong team against a
-    // weak one (Jerv 7-0, Cliftonville 7-1, Aluminij 5-0, Colo-Colo 6-1);
-    // balanced unders land. Mismatch now = favourite at 1.70 or shorter, or
-    // underdog at 4.00 or longer, or the run-up pattern. In a mismatch: no
-    // total or first-half total under, and no under on the favourite's goals.
+    // Owner's under rule (1 Nov, replacing the 4.5-only, weak-attack and cup
+    // rules): no under where the favourite is strong and likes scoring.
+    //  - Strong v weak (favourite at 1.70 or shorter, or underdog at 4.00 or
+    //    longer, or a high scorer against a leaky defence): no total or
+    //    first-half total under and no under on the favourite's goals; an
+    //    under on the weak team's goals is fine.
+    //  - A favourite that likes scoring (2+ goals in 5 of its last 10): no
+    //    total under and no under on its goals; look at its over instead.
+    // Every other under (balanced games) is judged on the numbers alone.
     const hp = pr("Home"), ap = pr("Away"), priced = hp < 99 && ap < 99;
     const runUp = (me, op) => me.filter((x) => x.f >= 3).length >= 3 && op.filter((x) => x.a >= 3).length >= 3;
-    const mismatch = (priced && (Math.min(hp, ap) <= 1.7 || Math.max(hp, ap) >= 4)) || runUp(g10.home, g10.away) || runUp(g10.away, g10.home);
-    if (mismatch) {
-      if (/^Total goals|^1st half goals/.test(label)) return true;
-      const favName = priced ? (hp <= ap ? ev.homeTeamName : ev.awayTeamName) : null;
-      if (favName && (label.startsWith(favName + " goals") || label.startsWith("1st half " + favName + " goals"))) return true;
-    }
-    for (const side of ["home", "away"]) {
-      const nm = side === "home" ? ev.homeTeamName : ev.awayTeamName;
-      if (label.startsWith(nm + " goals") && !weakAttack(side, line, false)) return true;
-      if (label.startsWith("1st half " + nm + " goals") && !weakAttack(side, line, true)) return true;
-    }
-    return !!(bigFav && (/^Total goals|^1st half goals/.test(label) || label.startsWith((bigFav === "home" ? ev.homeTeamName : ev.awayTeamName) + " goals") || label.startsWith("1st half " + (bigFav === "home" ? ev.homeTeamName : ev.awayTeamName))));
+    const strongWeak = (priced && (Math.min(hp, ap) <= 1.7 || Math.max(hp, ap) >= 4)) || runUp(g10.home, g10.away) || runUp(g10.away, g10.home);
+    const fav = priced && hp !== ap ? (hp < ap ? "home" : "away") : null;
+    const favName = fav ? (fav === "home" ? ev.homeTeamName : ev.awayTeamName) : null;
+    const favScores = fav ? g10[fav].filter((x) => x.f >= 2).length >= 5 : false;
+    const total = /^Total goals|^1st half goals/.test(label);
+    const onFav = favName && (label.startsWith(favName + " goals") || label.startsWith("1st half " + favName + " goals"));
+    if ((strongWeak || favScores) && (total || onFav)) return true;
+    return false;
   };
   const res = [];
   // Owner's rule (30 Oct, Colo-Colo 6-1): on one team's goals, each half of
   // the sample must clear 80% on its own (the team's goals for, and the
   // opponent's goals against), so a strong record can't hide a leaky defence.
   const test = (label, odds, hits, n, parts) => {
-    // Owner's price bands (1 Nov): 1.10-1.19 padding, 1.20-1.39 normal,
-    // 1.40-1.70 only at 90%+ with clean recent head-to-head (checked below).
-    if (!(odds >= 1.1 && odds <= 1.7 && n) || blocked(label)) return;
+    // Owner (1 Nov): back to the first-day window, 1.20-1.39 at 85%+.
+    if (!(odds >= 1.2 && odds < 1.4 && n) || blocked(label)) return;
     if (parts && parts.some(([h, k]) => k && h / k < 0.8)) return;
     const rec = h2h.filter((x) => x.recent), old = h2h.filter((x) => !x.recent);
     const bR = rec.filter((x) => !holds(label, x)).length, bO = old.filter((x) => !holds(label, x)).length;
@@ -165,12 +138,11 @@ for (const eid of ids) {
   // Same hit rate: the line with more room first (owner's rule after Leverkusen).
   res.sort((a, b) => b.hit / b.n - a.hit / a.n || a.odds - b.odds);
   const t = new Date(ev.estimateStartTime + 3600e3).toISOString().slice(11, 16);
-  console.log(`\n${t} ${ev.homeTeamName} v ${ev.awayTeamName} (${ev.sport.category.tournament.name})${bigFav ? " [cup mismatch: no unders on the favourite / total]" : ""}`);
+  console.log(`\n${t} ${ev.homeTeamName} v ${ev.awayTeamName} (${ev.sport.category.tournament.name})`);
   console.log(`  ${ev.homeTeamName} last ${g10.home.length}: ${g10.home.map((x) => x.f + "-" + x.a).join(" ")}`);
   console.log(`  ${ev.awayTeamName} last ${g10.away.length}: ${g10.away.map((x) => x.f + "-" + x.a).join(" ")}`);
   if (!process.env.NO_CORNERS) console.log(`  corners for-against: ${ev.homeTeamName} ${g10.home.map((x) => x.cf + "-" + x.ca).join(" ")} | ${ev.awayTeamName} ${g10.away.map((x) => x.cf + "-" + x.ca).join(" ")}`);
-  const good = res.filter((r) => r.n >= 12 && (r.odds < 1.4 ? r.hit / r.n >= 0.85 : r.hit / r.n >= 0.9 && r.cleanH2h)).slice(0, 6);
-  for (const r of good) r.band = r.odds < 1.2 ? "padding" : r.odds >= 1.4 ? "long (max 2 a slip)" : "";
-  for (const r of good) console.log(`  ✓ ${r.label} @${r.odds} — ${r.hit}/${r.n} | h2h ${r.h2h}${r.band ? " | " + r.band : ""}${r.warn ? " | " + r.warn : ""}`);
-  if (!good.length) console.log("  (nothing at 1.10-1.70 cleared the bar)");
+  const good = res.filter((r) => r.n >= 12 && r.hit / r.n >= 0.85).slice(0, 6);
+  for (const r of good) console.log(`  ✓ ${r.label} @${r.odds} — ${r.hit}/${r.n} | h2h ${r.h2h}${r.warn ? " | " + r.warn : ""}`);
+  if (!good.length) console.log("  (nothing at 1.20-1.39 cleared 85%+)");
 }
