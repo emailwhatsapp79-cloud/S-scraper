@@ -91,8 +91,8 @@ async function getJson(params, timeoutMs = 8000) {
 }
 
 /** Newest finished singles off SportyBet, saved. What the timer runs. */
-export async function pullTnResults(hours = 3, maxPages = 10) {
-  const end = Date.now();
+export async function pullTnResults(hours = 3, maxPages = 10, endAt = Date.now()) {
+  const end = endAt;
   const start = end - hours * 3600 * 1000;
   const rows = [];
   let read = 0;
