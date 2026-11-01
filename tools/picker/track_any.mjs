@@ -11,7 +11,8 @@ const niceLabel = (sel, sport, ev) => {
 };
 const legs = [];
 for (const a of specs) {
-  const [eid, mdesc, odesc, sel, sport] = a.split("|");
+  // Some TT event ids contain "|", so the other fields are the last four parts.
+  const parts = a.split("|"), sport = parts.pop(), sel = parts.pop(), odesc = parts.pop(), mdesc = parts.pop(), eid = parts.join("|");
   const ev = (await fetch(`https://www.sportybet.com/api/ng/factsCenter/event?eventId=${encodeURIComponent(eid)}&productId=3`, { headers: H }).then((r) => r.json())).data;
   let hit = null;
   for (const m of ev.markets || []) {
