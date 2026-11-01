@@ -16,9 +16,9 @@ for l in open(src):
   game=re.sub(r'^\d\d:\d\d ','',g); game=re.sub(r' \([^)]*\)$','',game)
   eid=L.get(game)
   if not eid: continue
-  # Owner's rule (1 Nov): prefer results and balanced unders over overs.
+  # kind is shown for information only.
   kind='result' if re.match(r'^(Double chance|Win|Draw no bet)',label) else 'under' if 'Under' in label else 'over'
-  key=r+{'result':0.04,'under':0.03,'over':0}[kind]
+  key=r  # owner (1 Nov): the best line goes in, whatever the market
   if game not in best or key>best[game]['key']:
     best[game]=dict(key=key,t=t,game=game,eid=eid,label=label,odds=float(odds),r=r,h=f'{h}/{n}',h2h=f'{hr}/{hn}',kind=kind)
 out=sorted(best.values(),key=lambda x:x['t'])
