@@ -30,7 +30,13 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 - Players must have met before. No pick who won under 60% as our favourite (4+ games). Tennis watch list in `tn_watch.txt`.
 
 ## Football (`fb_lines.mjs`) and NBA (`nba_lines.mjs`)
-- A line qualifies only if it **cleared 85%+** of both teams' **last 10 games each** (football: all competitions; NBA: the last 10 this season) and pays 1.20–1.39 (30 Oct: 20 games reach back about 5 months, with different players and sometimes a different coach).
+- A line qualifies only if it **cleared 85%+** of both teams' **last 10 games each** (football: all competitions; NBA: the last 10 this season) at the right price (30 Oct: 20 games reach back about 5 months, with different players and sometimes a different coach).
+- **Football price bands** (1 Nov, replacing the 1.20 floor and 1.40 ceiling for football; the 1.20–1.39 range was throwing away about 85% of strong lines, since bookies price 85%+ lines at 1.05–1.18):
+  - **1.10–1.19:** allowed at 85%+, as **padding**. Cheap legs add little odds (ten 1.10s = 2.6), so they fill a slip, not make it.
+  - **1.20–1.39:** normal, 85%+.
+  - **1.40–1.70:** only at **90%+** with **clean recent head-to-head** (no break in the last 2 years, 3+ meetings), and **at most 2 a slip** (our legs at 1.40+ won only 50–56%).
+  - TT and tennis keep 1.20–1.39.
+  Built into `fb_lines.mjs` (the band shows on each line).
 - **Football games 11–20 are a warning, not a drop**: a line that cleared under 75% of them is shown "⚠️ shaky before", so pick the cleaner leg (30 Oct: BK Olympic looked 17/20 on 10 games, but scored 3+ in 6 of their last 20).
 - **Head-to-head: the last 8 meetings, in football and the NBA** (TT keeps 20: they meet that often in a week). Teams meet 2–4 times a year, so 10+ meetings would reach back 3–5 years.
 - **Rate every game of the day, all leagues, men's and women's** (women are only excluded in TT and tennis), then screen (29 Oct).
