@@ -63,3 +63,6 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 ## Cash out
 - When reporting live slips: give the exact Lagos time, each match's minute and score, and each leg's odds now (29 Oct).
 - Cash-out is a judgement call; auto cash-out stays paused. Compare the offer with the slip's real value (remaining legs' chance × payout). Take it when it's clearly above that.
+
+## After a database outage
+- Backfill the gap before rating (1 Nov, after Neon's data quota ran out 28 Oct - 1 Nov): TT results with `node ../tools/picker/backfill_tt.mjs <fromISO>` (unpriced rows: results only), tennis with `pullTnResults(6, 20, end)` in 6-hour windows, Setka history with `pullSetkaDays({ days: 1, offset })` per day.
