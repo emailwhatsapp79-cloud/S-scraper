@@ -83,10 +83,18 @@ for (const eid of ids) {
     // under in a mismatch, in any competition. A mismatch is a favourite at
     // 1.50 or shorter, or a side that scored 3+ in 3 of its last 10 against an
     // opponent that conceded 3+ in 3 of its last 10 (Jerv 4/10 v Eik 5/10).
-    if (/^Total goals/.test(label)) {
-      if (Math.min(pr("Home"), pr("Away")) <= 1.5) return true;
-      const runUp = (me, op) => me.filter((x) => x.f >= 3).length >= 3 && op.filter((x) => x.a >= 3).length >= 3;
-      if (runUp(g10.home, g10.away) || runUp(g10.away, g10.home)) return true;
+    // Owner's rule (1 Nov): every under that lost was a strong team against a
+    // weak one (Jerv 7-0, Cliftonville 7-1, Aluminij 5-0, Colo-Colo 6-1);
+    // balanced unders land. Mismatch now = favourite at 1.70 or shorter, or
+    // underdog at 4.00 or longer, or the run-up pattern. In a mismatch: no
+    // total or first-half total under, and no under on the favourite's goals.
+    const hp = pr("Home"), ap = pr("Away"), priced = hp < 99 && ap < 99;
+    const runUp = (me, op) => me.filter((x) => x.f >= 3).length >= 3 && op.filter((x) => x.a >= 3).length >= 3;
+    const mismatch = (priced && (Math.min(hp, ap) <= 1.7 || Math.max(hp, ap) >= 4)) || runUp(g10.home, g10.away) || runUp(g10.away, g10.home);
+    if (mismatch) {
+      if (/^Total goals|^1st half goals/.test(label)) return true;
+      const favName = priced ? (hp <= ap ? ev.homeTeamName : ev.awayTeamName) : null;
+      if (favName && (label.startsWith(favName + " goals") || label.startsWith("1st half " + favName + " goals"))) return true;
     }
     for (const side of ["home", "away"]) {
       const nm = side === "home" ? ev.homeTeamName : ev.awayTeamName;
