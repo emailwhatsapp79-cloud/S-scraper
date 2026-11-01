@@ -78,8 +78,13 @@
   function renderDraft() {
     var box = document.getElementById("draft");
     box.textContent = "";
+    // Games that started over 3 hours ago are over: drop them so they can't
+    // sit in the slip as "suspended" (virtual games finish within minutes).
+    var stale = function (l) { return l.kickoff && Number(l.kickoff) < Date.now() - 3 * 3600e3; };
     var sporty = V.loadBook();
     var foot = V.loadBookFc();
+    if (sporty.some(stale)) { sporty = sporty.filter(function (l) { return !stale(l); }); V.saveBook(sporty); }
+    if (foot.some(stale)) { foot = foot.filter(function (l) { return !stale(l); }); V.saveBookFc(foot); }
     if (!sporty.length && !foot.length) {
       var empty = V.el("div", "empty");
       empty.innerHTML = "<b>Slip is empty.</b><br>On Football.com, tap Home or Draw or Draw or Away.";
@@ -377,7 +382,18 @@
         }
       }
       var blocked = legs.filter(function (l) { return l.blocked; });
-      var go = V.el("button", "primary", blocked.length ? (blocked.length + " suspended — take them off") : (site.connected ? ("Place " + naira(stake) + " · " + pay[key]) : ("Connect " + name + " to place")));
+      if (blocked.length) {
+        // The button says "take them off", so it does: suspended games leave
+        // the slip and the rest stay (an old virtual game used to block it for good).
+        var off = V.el("button", "primary", blocked.length + " suspended — take them off");
+        off.type = "button";
+        off.addEventListener("click", function () {
+          save(legs.filter(function (l) { return !l.blocked; }));
+          renderDraft();
+        });
+        box.appendChild(off);
+      }
+      var go = V.el("button", "primary", site.connected ? ("Place " + naira(stake) + " · " + pay[key]) : ("Connect " + name + " to place"));
       go.disabled = !site.connected || blocked.length || (pay[key] === "gift" && !(site.gifts || []).length);
       go.addEventListener("click", function () {
         go.disabled = true;
@@ -416,6 +432,10 @@
       });
       box.appendChild(linkOnly);
       box.appendChild(V.el("p", "note", "Place sends the stake to your " + name + " balance or gift. Load link only makes a code and does not stake."));
+      var clear = V.el("button", "ghost wide", "Clear this slip");
+      clear.type = "button";
+      clear.addEventListener("click", function () { save([]); renderDraft(); });
+      box.appendChild(clear);
   }
 
   function badge(status) {
