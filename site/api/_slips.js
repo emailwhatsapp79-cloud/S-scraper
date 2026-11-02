@@ -138,6 +138,13 @@ function isFootballLeg(leg) {
 /** First-half totals ("1U2.5", "1HO0.5"): final once the second half has a
  *  score line or the match is over; during the first half an over already
  *  passed has won and an under already passed has lost. */
+// First-half goal lines only (1U2.5, 1HO0.5): a plain "1", "1X" or "12" is a
+// home win / double chance (and TT's home winner), not a first half. Before
+// 2 Nov those were sent to the first-half grader and never settled.
+export function isFirstHalfSel(sel) {
+  return /^1(?=[HA]?[OU]\d)/.test(String(sel || ""));
+}
+
 export function firstHalfResult(base, snap) {
   const ps = String(snap.gameScore || "").trim().split(/\s+/).map((x) => x.match(/^(\d+):(\d+)$/)).filter(Boolean);
   if (ps.length >= 2 || (snap.ended && ps.length)) return dcHit(base, Number(ps[0][1]), Number(ps[0][2]));
@@ -623,7 +630,7 @@ export async function refreshSlips() {
     const reg = isFootballLeg(leg) ? regularTime(snap.gameScore) : null;
     const sel = String(leg.selection || "");
     let won;
-    if (/^1/.test(sel)) won = firstHalfResult(sel.slice(1), snap);
+    if (isFirstHalfSel(sel)) won = firstHalfResult(sel.slice(1), snap);
     else if (/^C/.test(sel)) {
       // Corners come from Sportradar's match stats once the match is over.
       won = leg.won === "yes" ? true : leg.won === "no" ? false
