@@ -27,6 +27,20 @@ export function legIsHot(leg, now) {
   return k - t <= 4 * 60 * 1000 && t - k <= 10 * 60 * 1000;
 }
 
+// A booked leg that is playing, or starts within 20 minutes, or kicked off
+// in the last 3 hours and has not settled. Idle checks run every 15 minutes
+// (Neon's free plan has 100 compute-hours a month and the database only
+// sleeps after 5 quiet minutes), so 20 minutes ahead switches the loop to
+// 3-minute checks before kick-off.
+export function legIsSoon(leg, now) {
+  if (!leg || leg.won === "yes" || leg.won === "no") return false;
+  if (isLiveStatus(leg.match_status)) return true;
+  const k = Number(leg.kickoff);
+  if (!isFinite(k) || k <= 0) return false;
+  const t = Number(now);
+  return k - t <= 20 * 60 * 1000 && t - k <= 3 * 3600 * 1000;
+}
+
 function parsePair(text) {
   const m = String(text || "").trim().match(/^(\d+)\s*:\s*(\d+)$/);
   return m ? [Number(m[1]), Number(m[2])] : null;

@@ -93,6 +93,7 @@ async function ebTick(res) {
     if (now - (at.watch || 0) < 20 * 1000) {
       out.skipped = true;
       out.hot = !!prevWatch.hot;
+      out.soon = !!prevWatch.soon;
       out.lines = Array.isArray(prevWatch.lines) ? prevWatch.lines : [];
     } else {
       await touchHealth("watch", {
@@ -136,8 +137,10 @@ async function ebTick(res) {
       const lines = (out.slips && out.slips.lines) || [];
       out.lines = lines;
       out.hot = !!(out.slips && out.slips.hot);
+      out.soon = !!(out.slips && out.slips.soon);
       await touchHealth("watch", {
         hot: out.hot,
+        soon: out.soon,
         lines,
         slips: {
           updated: out.slips && out.slips.updated,

@@ -1,7 +1,8 @@
 # Every 10 minutes: also pass scores24's newest finished TT matches to the app.
 # Booked games: while one is on (or starts within 3 minutes) check it every
-# 30 seconds and ping the phone — started, winning, losing. Otherwise check
-# open slips every 3 minutes. Every ~10 minutes (the route decides): save the
+# 30 seconds and ping the phone — started, winning, losing. A booked leg
+# within 20 minutes or still playing: every 3 minutes; otherwise every 15.
+# Every hour (the route decides): save the
 # eBasketball card and table tennis results. Prices only show about an hour
 # before tip-off, so without this most games are never priced. The route
 # needs no key (it only reads SportyBet's public odds) and skips if it ran in
@@ -67,12 +68,17 @@ jobs:
             fi
             resp=$(curl -sS --max-time 55 "https://vfootball-screener.vercel.app/api/poll?eb=1" || true)
             echo "$resp"
-            # Idle ticks every 3 minutes (was 1): Neon's free plan ran out of data
-            # transfer on 28 Oct. A live or about-to-start booked game still gets 30s.
+            # Neon's free plan: 5 GB transfer (ran out 28 Oct) and 100 compute-hours
+            # a month; the database only sleeps after 5 quiet minutes, and 3-minute
+            # ticks kept it awake around the clock (~175 hours a month). So:
+            # a live or about-to-start booked game: 30s; a booked leg within 20
+            # minutes or still playing: 3 minutes; otherwise 15 minutes.
             if printf '%s' "$resp" | grep -q '"hot":true'; then
               sleep 30
-            else
+            elif printf '%s' "$resp" | grep -q '"soon":true'; then
               sleep 180
+            else
+              sleep 900
             fi
           done
       - name: Start the next run

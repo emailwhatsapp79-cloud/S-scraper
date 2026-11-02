@@ -170,3 +170,13 @@ test("struggleOf reads how a live pick is going", async () => {
   assert.equal(struggleOf({ sport: "tt", selection: "1", gameScore: "0:0" }), null);
   assert.equal(struggleOf({ sport: "fc", selection: "1", gameScore: "1:0" }), null);
 });
+
+test("legIsSoon: playing, within 20 minutes, or unsettled in the last 3 hours", async () => {
+  const { legIsSoon } = await import("../site/api/_watch.js");
+  const now = 1_800_000_000_000;
+  assert.equal(legIsSoon({ kickoff: now + 19 * 60e3 }, now), true);
+  assert.equal(legIsSoon({ kickoff: now + 25 * 60e3 }, now), false);
+  assert.equal(legIsSoon({ kickoff: now - 2 * 3600e3 }, now), true);
+  assert.equal(legIsSoon({ kickoff: now - 4 * 3600e3 }, now), false);
+  assert.equal(legIsSoon({ kickoff: now - 60e3, won: "yes" }, now), false);
+});
