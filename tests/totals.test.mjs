@@ -81,3 +81,9 @@ test("draw no bet", () => {
   assert.equal(dcHit("D1", 1, 1), true);   // refunded
   assert.equal(dcHit("D2", 2, 1), false);
 });
+
+test("first-half codes are only goal lines, not home wins", async () => {
+  const { isFirstHalfSel } = await import("../site/api/_slips.js");
+  for (const s of ["1U2.5", "1O0.5", "1HO0.5", "1AU1.5"]) assert.equal(isFirstHalfSel(s), true, s);
+  for (const s of ["1", "1X", "12", "2", "X2", "U2.5", "HO0.5"]) assert.equal(isFirstHalfSel(s), false, s);
+});
