@@ -1,6 +1,6 @@
 // Football: which goal, first-half, corner, double-chance and draw-no-bet lines
-// each team's last 10 cleared. Games 11-20 only add a warning (owner's rule,
-// 30 Oct: older form misleads, but a line that broke often before is shaky).
+// each team's last 10 cleared (owner, 3 Nov: last 10 only; 20 games gave
+// false percentages).
 const B = "https://lsc.fn.sportradar.com/sportybet/en/Etc:UTC/gismo";
 const get = async (p) => { try { return (await fetch(`${B}/${p}`, { headers: { "user-agent": "Mozilla/5.0 Chrome/122" } }).then((r) => r.json()))?.doc?.[0]?.data; } catch { return null; } };
 const H = { "User-Agent": "Mozilla/5.0 (Linux; Android 13) Chrome/120 Mobile Safari/537.36", Accept: "application/json", Origin: "https://www.sportybet.com", Referer: "https://www.sportybet.com/ng/m/" };
@@ -15,7 +15,7 @@ for (const eid of ids) {
   const noLive = Number(mi?.match?.coverage?.lmtsupport ?? 0) <= 1;
   const g = {};
   for (const side of ["home", "away"]) {
-    const d = await get(`stats_team_lastx/${T[side].uid}/20`);
+    const d = await get(`stats_team_lastx/${T[side].uid}/10`);
     const ms = (d?.matches || []).filter((m) => m.result && m.result.home != null);
     g[side] = await Promise.all(ms.map(async (m) => {
       const me = m.teams.home.uid === T[side].uid; const f = me ? m.result.home : m.result.away, a = me ? m.result.away : m.result.home;
@@ -26,7 +26,6 @@ for (const eid of ids) {
     }));
   }
   const g10 = { home: g.home.slice(0, 10), away: g.away.slice(0, 10) };
-  const gOld = { home: g.home.slice(10, 20), away: g.away.slice(10, 20) };
   // Owner's rule (29 Oct, Braga v Famalicao): also check the two teams' meetings.
   const vs = await get(`stats_team_versus/${T.home.uid}/${T.away.uid}`);
   const h2h = (vs?.matches || []).filter((m) => m.result && m.result.home != null && !m.walkover).slice(0, 8).map((m) => {
@@ -58,8 +57,8 @@ for (const eid of ids) {
   const pr = (d) => +((x12?.outcomes || []).find((o) => o.desc === d)?.odds || 99);
   const blocked = (label) => {
     // Owner's rule (30 Oct, Seraing v Liege 1-0): a total over needs both
-    // attacks; neither side may have failed to score in more than 4 of its last 20.
-    if (/^Total goals Over/.test(label)) return g.home.filter((x) => x.f === 0).length > 4 || g.away.filter((x) => x.f === 0).length > 4;
+    // attacks; neither side may have failed to score in more than 2 of its last 10.
+    if (/^Total goals Over/.test(label)) return g10.home.filter((x) => x.f === 0).length > 2 || g10.away.filter((x) => x.f === 0).length > 2;
     if (!/Under/.test(label)) return false;
     // Owner's under rule (1 Nov, replacing the 4.5-only, weak-attack and cup
     // rules): no under where the favourite is strong and likes scoring.
@@ -133,12 +132,6 @@ for (const eid of ids) {
     }
   };
   scan(g10, test);
-  const prev = new Map();
-  scan(gOld, (label, odds, hits, n) => prev.set(label, { hits, n }));
-  for (const r of res) {
-    const o = prev.get(r.label);
-    if (o && o.n >= 10 && o.hits / o.n < 0.75) r.warn = `⚠️ shaky before: ${o.hits}/${o.n} in games 11-20`;
-  }
   // Same hit rate: the line with more room first (owner's rule after Leverkusen).
   res.sort((a, b) => b.hit / b.n - a.hit / a.n || a.odds - b.odds);
   const t = new Date(ev.estimateStartTime + 3600e3).toISOString().slice(11, 16);

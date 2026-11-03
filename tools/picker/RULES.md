@@ -31,7 +31,6 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 
 ## Football (`fb_lines.mjs`) and NBA (`nba_lines.mjs`)
 - A line qualifies only if it **cleared 85%+** of both teams' **last 10 games each** (football: all competitions; NBA: the last 10 this season) at the right price (30 Oct: 20 games reach back about 5 months, with different players and sometimes a different coach).
-- **Football games 11–20 are a warning, not a drop**: a line that cleared under 75% of them is shown "⚠️ shaky before", so pick the cleaner leg (30 Oct: BK Olympic looked 17/20 on 10 games, but scored 3+ in 6 of their last 20).
 - **Head-to-head: the last 8 meetings, in football and the NBA** (TT keeps 20: they meet that often in a week). Teams meet 2–4 times a year, so 10+ meetings would reach back 3–5 years.
 - **Rate every game of the day, all leagues, men's and women's** (women are only excluded in TT and tennis), then screen (29 Oct).
 - **Corners are off by default** (`NO_CORNERS=1`): the corner slip lost and the corner checks make a run take ~10 minutes instead of ~30 seconds (29 Oct).
@@ -45,11 +44,13 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
   Losses behind it: Jerv 7-0, Cliftonville 7-1, Aluminij 5-0, Colo-Colo 6-1, Esenler, Flamengo, Leverkusen. Built into `fb_lines.mjs`.
 - **The best legs go in**, whatever the market: win, double chance, under, over, first half (owner, 1 Nov: no market order and no cap on overs; first-half legs are fine when they are strong).
 - **No legs without live coverage on a slip you may want to cash out** (3 Nov: Bracknell v Chertsey, English 7th tier, showed "not started" on SportyBet all game and kept PSN6WP's cash-out suspended until it settled; Jerv, 31 Oct, the same). The checker marks these "⚠️ no live coverage (blocks cash-out)" (Sportradar coverage level 1 or less). Fine on small tickets you will ride to the end.
+- **Football: last 10 only** (owner, 3 Nov: 20 games gave false percentages, e.g. Lille at Bodø looked 17/20 but Bodø's home clean sheets made it a coin flip). The deep check (`deep_auto.mjs`) re-runs each line on both teams' last 10: 85%+ combined and **80%+ for each side**, so one team's record can't carry the other. The 11–20 "shaky before" warning is gone.
+- **Head-to-head only drops a line, it never picks one** (owner, 3 Nov): a good record between the two teams is not a reason to book; the line still has to pass both teams' own last 10 against everyone else.
 - **One line per game.** At the same hit rate, take the line with **more room**, not the higher price (28 Oct).
 - **Head-to-head meetings older than 2 years count less** (30 Oct): two breaks in the last 2 years drop a line; older breaks only drop it when there are 3+ breaks in all; under 3 recent meetings is flagged "thin". Built into `fb_lines.mjs`.
 - **One team's goals: each side must clear 80% on its own** (30 Oct: Colo-Colo under 3.5 lost 6-1; Colo-Colo's tight record hid that Concepcion had conceded 3+ in 4 of their last 20). The team's goals scored and the opponent's goals conceded are checked separately, not just added together. Built into `fb_lines.mjs`.
 - **Drop a leg whose price drifts 25%+ before kickoff** (e.g. 1.30 → 1.63 or more): the bookmaker has news we don't (30 Oct: Coventry U21 over 2.5 went 1.30 → 1.86 and finished 1-0).
-- **Total over 1.5: the weaker attack must not blank often** (no more than 4 of their last 20). The over then rests on one team (30 Oct: Seraing v Liege over 1.5 finished 1-0; Liege had failed to score in 7 of their last 20). Built into `fb_lines.mjs` for every total over (31 Oct).
+- **Total over 1.5: the weaker attack must not blank often** (no more than 2 of their last 10; was 4 of 20 until 3 Nov). The over then rests on one team (30 Oct: Seraing v Liege over 1.5 finished 1-0; Liege had failed to score in 7 of their last 20). Built into `fb_lines.mjs` for every total over.
 - Football settles on **90 minutes**; extra time and penalties don't count (Vantage grades it that way since PR #68).
 - **Before a leg goes on a slip, a deep check** (29 Oct, owner: "rating something alone doesn't mean that just because it played under 16/17"):
   - **Both sides of the line**: look at how often the other side landed and where the main line sits (`nba_both.mjs` prints every line, over and under). An alternative line far from the bookmaker's main line is not "free"; say how far it is.
