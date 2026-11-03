@@ -9,6 +9,10 @@ for (const eid of ids) {
   const ev = (await fetch(`https://www.sportybet.com/api/ng/factsCenter/event?eventId=${eid}&productId=3`, { headers: H }).then((r) => r.json())).data;
   if (!ev || ev.matchStatus !== "Not start") continue;
   const mi = await get(`match_info/${eid.replace("sr:match:", "")}`); const T = mi?.match?.teams; if (!T) continue;
+  // Owner's rule (3 Nov, Bracknell v Chertsey): a game with no live coverage
+  // (Sportradar lmtsupport 1 or less) shows "not started" all game on SportyBet
+  // and blocks the whole slip's cash-out until it settles.
+  const noLive = Number(mi?.match?.coverage?.lmtsupport ?? 0) <= 1;
   const g = {};
   for (const side of ["home", "away"]) {
     const d = await get(`stats_team_lastx/${T[side].uid}/20`);
@@ -143,6 +147,6 @@ for (const eid of ids) {
   console.log(`  ${ev.awayTeamName} last ${g10.away.length}: ${g10.away.map((x) => x.f + "-" + x.a).join(" ")}`);
   if (!process.env.NO_CORNERS) console.log(`  corners for-against: ${ev.homeTeamName} ${g10.home.map((x) => x.cf + "-" + x.ca).join(" ")} | ${ev.awayTeamName} ${g10.away.map((x) => x.cf + "-" + x.ca).join(" ")}`);
   const good = res.filter((r) => r.n >= 12 && r.hit / r.n >= 0.85).slice(0, 6);
-  for (const r of good) console.log(`  ✓ ${r.label} @${r.odds} — ${r.hit}/${r.n} | h2h ${r.h2h}${r.warn ? " | " + r.warn : ""}`);
+  for (const r of good) console.log(`  ✓ ${r.label} @${r.odds} — ${r.hit}/${r.n} | h2h ${r.h2h}${r.warn ? " | " + r.warn : ""}${noLive ? " | ⚠️ no live coverage (blocks cash-out)" : ""}`);
   if (!good.length) console.log("  (nothing at 1.20-1.39 cleared 85%+)");
 }
