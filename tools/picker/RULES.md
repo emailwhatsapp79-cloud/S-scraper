@@ -6,6 +6,7 @@ Run the scripts from `site/` with `DATABASE_URL` set (TT and tennis need the dat
 
 ## Every slip
 - Legs priced **1.20–1.39** (26–27 Oct; the 1 Nov 1.10–1.70 football trial was dropped the same day for the first-day window). On our own 427 graded legs, 1.40–1.49 won 56% and 1.50+ won 50%.
+- **Football exception: 1.15–1.19 is allowed when the line cleared 90%+** (owner, 4 Nov: Real Madrid at AEK, a first-half goal at 17/20 was lost to the 1.20 floor because bookies price big teams short). The checker marks these "short price". They add little to the odds, so use them to replace a weaker leg, not to pad.
 - **No player or team in two legs** of one slip (24 Oct, Rak lost both of his legs on WTCVHB).
 - **Show every warning** on every leg, including pick-side notes like "lost earlier today", when giving a code (27 Oct: Loboda's loss as favourite was left out).
 - State clearly at the top when a code has tennis legs ("⚠️ includes N tennis legs").

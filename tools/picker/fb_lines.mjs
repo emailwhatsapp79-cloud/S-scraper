@@ -86,13 +86,17 @@ for (const eid of ids) {
   // opponent's goals against), so a strong record can't hide a leaky defence.
   const test = (label, odds, hits, n, parts) => {
     // Owner (1 Nov): back to the first-day window, 1.20-1.39 at 85%+.
-    if (!(odds >= 1.2 && odds < 1.4 && n) || blocked(label)) return;
+    // Owner (4 Nov, Real Madrid): a 1.15-1.19 line may pass too when it
+    // cleared 90%+, so big teams' strong lines aren't lost to the price floor.
+    const short = odds >= 1.15 && odds < 1.2;
+    if (!((odds >= 1.2 && odds < 1.4) || short) || !n || blocked(label)) return;
+    if (short && hits / n < 0.9) return;
     if (parts && parts.some(([h, k]) => k && h / k < 0.8)) return;
     const rec = h2h.filter((x) => x.recent), old = h2h.filter((x) => !x.recent);
     const bR = rec.filter((x) => !holds(label, x)).length, bO = old.filter((x) => !holds(label, x)).length;
     if (bR >= 2 || bR + bO >= 3) return;
     const h2hTxt = !h2h.length ? "never met" : `${rec.length - bR}/${rec.length} last 2y` + (old.length ? `, ${old.length - bO}/${old.length} older` : "") + (rec.length < 3 ? " (thin)" : "");
-    res.push({ label, odds, hit: hits, n, h2h: h2hTxt, cleanH2h: bR === 0 && rec.length >= 3 });
+    res.push({ label, odds, hit: hits, n, h2h: h2hTxt, cleanH2h: bR === 0 && rec.length >= 3, warn: short ? "short price (1.15-1.19, needs 90%+)" : "" });
   };
   const scan = (g, test) => {
     const all = [...g.home, ...g.away];
@@ -141,5 +145,5 @@ for (const eid of ids) {
   if (!process.env.NO_CORNERS) console.log(`  corners for-against: ${ev.homeTeamName} ${g10.home.map((x) => x.cf + "-" + x.ca).join(" ")} | ${ev.awayTeamName} ${g10.away.map((x) => x.cf + "-" + x.ca).join(" ")}`);
   const good = res.filter((r) => r.n >= 12 && r.hit / r.n >= 0.85).slice(0, 6);
   for (const r of good) console.log(`  ✓ ${r.label} @${r.odds} — ${r.hit}/${r.n} | h2h ${r.h2h}${r.warn ? " | " + r.warn : ""}${noLive ? " | ⚠️ no live coverage (blocks cash-out)" : ""}`);
-  if (!good.length) console.log("  (nothing at 1.20-1.39 cleared 85%+)");
+  if (!good.length) console.log("  (nothing at 1.20-1.39 cleared 85%+, or 1.15-1.19 at 90%+)");
 }
