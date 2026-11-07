@@ -121,45 +121,60 @@ export async function notifyBooked(slips) {
   }
   const now = Date.now();
   let sent = 0;
+  // Owner (7 Nov): one game can sit on several tickets. A result goes out
+  // once per game and names each ticket it's on, with that ticket's tally.
+  const results = new Map();
+  const kicks = new Map();
   for (const sp of slips) {
     const settledMs = sp.settledAt ? Date.parse(sp.settledAt) : 0;
     const recent = isFinite(settledMs) && settledMs > 0 && now - settledMs < RECENT;
     const active = sp.status === "open" || sp.status === "live";
     if (!active && !recent) continue;
-
-    for (const l of sp.legs || []) {
-      if (sp.status === "lost") break;   // once lost, only "Bet missed" below
+    const legs = sp.legs || [];
+    const tally = (sp.shareCode || "Slip") + " " + legs.filter((x) => x.won === true).length + "/" + legs.length;
+    for (const l of legs) {
+      if (sp.status === "lost") break;   // once lost, only "<code> lost" below
       if (l.sport === "tt" || l.sport === "tn") continue;   // live updates cover these (notifySets)
-      if (l.won === true) {
-        if (await sendOnce("leg-" + l.gameId + "-yes", {
-          kind: "yes",
-          sound: "/sounds/yes.wav",
-          url: "/book",
-          title: "✅ " + (l.label || "Leg") + " won",
-          body: (l.home || "") + " v " + (l.away || "") + (l.setScore ? " · FT " + l.setScore.replace(":", "–") : ""),
-        })) sent++;
-      } else if (l.won === false) {
-        if (await sendOnce("leg-" + l.gameId + "-no", {
-          kind: "no",
-          sound: "/sounds/no.wav",
-          url: "/book",
-          title: "❌ " + (l.label || "Leg") + " lost",
-          body: (l.home || "") + " v " + (l.away || "") + (l.setScore ? " · FT " + l.setScore.replace(":", "–") : ""),
-        })) sent++;
-      } else if (active && l.kickoff && l.sport !== "tt" && l.sport !== "tn") {
+      if (l.won === true || l.won === false) {
+        const k = "leg-" + l.gameId + "-" + (l.won ? "yes" : "no");
+        if (!results.has(k)) results.set(k, { won: l.won, leg: l, picks: new Set(), tickets: [] });
+        const r = results.get(k);
+        r.picks.add(l.label || "Leg");
+        r.tickets.push(tally);
+      } else if (active && l.kickoff) {
         const d = Number(l.kickoff) - now;
         if (d > 0 && d <= 5 * 60 * 1000) {
-          if (await sendOnce("kick-" + l.gameId, {
-            kind: "kick",
-            sound: "/sounds/kick.wav",
-            url: "/book",
-            title: "Kicks soon",
-            body: (l.home || "") + " v " + (l.away || ""),
-          })) sent++;
+          const k = "kick-" + l.gameId;
+          if (!kicks.has(k)) kicks.set(k, { leg: l, tickets: [] });
+          kicks.get(k).tickets.push(sp.shareCode || "Slip");
         }
       }
     }
+  }
+  for (const [k, r] of results) {
+    const l = r.leg, picks = [...r.picks];
+    const game = (l.home || "") + " v " + (l.away || "") + (l.setScore ? " · FT " + l.setScore.replace(":", "–") : "");
+    if (await sendOnce(k, {
+      kind: r.won ? "yes" : "no",
+      sound: r.won ? "/sounds/yes.wav" : "/sounds/no.wav",
+      url: "/book",
+      title: (r.won ? "✅ " : "❌ ") + picks.join(" + ") + (r.won ? " won" : " lost"),
+      body: game + " · on " + r.tickets.join(", "),
+    })) sent++;
+  }
+  for (const [k, r] of kicks) {
+    if (await sendOnce(k, {
+      kind: "kick",
+      sound: "/sounds/kick.wav",
+      url: "/book",
+      title: "Kicks soon",
+      body: (r.leg.home || "") + " v " + (r.leg.away || "") + " · on " + r.tickets.join(", "),
+    })) sent++;
+  }
 
+  for (const sp of slips) {
+    const settledMs = sp.settledAt ? Date.parse(sp.settledAt) : 0;
+    const recent = isFinite(settledMs) && settledMs > 0 && now - settledMs < RECENT;
     if (sp.status === "won" && recent) {
       if (await sendOnce("slip-" + sp.id + "-won", {
         kind: "yes",
@@ -175,7 +190,8 @@ export async function notifyBooked(slips) {
         sound: "/sounds/no.wav",
         url: "/ledger",
         title: (sp.shareCode || "Slip") + " lost",
-        body: (sp.legs || []).filter((x) => x.won === true).length + "/" + (sp.legs || []).length + " legs won",
+        body: (sp.legs || []).filter((x) => x.won === true).length + "/" + (sp.legs || []).length + " legs won" +
+          ((sp.legs || []).some((x) => x.won === false) ? " · lost on " + (sp.legs || []).filter((x) => x.won === false).map((x) => x.label || ((x.home || "") + " v " + (x.away || ""))).join(", ") : ""),
       })) sent++;
     }
   }
@@ -300,23 +316,37 @@ export async function notifySets(legs, slips) {
 // Started, and whether a booked game is going your way or not. Table tennis
 // and tennis set scores (1–0, 1–1, …) stay in notifySets. Each moment is
 // claimed once, so a score is never sent twice.
-export async function notifyMoments(legs) {
+export async function notifyMoments(legs, slips) {
   if (!Array.isArray(legs) || !legs.length) return { sent: 0 };
   try {
     const { loadPrefs } = await import("./_vault.js");
     if ((await loadPrefs()).pings === false) return { sent: 0 };
   } catch { return { sent: 0 }; }
   const { legMoments } = await import("./_watch.js");
-  let sent = 0;
+  const code = new Map((slips || []).map((s) => [String(s.id), s.share_code || "Slip"]));
+  // Owner (7 Nov): the same game on several tickets gives one ping, naming
+  // each ticket. Moments are grouped by game and wording; every ticket's own
+  // key is claimed so it can't go out again on its own.
+  const groups = new Map();
   for (const l of legs) {
     for (const m of legMoments(l)) {
-      if (await sendOnce(m.key, {
-        kind: m.kind,
-        url: "/book",
-        title: m.title,
-        body: m.body,
-      })) sent++;
+      const g = m.key.replace(String(l.slip_id) + "-", "") + "|" + m.title;
+      if (!groups.has(g)) groups.set(g, { m, keys: [], tickets: [] });
+      const x = groups.get(g);
+      x.keys.push(m.key);
+      x.tickets.push(code.get(String(l.slip_id)) || "Slip");
     }
+  }
+  let sent = 0;
+  for (const { m, keys, tickets } of groups.values()) {
+    let fresh = false;
+    for (const k of keys) if (await claimed(k)) fresh = true;
+    if (!fresh) continue;
+    await broadcast({
+      kind: m.kind, url: "/book", title: m.title, tag: keys[0],
+      body: m.body + (tickets.length ? " · on " + [...new Set(tickets)].join(", ") : ""),
+    });
+    sent++;
   }
   return { sent };
 }
