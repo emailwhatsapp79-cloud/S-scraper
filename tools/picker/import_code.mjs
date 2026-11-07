@@ -14,7 +14,8 @@ for (const o of d.outcomes) {
   const m = o.markets[0], oc = m.outcomes[0], sport = SPORT[o.sport.id] || "fb";
   const total = (/total=([\d.]+)/.exec(m.specifier || "") || [])[1];
   let sel = oc.desc, label = `${m.desc}: ${oc.desc}`;
-  if (String(m.id) === "186") { sel = oc.desc === "Home" ? "1" : "2"; label = `${oc.desc === "Home" ? o.homeTeamName : o.awayTeamName} to win`; }
+  if (/2UP/.test(m.desc)) { sel = { Home: "2UP1", Away: "2UP2" }[oc.desc] || "X"; label = `${oc.desc === "Home" ? o.homeTeamName : oc.desc === "Away" ? o.awayTeamName : "Draw"} 2UP win`; }
+  else if (String(m.id) === "186") { sel = oc.desc === "Home" ? "1" : "2"; label = `${oc.desc === "Home" ? o.homeTeamName : o.awayTeamName} to win`; }
   else if (total && /^(Over|Under)/.test(oc.desc)) {
     const id = String(m.id), half = ["68", "69", "70"].includes(id) ? "1" : "", side = ["19", "69"].includes(id) ? "H" : ["20", "70"].includes(id) ? "A" : "";
     sel = `${half}${side}${oc.desc[0]}${total}`;

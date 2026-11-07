@@ -635,6 +635,15 @@ export async function refreshSlips() {
       // Corners come from Sportradar's match stats once the match is over.
       won = leg.won === "yes" ? true : leg.won === "no" ? false
         : (snap.ended || reg) ? dcHitCorners(sel.slice(1), await cornersOf(leg.event_id)) : null;
+    } else if (/^2UP[12]$/.test(sel)) {
+      // "1X2 - 2UP": wins if the team wins, or once it leads by 2 at any
+      // point. We see the live score each poll, plus half-time at the end.
+      const home = sel === "2UP1";
+      const lead = (h, a) => (h == null || a == null ? null : home ? h - a : a - h);
+      const now = lead(snap.ftHome, snap.ftAway), ht = lead(snap.htHome, snap.htAway);
+      const end = reg ? lead(reg.home, reg.away) : snap.ended ? now : null;
+      won = leg.won === "yes" || (now != null && now >= 2) || (ht != null && ht >= 2) ? true
+        : end == null ? null : end > 0;
     } else {
       won = reg ? dcHit(sel, reg.home, reg.away)
         : snap.ended ? dcHit(sel, snap.ftHome, snap.ftAway)
