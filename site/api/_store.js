@@ -9,6 +9,12 @@ let colsReady = false;
 async function ensureCols() {
   if (colsReady) return;
   try { await sql`ALTER TABLE games ADD COLUMN IF NOT EXISTS cs_json TEXT`; } catch { /* already there */ }
+  // Finished games whose SportyBet game id was handed to a new match (virtual
+  // leagues reuse ids). Kept here so the history isn't overwritten.
+  try {
+    await sql`CREATE TABLE IF NOT EXISTS games_hist (LIKE games INCLUDING DEFAULTS)`;
+    await sql`CREATE UNIQUE INDEX IF NOT EXISTS games_hist_event ON games_hist (event_id)`;
+  } catch (e) { logErr("games_hist", e); }
   colsReady = true;
 }
 
@@ -24,6 +30,26 @@ export async function store(games) {
     g.ht?.home ?? null, g.ht?.draw ?? null, g.ht?.away ?? null,
     g.cs ? JSON.stringify(g.cs) : null,
   ]);
+
+  // A game id now pointing at a different match: archive the finished one
+  // before the upsert below starts the row over for the new match.
+  try {
+    await sql`
+      INSERT INTO games_hist
+      SELECT g.* FROM games g
+      JOIN unnest(${rows.map((r) => String(r[0]))}::text[], ${rows.map((r) => r[1])}::text[]) AS n(gid, ev)
+        ON g.game_id = n.gid
+      WHERE n.ev IS NOT NULL AND g.event_id IS DISTINCT FROM n.ev AND g.r_status IS NOT NULL
+      ON CONFLICT DO NOTHING`;
+  } catch (e) { logErr("archive reused ids", e); }
+
+  // A new match on a reused id, or a result banked before this kickoff
+  // (left over from an earlier match): drop the old result and odds.
+  const NEW = `((EXCLUDED.event_id IS NOT NULL AND EXCLUDED.event_id IS DISTINCT FROM games.event_id)
+    OR (games.r_status IS NOT NULL AND EXCLUDED.kickoff IS NOT NULL
+        AND EXCLUDED.kickoff > EXTRACT(EPOCH FROM games.settled_at) * 1000))`;
+  const keep = (col) => `CASE WHEN ${NEW} THEN EXCLUDED.${col} ELSE COALESCE(EXCLUDED.${col}, games.${col}) END`;
+  const reset = (col) => `CASE WHEN ${NEW} THEN NULL ELSE games.${col} END`;
 
   const jobs = [];
   for (let i = 0; i < rows.length; i += 50) {
@@ -44,13 +70,17 @@ export async function store(games) {
          kickoff = COALESCE(EXCLUDED.kickoff, games.kickoff),
          league  = COALESCE(NULLIF(EXCLUDED.league,''), games.league),
          ft_home = EXCLUDED.ft_home, ft_draw = EXCLUDED.ft_draw, ft_away = EXCLUDED.ft_away,
-         dc_1x   = COALESCE(EXCLUDED.dc_1x, games.dc_1x),
-         dc_12   = COALESCE(EXCLUDED.dc_12, games.dc_12),
-         dc_x2   = COALESCE(EXCLUDED.dc_x2, games.dc_x2),
-         ht_home = COALESCE(EXCLUDED.ht_home, games.ht_home),
-         ht_draw = COALESCE(EXCLUDED.ht_draw, games.ht_draw),
-         ht_away = COALESCE(EXCLUDED.ht_away, games.ht_away),
-         cs_json = COALESCE(EXCLUDED.cs_json, games.cs_json),
+         dc_1x   = ${keep("dc_1x")},
+         dc_12   = ${keep("dc_12")},
+         dc_x2   = ${keep("dc_x2")},
+         ht_home = ${keep("ht_home")},
+         ht_draw = ${keep("ht_draw")},
+         ht_away = ${keep("ht_away")},
+         cs_json = ${keep("cs_json")},
+         r_hg = ${reset("r_hg")}, r_ag = ${reset("r_ag")},
+         r_hthg = ${reset("r_hthg")}, r_htag = ${reset("r_htag")},
+         r_status = ${reset("r_status")}, settled_at = ${reset("settled_at")},
+         first_seen = CASE WHEN ${NEW} THEN now() ELSE games.first_seen END,
          last_seen = now()`,
       chunk.flat(),
     ));

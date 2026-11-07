@@ -68,11 +68,17 @@ export async function settleFromEvents(events) {
 
 /** Settled games with odds + result, compact, for the Lab to analyse. */
 export async function settledGames(limit = 8000) {
+  await sql`CREATE TABLE IF NOT EXISTS games_hist (LIKE games INCLUDING DEFAULTS)`;
   const rows = await sql`
     SELECT game_id, home, away, league, kickoff,
            ft_home, ft_draw, ft_away, dc_1x, dc_12, dc_x2,
            ht_home, ht_draw, ht_away, r_hg, r_ag, r_hthg, r_htag
-    FROM games WHERE r_status IS NOT NULL
+    FROM (SELECT game_id, home, away, league, kickoff, ft_home, ft_draw, ft_away, dc_1x, dc_12, dc_x2, ht_home, ht_draw, ht_away, r_hg, r_ag, r_hthg, r_htag, r_status, first_seen FROM games
+          UNION ALL SELECT game_id, home, away, league, kickoff, ft_home, ft_draw, ft_away, dc_1x, dc_12, dc_x2, ht_home, ht_draw, ht_away, r_hg, r_ag, r_hthg, r_htag, r_status, first_seen FROM games_hist) g
+    WHERE r_status IS NOT NULL
+      -- Rows from before 7 Nov whose id was reused carry another match's
+      -- odds (first seen long before kickoff); leave them out.
+      AND NOT (league ILIKE '%Virtual%' AND kickoff - EXTRACT(EPOCH FROM first_seen) * 1000 > 6 * 3600 * 1000)
     ORDER BY kickoff DESC LIMIT ${limit}`;
   return rows.map((r) => ({
     id: r.game_id,
