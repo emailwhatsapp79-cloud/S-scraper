@@ -6,6 +6,7 @@ import { notifyBooked, notifySets, notifyFlags, notifyMoments } from "./_push.js
 import { placeOrder, loadGifts, priceLeg } from "./_fc.js";
 import { readSession, writeSession } from "./_fc_session.js";
 import { legIsHot, legIsSoon, watchLine, struggleOf } from "./_watch.js";
+import { gradeMarketSel } from "./_markets.js";
 
 let schemaReady = false;
 
@@ -635,6 +636,11 @@ export async function refreshSlips() {
       // Corners come from Sportradar's match stats once the match is over.
       won = leg.won === "yes" ? true : leg.won === "no" ? false
         : (snap.ended || reg) ? dcHitCorners(sel.slice(1), await cornersOf(leg.event_id)) : null;
+    } else if (sel.startsWith("M|")) {
+      // Any other market (combos, multigoals, handicaps ...), graded from the
+      // 90-minute and half-time score once the match is over.
+      const ft = reg ? { H: reg.home, A: reg.away } : snap.ended ? { H: snap.ftHome, A: snap.ftAway } : null;
+      won = ft ? gradeMarketSel(sel, { ...ft, hH: snap.htHome, hA: snap.htAway }) : null;
     } else if (/^2UP[12]$/.test(sel)) {
       // "1X2 - 2UP": wins if the team wins, or once it leads by 2 at any
       // point. We see the live score each poll, plus half-time at the end.
