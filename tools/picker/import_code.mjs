@@ -16,11 +16,13 @@ for (const o of d.outcomes) {
   let sel = oc.desc, label = `${m.desc}: ${oc.desc}`;
   if (/2UP/.test(m.desc)) { sel = { Home: "2UP1", Away: "2UP2" }[oc.desc] || "X"; label = `${oc.desc === "Home" ? o.homeTeamName : oc.desc === "Away" ? o.awayTeamName : "Draw"} 2UP win`; }
   else if (String(m.id) === "186") { sel = oc.desc === "Home" ? "1" : "2"; label = `${oc.desc === "Home" ? o.homeTeamName : o.awayTeamName} to win`; }
-  else if (total && /^(Over|Under)/.test(oc.desc)) {
+  else if (total && /^(Over|Under)/.test(oc.desc) && ["18", "19", "20", "68", "69", "70"].includes(String(m.id))) {
     const id = String(m.id), half = ["68", "69", "70"].includes(id) ? "1" : "", side = ["19", "69"].includes(id) ? "H" : ["20", "70"].includes(id) ? "A" : "";
     sel = `${half}${side}${oc.desc[0]}${total}`;
   } else if (String(m.id) === "10") sel = { "Home or Draw": "1X", "Draw or Away": "X2", "Home or Away": "12" }[oc.desc] || oc.desc;
   else if (String(m.id) === "1") sel = { Home: "1", Draw: "X", Away: "2" }[oc.desc] || oc.desc;
+  // Every other football market: Vantage grades it from the score (_markets.js).
+  else if (sport === "fb") sel = `M|${m.id}|${m.specifier || ""}|${oc.desc}`;
   legs.push({ o, m, oc, sport, sel, label });
 }
 const combined = Math.round(legs.reduce((s, l) => s * +l.oc.odds, 1) * 100) / 100;
